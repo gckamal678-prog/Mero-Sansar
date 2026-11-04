@@ -1,0 +1,12 @@
+{
+  "name": "हाम्रो संसार",
+  "short_name": "हाम्रो संसार",
+  "description": "साथी जोडौँ, कुरा गरौँ",
+  "lang": "ne",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f7fb",
+  "theme_color": "#2563eb"
+}
