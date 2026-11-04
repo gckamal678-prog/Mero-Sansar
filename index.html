@@ -1,64 +1,169 @@
-
 <!DOCTYPE html>
-<html lang="ne">
+<html lang="ne" data-theme="light">
 <head>
   <meta charset="UTF-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-
-  <meta
-    name="theme-color"
-    content="#ffffff"
-  >
-
-  <meta
-    name="description"
-    content="हाम्रो संसार - साथी जोड्ने र कुरा गर्ने नेपाली Social Media"
-  >
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2563eb">
   <title>हाम्रो संसार</title>
-
-  <!-- PWA Manifest -->
-  <link rel="manifest" href="./manifest.json">
-
-  <!-- App Icon -->
-  <link
-    rel="icon"
-    href="./assets/icons/icon-192.png"
-    type="image/png"
-  >
-
-  <!-- Shared Design System -->
-  <link rel="stylesheet" href="./css/tokens.css">
-  <link rel="stylesheet" href="./css/reset.css">
-  <link rel="stylesheet" href="./css/layout.css">
-  <link rel="stylesheet" href="./css/components.css">
-  <link rel="stylesheet" href="./css/themes.css">
-  <link rel="stylesheet" href="./css/app.css">
+  <link rel="stylesheet" href="app.css">
 </head>
-
 <body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-logo">ह</div>
+        <div class="brand-text">
+          <h1 class="brand-name">हाम्रो संसार</h1>
+          <p class="brand-tagline">साथी जोडौँ, कुरा गरौँ</p>
+        </div>
+      </div>
 
-  <!-- Main Application Root -->
-  <div id="app">
+      <div class="header-actions">
+        <button class="icon-button" id="searchToggle" aria-label="Search">⌕</button>
+        <button class="icon-button" id="themeToggle" aria-label="Theme">🌙</button>
+        <button class="icon-button" id="settingsToggle" aria-label="Settings">⚙</button>
+      </div>
+    </div>
+  </header>
 
-    <!-- Dashboard will be designed after your instructions -->
+  <main class="app-main">
+    <section id="searchPanel" class="search-panel hidden">
+      <input id="searchInput" class="form-input" type="search"
+        placeholder="पोस्ट खोज्नुहोस्..." aria-label="पोस्ट खोज्नुहोस्">
+    </section>
 
+    <section id="homePage" class="page">
+      <section class="stories-section">
+        <h2 class="section-title">स्टोरीहरू</h2>
+        <div id="storiesList" class="stories-row"></div>
+      </section>
+
+      <section class="composer-card">
+        <div class="composer-top">
+          <div class="avatar">त</div>
+          <button id="openComposer" class="composer-input composer-trigger">
+            के सोच्दै हुनुहुन्छ?
+          </button>
+        </div>
+
+        <div class="composer-actions">
+          <button class="composer-tool" id="quickPhoto">📷 फोटो</button>
+          <button class="composer-tool" id="quickVideo">🎥 भिडियो</button>
+          <button class="composer-tool" id="quickText">✍️ लेख्नुहोस्</button>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="section-title">नयाँ पोस्टहरू</h2>
+        <div id="feedList"></div>
+        <div id="emptyFeed" class="empty-state hidden">
+          <div class="empty-state-icon">📝</div>
+          <h3 class="empty-state-title">अहिलेसम्म पोस्ट छैन</h3>
+          <p>पहिलो पोस्ट गरेर साथीहरूसँग कुरा सुरु गर्नुहोस्।</p>
+        </div>
+      </section>
+    </section>
+
+    <section id="otherPage" class="page hidden">
+      <div class="card">
+        <h2 id="otherPageTitle">पृष्ठ</h2>
+        <p id="otherPageText">यो सुविधा क्रमशः थपिँदैछ।</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" id="bottomNav" aria-label="मुख्य navigation">
+    <div class="bottom-nav-inner">
+      <button class="nav-item active" data-page="home">
+        <span class="nav-icon">🏠</span><span>गृह</span>
+      </button>
+      <button class="nav-item" data-page="posts">
+        <span class="nav-icon">📰</span><span>पोस्ट</span>
+      </button>
+      <button class="nav-item" data-page="create">
+        <span class="nav-icon">➕</span><span>बनाउनु</span>
+      </button>
+      <button class="nav-item" data-page="messages">
+        <span class="nav-icon">💬</span><span>सन्देश</span>
+      </button>
+      <button class="nav-item" data-page="profile">
+        <span class="nav-icon">👤</span><span>प्रोफाइल</span>
+      </button>
+    </div>
+  </nav>
+
+  <div id="composerModal" class="modal-backdrop hidden" aria-hidden="true">
+    <section class="modal" role="dialog" aria-modal="true"
+      aria-labelledby="composerTitle">
+      <header class="modal-header">
+        <h2 id="composerTitle" class="modal-title">नयाँ पोस्ट</h2>
+        <button id="closeComposer" class="icon-button" aria-label="बन्द गर्नुहोस्">×</button>
+      </header>
+
+      <div class="modal-body">
+        <textarea id="postText" class="form-textarea"
+          placeholder="के सोच्दै हुनुहुन्छ?" rows="5"></textarea>
+
+        <div id="mediaPreview" class="media-preview hidden">
+          <img id="imagePreview" class="hidden" alt="छानिएको फोटो">
+          <video id="videoPreview" class="hidden" controls playsinline></video>
+          <button id="removeMedia" class="btn btn-secondary" type="button">
+            फाइल हटाउनुहोस्
+          </button>
+        </div>
+
+        <div class="composer-actions">
+          <button id="choosePhoto" class="composer-tool" type="button">📷 फोटो</button>
+          <button id="chooseVideo" class="composer-tool" type="button">🎥 भिडियो</button>
+          <input id="mediaInput" type="file" accept="image/*,video/*" hidden>
+        </div>
+      </div>
+
+      <footer class="modal-footer">
+        <button id="cancelComposer" class="btn btn-secondary" type="button">रद्द</button>
+        <button id="publishButton" class="btn btn-primary" type="button">प्रकाशित गर्नुहोस्</button>
+      </footer>
+    </section>
   </div>
 
-  <!-- Global Toast Container -->
-  <div
-    id="toast-container"
-    class="toast-container"
-    aria-live="polite"
-    aria-atomic="true"
-  ></div>
+  <div id="settingsModal" class="modal-backdrop hidden" aria-hidden="true">
+    <section class="modal" role="dialog" aria-modal="true"
+      aria-labelledby="settingsTitle">
+      <header class="modal-header">
+        <h2 id="settingsTitle" class="modal-title">सेटिङ</h2>
+        <button id="closeSettings" class="icon-button" aria-label="बन्द गर्नुहोस्">×</button>
+      </header>
 
-  <!-- Shared Application Modules -->
-  <script type="module" src="./js/main.js"></script>
+      <div class="modal-body">
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">Theme</div>
+            <div class="settings-description">Light वा Dark mode</div>
+          </div>
+          <button id="settingsThemeToggle" class="btn btn-secondary">बदल्नुहोस्</button>
+        </div>
 
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">भाषा</div>
+            <div class="settings-description">हाल नेपाली भाषा</div>
+          </div>
+          <span>नेपाली</span>
+        </div>
+
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">स्थानीय डाटा</div>
+            <div class="settings-description">यस उपकरणमा सुरक्षित पोस्टहरू</div>
+          </div>
+          <button id="clearPosts" class="btn btn-danger">मेटाउनुहोस्</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <script src="app.js"></script>
 </body>
 </html>
