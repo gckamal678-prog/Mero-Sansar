@@ -1,0 +1,274 @@
+/* Hamro Sansar - Shared Design System */
+
+:root {
+  --hs-primary: #1877f2;
+  --hs-primary-hover: #1264d8;
+  --hs-primary-soft: #eaf3ff;
+
+  --hs-bg: #f3f6fb;
+  --hs-surface: #ffffff;
+  --hs-text: #172033;
+  --hs-muted: #718096;
+  --hs-border: #e5eaf1;
+  --hs-danger: #e5484d;
+  --hs-success: #159957;
+
+  --hs-radius-sm: 10px;
+  --hs-radius-md: 16px;
+  --hs-radius-lg: 22px;
+  --hs-radius-pill: 999px;
+
+  --hs-space-1: 4px;
+  --hs-space-2: 8px;
+  --hs-space-3: 12px;
+  --hs-space-4: 16px;
+  --hs-space-5: 20px;
+  --hs-space-6: 24px;
+
+  --hs-shadow-card: 0 3px 14px rgba(25, 45, 80, 0.06);
+  --hs-header-height: 68px;
+  --hs-bottom-nav-height: 68px;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --hs-primary: #5598ff;
+  --hs-primary-hover: #3b82f6;
+  --hs-primary-soft: #1c3150;
+
+  --hs-bg: #101722;
+  --hs-surface: #182231;
+  --hs-text: #edf3fb;
+  --hs-muted: #a1afc1;
+  --hs-border: #2b394b;
+  --hs-danger: #ff6b72;
+  --hs-success: #45c98a;
+
+  --hs-shadow-card: 0 3px 14px rgba(0, 0, 0, 0.18);
+
+  color-scheme: dark;
+}
+
+/* Shared reset */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--hs-bg);
+  color: var(--hs-text);
+  font-family:
+    "Noto Sans Devanagari",
+    "Nirmala UI",
+    "Mangal",
+    system-ui,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--hs-primary);
+  outline-offset: 2px;
+}
+
+img,
+video {
+  max-width: 100%;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Shared layout */
+
+.hs-container {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+  padding: var(--hs-space-3);
+}
+
+.hs-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hs-space-3);
+}
+
+.hs-row {
+  display: flex;
+  align-items: center;
+  gap: var(--hs-space-3);
+}
+
+.hs-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hs-space-3);
+}
+
+/* Shared cards */
+
+.hs-card {
+  background: var(--hs-surface);
+  border: 1px solid var(--hs-border);
+  border-radius: var(--hs-radius-lg);
+  box-shadow: var(--hs-shadow-card);
+}
+
+.hs-card-padding {
+  padding: var(--hs-space-4);
+}
+
+/* Shared buttons */
+
+.hs-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hs-space-2);
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: var(--hs-radius-pill);
+  font-weight: 700;
+}
+
+.hs-button-primary {
+  background: var(--hs-primary);
+  color: #ffffff;
+}
+
+.hs-button-primary:active {
+  background: var(--hs-primary-hover);
+}
+
+.hs-button-secondary {
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+}
+
+.hs-button-ghost {
+  background: transparent;
+  color: var(--hs-muted);
+}
+
+.hs-button-danger {
+  background: var(--hs-danger);
+  color: #ffffff;
+}
+
+.hs-button-full {
+  width: 100%;
+}
+
+/* Shared inputs */
+
+.hs-input,
+.hs-textarea,
+.hs-select {
+  width: 100%;
+  border: 1px solid var(--hs-border);
+  border-radius: var(--hs-radius-md);
+  padding: 11px 13px;
+  background: var(--hs-surface);
+  color: var(--hs-text);
+}
+
+.hs-input-pill {
+  border-radius: var(--hs-radius-pill);
+}
+
+.hs-textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+/* Shared headings and labels */
+
+.hs-heading {
+  margin: 0;
+  color: var(--hs-text);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.hs-muted {
+  color: var(--hs-muted);
+}
+
+.hs-small {
+  font-size: 12px;
+}
+
+/* Shared avatar */
+
+.hs-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--hs-primary-soft);
+  color: var(--hs-primary);
+  font-weight: 800;
+}
+
+.hs-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Shared divider */
+
+.hs-divider {
+  width: 100%;
+  height: 1px;
+  border: 0;
+  background: var(--hs-border);
+}
+
+/* Shared empty state */
+
+.hs-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--hs-muted);
+}
+
+/* Responsive spacing */
+
+@media (min-width: 760px) {
+  .hs-container {
+    padding: var(--hs-space-5);
+  }
+}
