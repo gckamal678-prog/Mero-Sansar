@@ -1,9 +1,14 @@
+
 "use strict";
 
-/* HAMRO SANSAR — GLOBAL APPLICATION STATE */
+/* =========================================================
+   KSK — GLOBAL APPLICATION STATE
+   Single shared state for the entire application.
+   Persistent data belongs to KSKData, not this state layer.
+========================================================= */
 
 (function (global) {
-  const STORAGE_KEY = "hs_global_state_v1";
+  const STORAGE_KEY = "ksk_global_state_v1";
 
   const DEFAULT_STATE = {
     user: null,
@@ -11,6 +16,7 @@
     language: "ne",
     currentPage: "home",
     searchQuery: "",
+
     posts: [],
     stories: [],
     friends: [],
@@ -18,18 +24,26 @@
     notifications: [],
     messages: [],
     groups: [],
+
     settings: {
       notifications: true,
       compactMode: false
-    }
+    },
+
+    lastDataChange: null
   };
+
+  const listeners = new Set();
 
   function readStorage() {
     try {
-      const value = localStorage.getItem(STORAGE_KEY);
-      return value ? JSON.parse(value) : {};
+      const raw = global.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return {};
+
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
     } catch (error) {
-      console.error("State storage read failed:", error);
+      console.warn("KSKState: Unable to read saved settings.", error);
       return {};
     }
   }
@@ -42,48 +56,69 @@
     return value === "en" ? "en" : "ne";
   }
 
+  function validPage(value) {
+    return typeof value === "string" && value.trim()
+      ? value.trim()
+      : "home";
+  }
+
+  function copyArray(value) {
+    return Array.isArray(value)
+      ? value.map(item =>
+          item && typeof item === "object"
+            ? { ...item }
+            : item
+        )
+      : [];
+  }
+
   const saved = readStorage();
 
   let state = {
     ...DEFAULT_STATE,
-    ...saved,
     theme: validTheme(saved.theme),
     language: validLanguage(saved.language),
+    currentPage: validPage(saved.currentPage),
+
     settings: {
       ...DEFAULT_STATE.settings,
       ...(saved.settings || {})
     }
   };
 
-  const listeners = new Set();
-
   function getState() {
     return {
       ...state,
-      settings: { ...state.settings },
-      posts: [...state.posts],
-      stories: [...state.stories],
-      friends: [...state.friends],
-      friendRequests: [...state.friendRequests],
-      notifications: [...state.notifications],
-      messages: [...state.messages],
-      groups: [...state.groups]
+
+      posts: copyArray(state.posts),
+      stories: copyArray(state.stories),
+      friends: copyArray(state.friends),
+      friendRequests: copyArray(state.friendRequests),
+      notifications: copyArray(state.notifications),
+      messages: copyArray(state.messages),
+      groups: copyArray(state.groups),
+
+      settings: { ...state.settings }
     };
   }
 
   function persist() {
     try {
-      const data = {
+      const persistentState = {
         theme: state.theme,
         language: state.language,
         currentPage: state.currentPage,
-        settings: state.settings
+        settings: { ...state.settings }
       };
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      global.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(persistentState)
+      );
+
       return true;
     } catch (error) {
-      console.error("State storage write failed:", error);
+      console.warn("KSKState: Unable to save settings.", error);
       return false;
     }
   }
@@ -91,16 +126,16 @@
   function notify(changeName) {
     const snapshot = getState();
 
-    listeners.forEach((listener) => {
+    listeners.forEach(listener => {
       try {
         listener(snapshot, changeName);
       } catch (error) {
-        console.error("State listener error:", error);
+        console.error("KSKState listener error:", error);
       }
     });
 
     global.dispatchEvent(
-      new CustomEvent("hamro:state-change", {
+      new CustomEvent("ksk:state-change", {
         detail: {
           state: snapshot,
           change: changeName
@@ -110,26 +145,39 @@
   }
 
   function setState(updates = {}, changeName = "state-change") {
-    if (!updates || typeof updates !== "object") {
+    if (
+      !updates ||
+      typeof updates !== "object" ||
+      Array.isArray(updates)
+    ) {
       return false;
     }
 
     state = {
       ...state,
       ...updates,
+
       settings: {
         ...state.settings,
         ...(updates.settings || {})
       }
     };
 
-    if (updates.theme !== undefined) {
-      state.theme = validTheme(updates.theme);
-    }
+    state.theme = validTheme(state.theme);
+    state.language = validLanguage(state.language);
+    state.currentPage = validPage(state.currentPage);
 
-    if (updates.language !== undefined) {
-      state.language = validLanguage(updates.language);
+    if (!Array.isArray(state.posts)) state.posts = [];
+    if (!Array.isArray(state.stories)) state.stories = [];
+    if (!Array.isArray(state.friends)) state.friends = [];
+    if (!Array.isArray(state.friendRequests)) {
+      state.friendRequests = [];
     }
+    if (!Array.isArray(state.notifications)) {
+      state.notifications = [];
+    }
+    if (!Array.isArray(state.messages)) state.messages = [];
+    if (!Array.isArray(state.groups)) state.groups = [];
 
     persist();
     notify(changeName);
@@ -139,7 +187,7 @@
 
   function subscribe(listener) {
     if (typeof listener !== "function") {
-      throw new TypeError("Listener must be a function.");
+      throw new TypeError("KSKState.subscribe requires a function.");
     }
 
     listeners.add(listener);
@@ -169,54 +217,71 @@
     }
 
     return setState(
-      { currentPage: page },
+      { currentPage: page.trim() },
       "page-change"
     );
   }
 
   function setSearchQuery(query) {
     return setState(
-      { searchQuery: String(query || "") },
+      { searchQuery: String(query ?? "") },
       "search-change"
     );
   }
 
   function setPosts(posts) {
     return setState(
-      { posts: Array.isArray(posts) ? [...posts] : [] },
+      { posts: copyArray(posts) },
       "posts-change"
     );
   }
 
   function setStories(stories) {
     return setState(
-      { stories: Array.isArray(stories) ? [...stories] : [] },
+      { stories: copyArray(stories) },
       "stories-change"
     );
   }
 
   function setFriends(friends) {
     return setState(
-      { friends: Array.isArray(friends) ? [...friends] : [] },
+      { friends: copyArray(friends) },
       "friends-change"
+    );
+  }
+
+  function setFriendRequests(requests) {
+    return setState(
+      { friendRequests: copyArray(requests) },
+      "friend-requests-change"
     );
   }
 
   function setNotifications(notifications) {
     return setState(
-      {
-        notifications: Array.isArray(notifications)
-          ? [...notifications]
-          : []
-      },
+      { notifications: copyArray(notifications) },
       "notifications-change"
     );
   }
 
   function setMessages(messages) {
     return setState(
-      { messages: Array.isArray(messages) ? [...messages] : [] },
+      { messages: copyArray(messages) },
       "messages-change"
+    );
+  }
+
+  function setGroups(groups) {
+    return setState(
+      { groups: copyArray(groups) },
+      "groups-change"
+    );
+  }
+
+  function setUser(user) {
+    return setState(
+      { user: user && typeof user === "object" ? { ...user } : null },
+      "user-change"
     );
   }
 
@@ -232,27 +297,32 @@
     return getState();
   }
 
-  const api = {
+  const KSKState = Object.freeze({
     get state() {
-      return state;
+      return getState();
     },
 
     getState,
     setState,
     subscribe,
+
     setTheme,
     setLanguage,
     setCurrentPage,
     setSearchQuery,
+    setUser,
+
     setPosts,
     setStories,
     setFriends,
+    setFriendRequests,
     setNotifications,
     setMessages,
-    resetState
-  };
+    setGroups,
 
-  global.HamroState = api;
-  global.appState = api;
+    resetState
+  });
+
+  global.KSKState = KSKState;
 
 })(window);
