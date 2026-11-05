@@ -5,8 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#2563eb">
   <title>हाम्रो संसार</title>
-  <link rel="stylesheet" href="app.css">
-  <link rel="manifest" href="manifest.json">
+<!-- Shared core: dependency order matters -->
+<script src="core/state.js"></script>
+<script src="core/utils.js"></script>
+<script src="core/toast.js"></script>
+<script src="core/language.js"></script>
+<script src="core/theme.js"></script>
+<script src="core/navigation.js"></script>
+<script src="core/settings.js"></script>
+<script src="core/modal.js"></script>
+
+<!-- Components -->
+<script src="components/post-card.js"></script>
+
+<!-- Main app must load last -->
+<script src="app.js"></script>
 </head>
 <body>
   <header class="app-header">
