@@ -1,6 +1,5 @@
 "use strict";
 
-/* Hamro Sansar — Nepali / English language controller */
 (function (global) {
   const dictionaries = {
     ne: {
@@ -22,21 +21,9 @@
       latest: "नयाँ",
       emptyFeed: "अहिलेसम्म पोस्ट छैन। पहिलो पोस्ट तपाईं गर्नुहोस्!",
       searchPlaceholder: "साथी वा पोस्ट खोज्नुहोस्...",
-      theme: "रङ्ग शैली",
-      language: "भाषा",
-      light: "Light",
-      dark: "Dark",
-      nepali: "नेपाली",
-      english: "English",
-      storiesLater: "स्टोरी सुविधा अर्को चरणमा जोडिनेछ।",
-      commentsLater: "टिप्पणी सुविधा अर्को चरणमा जोडिनेछ।",
-      messagesLater: "सन्देश सुविधा अर्को चरणमा जोडिनेछ।",
-      profileLater: "प्रोफाइल सुविधा अर्को चरणमा थपिनेछ।",
-      friendsLater: "साथी सुविधा क्रमशः थपिनेछ।",
+      friends: "साथीहरू",
       notifications: "सूचनाहरू",
       saved: "सेभ गरिएका पोस्टहरू",
-      friends: "साथीहरू",
-      search: "खोज्नुहोस्",
       publish: "प्रकाशित गर्नुहोस्",
       cancel: "रद्द",
       close: "बन्द",
@@ -49,6 +36,15 @@
       connectFriends: "साथी जोड्नुहोस् र कुराकानी सुरु गर्नुहोस्।",
       noNotifications: "अहिले नयाँ सूचना छैन।",
       noSavedPosts: "अहिलेसम्म सेभ गरिएको पोस्ट छैन।",
+      pageUnavailable: "यो पृष्ठ उपलब्ध छैन",
+      moduleNotLoaded: "यस पृष्ठको module load भएको छैन।",
+      pageError: "पृष्ठ खोल्न समस्या भयो",
+      theme: "रङ्ग शैली",
+      language: "भाषा",
+      light: "Light",
+      dark: "Dark",
+      nepali: "नेपाली",
+      english: "English",
       appPreferences: "एपको प्राथमिकता व्यवस्थापन गर्नुहोस्।",
       themeDescription: "Light वा Dark mode",
       languageDescription: "एपको भाषा छान्नुहोस्।",
@@ -59,23 +55,17 @@
       localData: "स्थानीय demo data",
       localDataDescription: "Friends, chats, notifications र profile demo data",
       clearDemoData: "Demo data हटाउनुहोस्",
-      clearDemoConfirm: "स्थानीय demo data हटाउने?",
       resetSettings: "सेटिङ पूर्ववत्",
-      resetSettingsConfirm: "सेटिङ पूर्ववत् गर्ने?",
+      storiesLater: "स्टोरी सुविधा अर्को चरणमा जोडिनेछ।",
+      commentsLater: "टिप्पणी सुविधा अर्को चरणमा जोडिनेछ।",
+      messagesLater: "सन्देश सुविधा अर्को चरणमा जोडिनेछ।",
+      profileLater: "प्रोफाइल सुविधा अर्को चरणमा थपिनेछ।",
+      friendsLater: "साथी सुविधा क्रमशः थपिनेछ।",
       settingsSaved: "सेटिङ सुरक्षित भयो।",
       settingsReset: "सेटिङ पूर्ववत् भयो।",
       demoDataCleared: "Demo data हटाइयो।",
-      on: "चालु",
-      off: "बन्द",
-      post: "पोस्ट",
-      comment: "टिप्पणी",
-      like: "लाइक",
-      share: "शेयर",
-      more: "थप",
-      pageUnavailable: "यो पृष्ठ उपलब्ध छैन",
-      moduleNotLoaded: "यस पृष्ठको module load भएको छैन।",
-      pageError: "पृष्ठ खोल्न समस्या भयो",
-      later: "अर्को चरणमा थपिनेछ।"
+      clearDemoConfirm: "स्थानीय demo data हटाउने?",
+      resetSettingsConfirm: "सेटिङ पूर्ववत् गर्ने?"
     },
 
     en: {
@@ -97,21 +87,9 @@
       latest: "Latest",
       emptyFeed: "No posts yet. Be the first to post!",
       searchPlaceholder: "Search friends or posts...",
-      theme: "Theme",
-      language: "Language",
-      light: "Light",
-      dark: "Dark",
-      nepali: "Nepali",
-      english: "English",
-      storiesLater: "Stories will be added in a later step.",
-      commentsLater: "Comments will be added in a later step.",
-      messagesLater: "Messaging will be added in a later step.",
-      profileLater: "Profile features will be added in a later step.",
-      friendsLater: "Friend features will be added gradually.",
+      friends: "Friends",
       notifications: "Notifications",
       saved: "Saved posts",
-      friends: "Friends",
-      search: "Search",
       publish: "Publish",
       cancel: "Cancel",
       close: "Close",
@@ -124,6 +102,15 @@
       connectFriends: "Add friends and start connecting.",
       noNotifications: "There are no new notifications.",
       noSavedPosts: "There are no saved posts yet.",
+      pageUnavailable: "This page is unavailable",
+      moduleNotLoaded: "This page module has not loaded.",
+      pageError: "There was a problem opening this page",
+      theme: "Theme",
+      language: "Language",
+      light: "Light",
+      dark: "Dark",
+      nepali: "Nepali",
+      english: "English",
       appPreferences: "Manage your app preferences.",
       themeDescription: "Light or Dark mode",
       languageDescription: "Choose the app language.",
@@ -134,118 +121,42 @@
       localData: "Local demo data",
       localDataDescription: "Friends, chats, notifications and profile demo data",
       clearDemoData: "Clear demo data",
-      clearDemoConfirm: "Clear local demo data?",
       resetSettings: "Reset settings",
-      resetSettingsConfirm: "Reset settings to default?",
+      storiesLater: "Stories will be added in a later step.",
+      commentsLater: "Comments will be added in a later step.",
+      messagesLater: "Messaging will be added in a later step.",
+      profileLater: "Profile features will be added in a later step.",
+      friendsLater: "Friend features will be added gradually.",
       settingsSaved: "Settings saved.",
       settingsReset: "Settings reset.",
       demoDataCleared: "Demo data cleared.",
-      on: "On",
-      off: "Off",
-      post: "Post",
-      comment: "Comment",
-      like: "Like",
-      share: "Share",
-      more: "More",
-      pageUnavailable: "This page is unavailable",
-      moduleNotLoaded: "This page module has not loaded.",
-      pageError: "There was a problem opening this page",
-      later: "Will be added in a later step."
-    }
-  };
-
-  /*
-   * Exact text translation map for existing HTML/page modules.
-   * Dynamic/user-written post content is not translated.
-   */
-  const textMap = {
-    ne: {
-      "होम": "home",
-      "पोस्ट": "posts",
-      "बनाउनुहोस्": "create",
-      "सन्देश": "messages",
-      "प्रोफाइल": "profile",
-      "सेटिङ": "settings",
-      "स्टोरीहरू": "stories",
-      "＋ स्टोरी": "addStory",
-      "तपाईं के सोच्दै हुनुहुन्छ?": "writePost",
-      "फोटो": "photo",
-      "भिडियो": "video",
-      "भावना": "feeling",
-      "पोस्टहरू": "feed",
-      "नयाँ": "latest",
-      "अहिलेसम्म पोस्ट छैन। पहिलो पोस्ट तपाईं गर्नुहोस्!": "emptyFeed",
-      "साथी वा पोस्ट खोज्नुहोस्...": "searchPlaceholder",
-      "साथीहरू": "friends",
-      "सूचनाहरू": "notifications",
-      "सेभ गरिएका पोस्टहरू": "saved",
-      "प्रकाशित गर्नुहोस्": "publish",
-      "रद्द": "cancel",
-      "बन्द": "close",
-      "हटाउनुहोस्": "remove",
-      "मेटाउनुहोस्": "delete",
-      "बदल्नुहोस्": "change",
-      "साथी थप्नुहोस्": "addFriend",
-      "साथीको नाम लेख्नुहोस्": "friendName",
-      "अहिलेसम्म साथी छैन।": "noFriends",
-      "साथी जोड्नुहोस् र कुराकानी सुरु गर्नुहोस्।": "connectFriends",
-      "अहिले नयाँ सूचना छैन।": "noNotifications",
-      "अहिलेसम्म सेभ गरिएको पोस्ट छैन।": "noSavedPosts",
-      "यो पृष्ठ उपलब्ध छैन": "pageUnavailable",
-      "यस पृष्ठको module load भएको छैन।": "moduleNotLoaded",
-      "पृष्ठ खोल्न समस्या भयो": "pageError"
-    },
-    en: {
-      "Home": "home",
-      "Posts": "posts",
-      "Create": "create",
-      "Messages": "messages",
-      "Profile": "profile",
-      "Settings": "settings",
-      "Stories": "stories",
-      "+ Story": "addStory",
-      "What are you thinking?": "writePost",
-      "Photo": "photo",
-      "Video": "video",
-      "Feeling": "feeling",
-      "Posts": "feed",
-      "Latest": "latest",
-      "No posts yet. Be the first to post!": "emptyFeed",
-      "Search friends or posts...": "searchPlaceholder",
-      "Friends": "friends",
-      "Notifications": "notifications",
-      "Saved posts": "saved",
-      "Publish": "publish",
-      "Cancel": "cancel",
-      "Close": "close",
-      "Remove": "remove",
-      "Delete": "delete",
-      "Change": "change",
-      "Add friend": "addFriend",
-      "Enter friend's name": "friendName",
-      "You have no friends added yet.": "noFriends",
-      "Add friends and start connecting.": "connectFriends",
-      "There are no new notifications.": "noNotifications",
-      "There are no saved posts yet.": "noSavedPosts",
-      "This page is unavailable": "pageUnavailable",
-      "This page module has not loaded.": "moduleNotLoaded",
-      "There was a problem opening this page": "pageError"
+      clearDemoConfirm: "Clear local demo data?",
+      resetSettingsConfirm: "Reset settings to default?"
     }
   };
 
   function getLanguage() {
     try {
-      const stored = localStorage.getItem("hs_language_v1");
-      if (stored === "en" || stored === "ne") return stored;
+      const saved = localStorage.getItem("hs_language_v1");
+      if (saved === "ne" || saved === "en") return saved;
     } catch {}
 
-    const stateLanguage = global.HamroState?.state?.language;
-    return stateLanguage === "en" ? "en" : "ne";
+    return global.HamroState?.state?.language === "en" ? "en" : "ne";
   }
 
   function translate(key, language = getLanguage()) {
-    const selected = dictionaries[language] || dictionaries.ne;
-    return selected[key] ?? dictionaries.ne[key] ?? key;
+    return dictionaries[language]?.[key] ??
+      dictionaries.ne[key] ??
+      key;
+  }
+
+  function findKeyForText(text) {
+    for (const key of Object.keys(dictionaries.ne)) {
+      if (dictionaries.ne[key] === text || dictionaries.en[key] === text) {
+        return key;
+      }
+    }
+    return null;
   }
 
   function translateTextNode(node, language) {
@@ -253,10 +164,10 @@
     const trimmed = original.trim();
     if (!trimmed) return;
 
-    const lookup = textMap[language]?.[trimmed];
-    if (!lookup) return;
+    const key = findKeyForText(trimmed);
+    if (!key) return;
 
-    const translated = translate(lookup, language);
+    const translated = translate(key, language);
     const leading = original.match(/^\s*/)?.[0] || "";
     const trailing = original.match(/\s*$/)?.[0] || "";
     node.nodeValue = leading + translated + trailing;
@@ -264,11 +175,6 @@
 
   function applyTranslations(root = document) {
     const language = getLanguage();
-
-    if (root.nodeType === Node.TEXT_NODE) {
-      translateTextNode(root, language);
-      return;
-    }
 
     if (root.querySelectorAll) {
       root.querySelectorAll("[data-i18n]").forEach((element) => {
@@ -279,17 +185,14 @@
         element.placeholder = translate(element.dataset.i18nPlaceholder, language);
       });
 
-      root.querySelectorAll("[data-i18n-title]").forEach((element) => {
-        element.title = translate(element.dataset.i18nTitle, language);
-      });
-
       const walker = document.createTreeWalker(
         root,
         NodeFilter.SHOW_TEXT,
         {
           acceptNode(node) {
-            if (!node.parentElement) return NodeFilter.FILTER_REJECT;
-            if (node.parentElement.closest("script, style, textarea, input, select, option")) {
+            const parent = node.parentElement;
+            if (!parent) return NodeFilter.FILTER_REJECT;
+            if (parent.closest("script, style, textarea, input, select, option")) {
               return NodeFilter.FILTER_REJECT;
             }
             return NodeFilter.FILTER_ACCEPT;
@@ -317,7 +220,6 @@
     }
 
     applyTranslations(document);
-    document.documentElement.lang = selected;
 
     global.dispatchEvent(new CustomEvent("hamro:language-change", {
       detail: { language: selected }
