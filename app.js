@@ -2,98 +2,77 @@
 "use strict";
 
 /* =========================================================
-   HAMRO SANSAR — APP CONTROLLER
-   Shared State | Navigation | Stories | Posts | Media
-   Friends | Messages | Profile | Settings
-   ========================================================= */
+   KSK — MAIN APPLICATION CONTROLLER
+   Single Data Layer Architecture
+   Data: KSKData
+   State: KSKState
+   UI: KSKModal / KSKToast
+   Navigation: KSKNavigation
+========================================================= */
 
-(() => {
+(function (global) {
   const $ = (selector, root = document) =>
     root.querySelector(selector);
 
   const $$ = (selector, root = document) =>
     [...root.querySelectorAll(selector)];
 
-  const DB_NAME = "hamro_sansar_media";
-  const DB_VERSION = 1;
-  const MEDIA_STORE = "media";
+  const DATA = () => global.KSKData;
+  const STATE = () => global.KSKState;
+  const MODAL = () => global.KSKModal;
+  const TOAST = () => global.KSKToast;
+  const LANG = () => global.KSKLanguage;
+  const THEME = () => global.KSKTheme;
+  const NAV = () => global.KSKNavigation;
 
-  const POSTS_KEY = "hs_posts_v2";
-  const STORIES_KEY = "hs_stories_v1";
-  const FRIENDS_KEY = "hs_friends_v1";
-  const MESSAGES_KEY = "hs_messages_v1";
-  const PROFILE_KEY = "hs_profile_v1";
-  const SAVED_KEY = "hs_saved_v1";
-
-  const STORY_DURATION = 24 * 60 * 60 * 1000;
-  const MAX_MEDIA_SIZE = 100 * 1024 * 1024;
-
-  const els = {
-    homePage: $("#homePage"),
-    otherPage: $("#otherPage"),
-    otherPageTitle: $("#otherPageTitle"),
-    otherPageText: $("#otherPageText"),
-
-    bottomNav: $("#bottomNav"),
-
-    storiesList: $("#storiesList"),
-    feedList: $("#feedList"),
-    emptyFeed: $("#emptyFeed"),
-
-    composerModal: $("#composerModal"),
-    openComposer: $("#openComposer"),
-    closeComposer: $("#closeComposer"),
-    cancelComposer: $("#cancelComposer"),
-    postText: $("#postText"),
-    publishButton: $("#publishButton"),
-
-    mediaInput: $("#mediaInput"),
-    choosePhoto: $("#choosePhoto"),
-    chooseVideo: $("#chooseVideo"),
-    quickPhoto: $("#quickPhoto"),
-    quickVideo: $("#quickVideo"),
-    quickText: $("#quickText"),
-
-    mediaPreview: $("#mediaPreview"),
-    imagePreview: $("#imagePreview"),
-    videoPreview: $("#videoPreview"),
-    removeMedia: $("#removeMedia"),
-
-    searchPanel: $("#searchPanel"),
-    searchInput: $("#searchInput"),
-    searchToggle: $("#searchToggle"),
-    notificationsToggle: $("#notificationsToggle"),
-
-    settingsToggle: $("#settingsToggle"),
-    settingsModal: $("#settingsModal"),
-    closeSettings: $("#closeSettings"),
-    settingsThemeToggle: $("#settingsThemeToggle"),
-    languageSelect: $("#languageSelect"),
-    clearPosts: $("#clearPosts")
-  };
-
-  let db = null;
-  let dbReady = false;
+  let currentPage = "home";
+  let activeChatId = null;
+  let searchQuery = "";
   let initialized = false;
 
-  let posts = [];
-  let stories = [];
-  let friends = [];
-  let messages = [];
-  let profile = {};
-
-  let selectedMedia = null;
-  let currentPage = "home";
-  let searchQuery = "";
-  let activeChatId = null;
-
-  const objectURLs = new Map();
+  const els = {};
 
   /* =========================================================
      HELPERS
-     ========================================================= */
+  ========================================================= */
+
+  function cacheElements() {
+    const ids = [
+      "homePage",
+      "otherPage",
+      "otherPageTitle",
+      "otherPageText",
+      "bottomNav",
+      "storiesList",
+      "feedList",
+      "emptyFeed",
+      "openComposer",
+      "quickText",
+      "quickPhoto",
+      "quickVideo",
+      "searchPanel",
+      "searchInput",
+      "searchToggle",
+      "notificationsToggle",
+      "settingsToggle",
+      "settingsModal",
+      "closeSettings",
+      "settingsThemeToggle",
+      "languageSelect",
+      "clearPosts",
+      "toastContainer"
+    ];
+
+    ids.forEach(id => {
+      els[id] = document.getElementById(id);
+    });
+  }
 
   function escapeHTML(value = "") {
+    if (global.KSKUtils?.escapeHTML) {
+      return global.KSKUtils.escapeHTML(value);
+    }
+
     return String(value).replace(/[&<>"']/g, char => ({
       "&": "&amp;",
       "<": "&lt;",
@@ -104,64 +83,44 @@
   }
 
   function makeId(prefix = "item") {
-    return `${prefix}_${Date.now()}_${Math.random()
-      .toString(36).slice(2, 9)}`;
+    return DATA()?.makeId?.(prefix) ||
+      `${prefix}_${Date.now()}`;
   }
 
   function language() {
-    return window.HamroLanguage?.getLanguage() || "ne";
+    return LANG()?.getLanguage?.() || "ne";
   }
 
-  function t(key, fallback = "") {
-    return window.HamroLanguage?.translate(key) ||
-      fallback || key;
+  function translate(key, fallback = "") {
+    return LANG()?.translate?.(key) || fallback || key;
+  }
+
+  function isEnglish() {
+    return language() === "en";
   }
 
   function toast(message, type = "info") {
-    if (window.HamroToast?.show) {
-      window.HamroToast.show(message, type);
+    const api = TOAST();
+
+    if (api?.[type]) {
+      api[type](message);
       return;
     }
 
-    const container = $("#toastContainer");
-    if (!container) return;
-
-    const item = document.createElement("div");
-    item.className = `toast toast-${type}`;
-    item.textContent = message;
-    container.appendChild(item);
-
-    setTimeout(() => item.remove(), 3000);
-  }
-
-  function readJSON(key, fallback = []) {
-    try {
-      const value = localStorage.getItem(key);
-      return value ? JSON.parse(value) : fallback;
-    } catch (error) {
-      console.warn("Data loading failed:", key, error);
-      return fallback;
-    }
-  }
-
-  function writeJSON(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-      return true;
-    } catch (error) {
-      console.error("Data saving failed:", key, error);
-      toast("डाटा सुरक्षित गर्न सकिएन।", "error");
-      return false;
-    }
+    api?.show?.(message, type);
   }
 
   function formatDate(value) {
+    if (global.KSKUtils?.formatDateTime) {
+      return global.KSKUtils.formatDateTime(value);
+    }
+
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) return "";
 
     return date.toLocaleString(
-      language() === "en" ? "en-US" : "ne-NP",
+      isEnglish() ? "en-US" : "ne-NP",
       {
         dateStyle: "medium",
         timeStyle: "short"
@@ -175,7 +134,7 @@
     if (Number.isNaN(date.getTime())) return "";
 
     return date.toLocaleTimeString(
-      language() === "en" ? "en-US" : "ne-NP",
+      isEnglish() ? "en-US" : "ne-NP",
       {
         hour: "2-digit",
         minute: "2-digit"
@@ -183,264 +142,150 @@
     );
   }
 
-  function savePosts() {
-    const metadata = posts.map(({ mediaData, ...post }) => post);
-
-    if (!writeJSON(POSTS_KEY, metadata)) return false;
-
-    window.HamroState?.setPosts(posts);
-    return true;
+  function confirmAction(message) {
+    return global.confirm(message);
   }
 
-  function saveStories() {
-    if (!writeJSON(STORIES_KEY, stories)) return false;
-
-    window.HamroState?.setStories(stories);
-    return true;
+  function profile() {
+    return DATA()?.getProfile?.() || {
+      name: "",
+      bio: "",
+      location: "",
+      avatar: ""
+    };
   }
 
-  /* =========================================================
-     INDEXED DB — PHOTO / VIDEO STORAGE
-     ========================================================= */
-
-  function openMediaDatabase() {
-    return new Promise((resolve, reject) => {
-      if (!("indexedDB" in window)) {
-        reject(new Error("IndexedDB उपलब्ध छैन।"));
-        return;
-      }
-
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-      request.onupgradeneeded = () => {
-        const database = request.result;
-
-        if (!database.objectStoreNames.contains(MEDIA_STORE)) {
-          database.createObjectStore(MEDIA_STORE, {
-            keyPath: "id"
-          });
-        }
-      };
-
-      request.onsuccess = () => {
-        db = request.result;
-        dbReady = true;
-        resolve(db);
-      };
-
-      request.onerror = () => reject(request.error);
-    });
+  function displayName() {
+    return profile().name ||
+      (isEnglish() ? "You" : "तपाईं");
   }
 
-  function storeMedia(id, blob, type) {
-    return new Promise((resolve, reject) => {
-      if (!dbReady || !db) {
-        reject(new Error("Media database तयार छैन।"));
-        return;
-      }
-
-      const transaction = db.transaction(MEDIA_STORE, "readwrite");
-
-      transaction.objectStore(MEDIA_STORE).put({
-        id,
-        blob,
-        type,
-        createdAt: Date.now()
-      });
-
-      transaction.oncomplete = () => resolve(true);
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error);
-    });
+  function initial(value) {
+    return String(value || "").trim().charAt(0) ||
+      (isEnglish() ? "U" : "स");
   }
 
-  function getMedia(id) {
-    return new Promise((resolve, reject) => {
-      if (!dbReady || !db) {
-        reject(new Error("Media database उपलब्ध छैन।"));
-        return;
-      }
+  function avatarHTML(name, avatar = "", size = "") {
+    const content = avatar
+      ? `<img src="${escapeHTML(avatar)}" alt="">`
+      : escapeHTML(initial(name));
 
-      const transaction = db.transaction(MEDIA_STORE, "readonly");
-      const request = transaction.objectStore(MEDIA_STORE).get(id);
-
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
-    });
+    return `
+      <div class="avatar ${size}">
+        ${content}
+      </div>
+    `;
   }
 
-  function deleteMedia(id) {
-    if (!dbReady || !db || !id) return;
-
-    try {
-      const transaction = db.transaction(MEDIA_STORE, "readwrite");
-      transaction.objectStore(MEDIA_STORE).delete(id);
-    } catch (error) {
-      console.warn("Media deletion failed:", error);
-    }
-
-    const url = objectURLs.get(id);
-
-    if (url) {
-      URL.revokeObjectURL(url);
-      objectURLs.delete(id);
-    }
-  }
-
-  async function getMediaURL(id) {
-    if (objectURLs.has(id)) return objectURLs.get(id);
-
-    const record = await getMedia(id);
-
-    if (!record?.blob) return "";
-
-    const url = URL.createObjectURL(record.blob);
-    objectURLs.set(id, url);
-
-    return url;
-  }
-
-  async function attachMediaToElements(root) {
-    const elements = $$("[data-media-id]", root);
-
-    for (const element of elements) {
-      const id = element.dataset.mediaId;
-
-      if (!id || element.dataset.mediaLoaded === "true") continue;
-
-      try {
-        const url = await getMediaURL(id);
-
-        if (!url) continue;
-
-        element.src = url;
-        element.dataset.mediaLoaded = "true";
-
-        if (element.tagName === "VIDEO") {
-          element.load();
-        }
-      } catch (error) {
-        console.warn("Media could not be displayed:", error);
-      }
-    }
-  }
-
-  /* =========================================================
-     LOAD DATA
-     ========================================================= */
-
-  function loadPosts() {
-    let saved = readJSON(POSTS_KEY, null);
-
-    // Old-version compatibility.
-    if (!Array.isArray(saved)) {
-      const oldPosts = readJSON("hs_posts_v1", []);
-
-      saved = Array.isArray(oldPosts)
-        ? oldPosts
-        : [];
-    }
-
-    return saved.sort((a, b) =>
-      new Date(b.createdAt || 0) -
-      new Date(a.createdAt || 0)
-    );
-  }
-
-  function loadStories() {
-    const now = Date.now();
-
-    return readJSON(STORIES_KEY, [])
-      .filter(story =>
-        story.expiresAt && story.expiresAt > now
-      )
-      .sort((a, b) =>
-        new Date(b.createdAt) - new Date(a.createdAt)
+  function openModal(options) {
+    if (!MODAL()?.openModal) {
+      toast(
+        isEnglish()
+          ? "Modal is not available."
+          : "यो सुविधा अहिले उपलब्ध छैन।",
+        "error"
       );
+      return null;
+    }
+
+    return MODAL().openModal(options);
   }
 
-  function loadOtherData() {
-    friends = readJSON(FRIENDS_KEY, []);
-    messages = readJSON(MESSAGES_KEY, []);
-    profile = readJSON(PROFILE_KEY, {
-      name: "तपाईं",
-      bio: "हाम्रो संसारमा स्वागत छ।"
-    });
+  function closeModal() {
+    MODAL()?.closeModal?.();
+  }
+
+  function getPosts() {
+    return DATA()?.getPosts?.() || [];
+  }
+
+  function getStories() {
+    return DATA()?.getStories?.() || [];
+  }
+
+  function getFriends() {
+    return DATA()?.getFriends?.() || [];
+  }
+
+  function getChats() {
+    return DATA()?.getChats?.() || [];
   }
 
   /* =========================================================
-     THEME + SETTINGS
-     ========================================================= */
+     SHARED PAGE LAYOUT
+  ========================================================= */
 
-  function getTheme() {
-    return window.HamroTheme?.getTheme() ||
-      document.documentElement.dataset.theme ||
-      "light";
+  function showHomeLayout() {
+    els.homePage?.classList.remove("hidden");
+    els.otherPage?.classList.add("hidden");
   }
 
-  function applyTheme() {
-    const selected =
-      getTheme() === "dark" ? "dark" : "light";
+  function showOtherLayout() {
+    els.homePage?.classList.add("hidden");
+    els.otherPage?.classList.remove("hidden");
+  }
 
-    if (window.HamroTheme) {
-      window.HamroTheme.applyTheme(selected);
+  function setPageTitle(title) {
+    if (els.otherPageTitle) {
+      els.otherPageTitle.textContent = title;
     }
-
-    return selected;
   }
 
-  function toggleTheme() {
-    const next = getTheme() === "dark" ? "light" : "dark";
-
-    if (window.HamroTheme) {
-      window.HamroTheme.applyTheme(next);
-    } else {
-      document.documentElement.dataset.theme = next;
+  function setPageContent(html) {
+    if (els.otherPageText) {
+      els.otherPageText.innerHTML = html;
     }
-
-    toast(
-      next === "dark"
-        ? "Dark mode सक्रिय भयो।"
-        : "Light mode सक्रिय भयो।",
-      "success"
-    );
   }
 
-  function initializeLanguageControl() {
-    if (!els.languageSelect) return;
+  function refreshNavigation(page = currentPage) {
+    NAV()?.refreshNavigation?.();
 
-    els.languageSelect.value = language();
+    $$(".nav-item").forEach(button => {
+      const active = button.dataset.page === page;
+
+      button.classList.toggle("active", active);
+
+      if (active) {
+        button.setAttribute("aria-current", "page");
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
   }
 
   /* =========================================================
      STORIES
-     ========================================================= */
+  ========================================================= */
 
   function renderStories() {
     if (!els.storiesList) return;
+
+    const stories = getStories();
+
+    const addLabel = isEnglish()
+      ? "Add Story"
+      : "स्टोरी थप्नुहोस्";
 
     const addStory = `
       <button
         class="story-card"
         type="button"
-        data-story-create="true">
+        data-story-create>
 
         <span class="story-avatar">＋</span>
-        <span class="story-name">${escapeHTML(
-          language() === "en" ? "Add Story" : "स्टोरी थप्नुहोस्"
-        )}</span>
+        <span class="story-name">${addLabel}</span>
 
       </button>
     `;
 
-    const storyHTML = stories.map(story => `
+    const storyItems = stories.map(story => `
       <button
         class="story-card"
         type="button"
         data-story-view="${escapeHTML(story.id)}">
 
         <span class="story-avatar">
-          ${escapeHTML(story.initial || "स")}
+          ${escapeHTML(initial(story.author))}
         </span>
 
         <span class="story-name">
@@ -450,181 +295,194 @@
       </button>
     `).join("");
 
-    els.storiesList.innerHTML = addStory + storyHTML;
+    els.storiesList.innerHTML = addStory + storyItems;
   }
 
-  function openStoryPicker() {
-    const input = document.createElement("input");
+  function openStoryCreator() {
+    const content = `
+      <form id="kskStoryForm">
 
-    input.type = "file";
-    input.accept = "image/*,video/*";
-    input.hidden = true;
+        <label class="form-label" for="kskStoryText">
+          ${isEnglish()
+            ? "Write your story"
+            : "आफ्नो Story लेख्नुहोस्"}
+        </label>
 
-    document.body.appendChild(input);
+        <textarea
+          id="kskStoryText"
+          class="form-textarea"
+          rows="4"
+          maxlength="1000"
+          placeholder="${isEnglish()
+            ? "Share something..."
+            : "केही कुरा साझा गर्नुहोस्..."}"
+          required></textarea>
 
-    input.addEventListener("change", async () => {
-      const file = input.files?.[0];
-      input.remove();
+      </form>
+    `;
 
-      if (!file) return;
+    const footer = `
+      <button
+        type="button"
+        class="btn btn-secondary"
+        data-modal-close>
+        ${translate("cancel", "रद्द")}
+      </button>
 
-      if (!file.type.startsWith("image/") &&
-          !file.type.startsWith("video/")) {
-        toast("फोटो वा भिडियो छान्नुहोस्।", "warning");
-        return;
-      }
+      <button
+        type="submit"
+        form="kskStoryForm"
+        class="btn btn-primary">
+        ${isEnglish() ? "Publish Story" : "Story प्रकाशित गर्नुहोस्"}
+      </button>
+    `;
 
-      if (file.size > MAX_MEDIA_SIZE) {
-        toast("फाइल १०० MB भन्दा सानो हुनुपर्छ।", "warning");
-        return;
-      }
+    const modal = openModal({
+      title: isEnglish() ? "Create Story" : "नयाँ Story",
+      content,
+      footer
+    });
 
-      const id = makeId("story");
+    if (!modal) return;
 
-      try {
-        await storeMedia(id, file, file.type);
+    $("#kskStoryText", modal.element)?.focus();
 
-        const story = {
-          id,
-          author: profile.name || "तपाईं",
-          initial: (profile.name || "त").charAt(0),
-          mediaType: file.type,
-          createdAt: new Date().toISOString(),
-          expiresAt: Date.now() + STORY_DURATION
-        };
+    $("#kskStoryForm", modal.element)?.addEventListener(
+      "submit",
+      event => {
+        event.preventDefault();
 
-        stories.unshift(story);
+        const text = $("#kskStoryText", modal.element)
+          ?.value.trim();
 
-        if (!saveStories()) {
-          stories.shift();
-          deleteMedia(id);
+        if (!text) return;
+
+        const result = DATA()?.addStory?.({
+          author: displayName(),
+          text
+        });
+
+        if (!result) {
+          toast(
+            isEnglish()
+              ? "Could not publish story."
+              : "Story प्रकाशित गर्न सकिएन।",
+            "error"
+          );
           return;
         }
 
+        closeModal();
         renderStories();
-        toast("तपाईंको Story थपियो।", "success");
 
-      } catch (error) {
-        console.error(error);
-        toast("Story सुरक्षित गर्न सकिएन।", "error");
+        toast(
+          isEnglish()
+            ? "Story published."
+            : "Story प्रकाशित भयो।",
+          "success"
+        );
       }
-    });
-
-    input.click();
+    );
   }
 
   function viewStory(id) {
-    const story = stories.find(item => item.id === id);
+    const story = getStories().find(
+      item => String(item.id) === String(id)
+    );
 
     if (!story) return;
 
-    let modal = $("#storyViewer");
+    const content = `
+      <div class="story-view-content">
+        ${avatarHTML(story.author)}
 
-    if (!modal) {
-      modal = document.createElement("div");
-      modal.id = "storyViewer";
-      modal.className = "modal-backdrop";
-      document.body.appendChild(modal);
-    }
+        <h3>${escapeHTML(story.author || "सदस्य")}</h3>
 
-    const mediaTag = story.mediaType?.startsWith("video/")
-      ? `<video data-media-id="${escapeHTML(id)}"
-           controls autoplay playsinline
-           style="width:100%;max-height:70vh"></video>`
-      : `<img data-media-id="${escapeHTML(id)}"
-           alt="Story"
-           style="width:100%;max-height:70vh;object-fit:contain">`;
+        <p class="post-time">
+          ${escapeHTML(formatDate(story.createdAt))}
+        </p>
 
-    modal.innerHTML = `
-      <section class="modal" role="dialog" aria-modal="true">
-        <header class="modal-header">
-          <strong>${escapeHTML(story.author)}</strong>
-          <button class="icon-button" type="button"
-            data-close-story>×</button>
-        </header>
-        <div class="modal-body">
-          ${mediaTag}
-          <p class="post-time">${formatDate(story.createdAt)}</p>
+        <div class="post-content">
+          ${escapeHTML(story.text || "")}
         </div>
-      </section>
+      </div>
     `;
 
-    attachMediaToElements(modal);
+    openModal({
+      title: isEnglish() ? "Story" : "Story",
+      content,
+      footer: `
+        <button
+          class="btn btn-secondary"
+          type="button"
+          data-modal-close>
+          ${translate("close", "बन्द गर्नुहोस्")}
+        </button>
+      `
+    });
   }
 
   /* =========================================================
-     POST RENDERING
-     ========================================================= */
+     POSTS
+  ========================================================= */
 
   function renderPost(post) {
     const id = escapeHTML(post.id);
     const author = escapeHTML(post.author || "सदस्य");
-    const initial = escapeHTML(post.authorInitial || "स");
-    const content = escapeHTML(post.text || "");
+    const text = escapeHTML(post.text || "");
     const date = escapeHTML(formatDate(post.createdAt));
+    const liked = Boolean(post.liked);
+    const likes = Number(post.likes || 0);
 
-    let mediaHTML = "";
-
-    if (post.mediaId) {
-      if (post.mediaType?.startsWith("video/")) {
-        mediaHTML = `
-          <video
-            class="post-media"
-            data-media-id="${escapeHTML(post.mediaId)}"
-            controls
-            playsinline>
-          </video>
-        `;
-      } else {
-        mediaHTML = `
-          <img
-            class="post-media"
-            data-media-id="${escapeHTML(post.mediaId)}"
-            alt="पोस्ट फोटो"
-            loading="lazy">
-        `;
-      }
-    } else if (post.mediaData) {
-      const url = escapeHTML(post.mediaData);
-
-      mediaHTML = post.mediaType?.startsWith("video/")
-        ? `<video class="post-media" src="${url}" controls playsinline></video>`
-        : `<img class="post-media" src="${url}" alt="पोस्ट फोटो" loading="lazy">`;
-    }
+    const saved = (DATA()?.getSavedPosts?.() || [])
+      .some(item => String(item) === String(post.id));
 
     return `
-      <article class="post-card" data-post-id="${id}">
+      <article
+        class="post-card"
+        data-post-id="${id}">
 
         <header class="post-header">
-          <div class="avatar">${initial}</div>
+
+          ${avatarHTML(author)}
 
           <div class="post-author">
-            <p class="post-author-name">${author}</p>
-            <p class="post-time">${date}</p>
+
+            <p class="post-author-name">
+              ${author}
+            </p>
+
+            <p class="post-time">
+              ${date}
+            </p>
+
           </div>
 
           <button
             class="icon-button"
             type="button"
             data-post-menu="${id}"
-            aria-label="पोस्ट विकल्प">⋯</button>
+            aria-label="${isEnglish() ? "Post options" : "पोस्ट विकल्प"}">
+            ⋯
+          </button>
+
         </header>
 
-        ${content
-          ? `<div class="post-content">${content}</div>`
+        ${text
+          ? `<div class="post-content">${text}</div>`
           : ""}
-
-        ${mediaHTML}
 
         <footer class="post-actions">
 
           <button
-            class="post-action ${post.liked ? "is-active" : ""}"
+            class="post-action ${liked ? "is-active" : ""}"
             type="button"
             data-post-action="like"
             data-post-id="${id}">
-            ${post.liked ? "❤️" : "♡"}
-            ${Number(post.likes || 0)}
+
+            ${liked ? "❤️" : "♡"}
+            ${likes}
+
           </button>
 
           <button
@@ -632,7 +490,20 @@
             type="button"
             data-post-action="comment"
             data-post-id="${id}">
-            💬 टिप्पणी
+
+            💬 ${isEnglish() ? "Comment" : "टिप्पणी"}
+
+          </button>
+
+          <button
+            class="post-action"
+            type="button"
+            data-post-action="save"
+            data-post-id="${id}">
+
+            ${saved ? "🔖" : "☆"}
+            ${isEnglish() ? "Save" : "सेभ"}
+
           </button>
 
           <button
@@ -640,7 +511,9 @@
             type="button"
             data-post-action="share"
             data-post-id="${id}">
-            ↗ Share
+
+            ↗ ${isEnglish() ? "Share" : "साझा"}
+
           </button>
 
         </footer>
@@ -650,589 +523,1141 @@
   }
 
   function renderFeed() {
-    if (!els.feedList || !els.emptyFeed) return;
+    if (!els.feedList) return;
+
+    const posts = getPosts();
 
     const filtered = posts.filter(post => {
-      const text = `${post.author || ""} ${post.text || ""}`
-        .toLowerCase();
+      const text = [
+        post.author || "",
+        post.text || ""
+      ].join(" ").toLowerCase();
 
       return text.includes(searchQuery.toLowerCase());
     });
 
-    els.feedList.innerHTML = filtered.map(renderPost).join("");
+    els.feedList.innerHTML = filtered
+      .map(renderPost)
+      .join("");
 
-    els.emptyFeed.classList.toggle("hidden", filtered.length > 0);
-
-    attachMediaToElements(els.feedList);
+    els.emptyFeed?.classList.toggle(
+      "hidden",
+      filtered.length > 0
+    );
   }
 
-  /* =========================================================
-     POST COMPOSER
-     ========================================================= */
+  function openPostComposer() {
+    const content = `
+      <form id="kskPostForm">
 
-  function openComposer() {
-    if (!els.composerModal) return;
+        <textarea
+          id="kskPostText"
+          class="form-textarea"
+          rows="5"
+          maxlength="10000"
+          placeholder="${isEnglish()
+            ? "What is on your mind?"
+            : "के सोच्दै हुनुहुन्छ?"}"
+          required></textarea>
 
-    els.composerModal.classList.remove("hidden");
-    els.composerModal.setAttribute("aria-hidden", "false");
+      </form>
+    `;
 
-    setTimeout(() => els.postText?.focus(), 50);
+    const footer = `
+      <button
+        type="button"
+        class="btn btn-secondary"
+        data-modal-close>
+        ${translate("cancel", "रद्द")}
+      </button>
+
+      <button
+        type="submit"
+        form="kskPostForm"
+        class="btn btn-primary">
+        ${translate("publish", "प्रकाशित गर्नुहोस्")}
+      </button>
+    `;
+
+    const modal = openModal({
+      title: isEnglish() ? "Create Post" : "नयाँ पोस्ट",
+      content,
+      footer
+    });
+
+    if (!modal) return;
+
+    $("#kskPostText", modal.element)?.focus();
+
+    $("#kskPostForm", modal.element)?.addEventListener(
+      "submit",
+      event => {
+        event.preventDefault();
+
+        const text = $("#kskPostText", modal.element)
+          ?.value.trim();
+
+        if (!text) {
+          toast(
+            isEnglish()
+              ? "Please write something."
+              : "पोस्ट लेख्नुहोस्।",
+            "warning"
+          );
+          return;
+        }
+
+        const user = profile();
+
+        const result = DATA()?.addPost?.({
+          author: user.name || displayName(),
+          authorInitial: initial(user.name),
+          text,
+          likes: 0,
+          liked: false
+        });
+
+        if (!result) {
+          toast(
+            isEnglish()
+              ? "Post could not be published."
+              : "पोस्ट प्रकाशित गर्न सकिएन।",
+            "error"
+          );
+          return;
+        }
+
+        closeModal();
+        renderFeed();
+
+        toast(
+          isEnglish()
+            ? "Post published successfully."
+            : "पोस्ट प्रकाशित भयो।",
+          "success"
+        );
+      }
+    );
   }
 
-  function closeComposer() {
-    els.composerModal?.classList.add("hidden");
-    els.composerModal?.setAttribute("aria-hidden", "true");
+  function editPost(id) {
+    const post = DATA()?.getPost?.(id);
+
+    if (!post) return;
+
+    const content = `
+      <form id="kskEditPostForm">
+
+        <textarea
+          id="kskEditPostText"
+          class="form-textarea"
+          rows="5"
+          maxlength="10000"
+          required>${escapeHTML(post.text || "")}</textarea>
+
+      </form>
+    `;
+
+    const modal = openModal({
+      title: isEnglish() ? "Edit Post" : "पोस्ट सम्पादन",
+      content,
+      footer: `
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-modal-close>
+          ${translate("cancel", "रद्द")}
+        </button>
+
+        <button
+          type="submit"
+          form="kskEditPostForm"
+          class="btn btn-primary">
+          ${isEnglish() ? "Save Changes" : "परिवर्तन सुरक्षित गर्नुहोस्"}
+        </button>
+      `
+    });
+
+    if (!modal) return;
+
+    $("#kskEditPostForm", modal.element)?.addEventListener(
+      "submit",
+      event => {
+        event.preventDefault();
+
+        const text = $("#kskEditPostText", modal.element)
+          ?.value.trim();
+
+        if (!text) return;
+
+        const success = DATA()?.updatePost?.(id, { text });
+
+        if (!success) {
+          toast(
+            isEnglish()
+              ? "Could not update post."
+              : "पोस्ट परिवर्तन गर्न सकिएन।",
+            "error"
+          );
+          return;
+        }
+
+        closeModal();
+        refreshCurrentPage();
+
+        toast(
+          isEnglish() ? "Post updated." : "पोस्ट परिवर्तन भयो।",
+          "success"
+        );
+      }
+    );
   }
 
-  function resetMedia() {
-    selectedMedia = null;
+  function openPostMenu(id) {
+    const post = DATA()?.getPost?.(id);
 
-    if (els.mediaInput) els.mediaInput.value = "";
+    if (!post) return;
 
-    els.mediaPreview?.classList.add("hidden");
-    els.imagePreview?.classList.add("hidden");
-    els.videoPreview?.classList.add("hidden");
+    const content = `
+      <div class="post-menu-actions">
 
-    if (els.imagePreview) els.imagePreview.removeAttribute("src");
+        <button
+          class="dropdown-item"
+          type="button"
+          data-edit-post="${escapeHTML(id)}">
+          ✏️ ${isEnglish() ? "Edit post" : "पोस्ट सम्पादन"}
+        </button>
 
-    if (els.videoPreview) {
-      els.videoPreview.pause();
-      els.videoPreview.removeAttribute("src");
-      els.videoPreview.load();
-    }
+        <button
+          class="dropdown-item"
+          type="button"
+          data-delete-post="${escapeHTML(id)}">
+          🗑️ ${isEnglish() ? "Delete post" : "पोस्ट मेटाउनुहोस्"}
+        </button>
+
+      </div>
+    `;
+
+    openModal({
+      title: isEnglish() ? "Post options" : "पोस्ट विकल्प",
+      content,
+      footer: `
+        <button
+          class="btn btn-secondary"
+          type="button"
+          data-modal-close>
+          ${translate("close", "बन्द")}
+        </button>
+      `
+    });
   }
 
-  function chooseMedia(type) {
-    if (!els.mediaInput) return;
+  function deletePost(id) {
+    const message = isEnglish()
+      ? "Are you sure you want to delete this post?"
+      : "के तपाईं यो पोस्ट मेटाउन चाहनुहुन्छ?";
 
-    els.mediaInput.accept =
-      type === "image" ? "image/*" : "video/*";
+    if (!confirmAction(message)) return;
 
-    els.mediaInput.click();
-  }
+    const success = DATA()?.deletePost?.(id);
 
-  function handleMedia(file) {
-    if (!file) return;
-
-    if (!file.type.startsWith("image/") &&
-        !file.type.startsWith("video/")) {
-      toast("फोटो वा भिडियो छान्नुहोस्।", "warning");
+    if (!success) {
+      toast(
+        isEnglish()
+          ? "Could not delete post."
+          : "पोस्ट मेटाउन सकिएन।",
+        "error"
+      );
       return;
     }
 
-    if (file.size > MAX_MEDIA_SIZE) {
-      toast("फाइल १०० MB भन्दा सानो हुनुपर्छ।", "warning");
-      return;
-    }
+    closeModal();
+    refreshCurrentPage();
 
-    selectedMedia = file;
-
-    const url = URL.createObjectURL(file);
-
-    els.mediaPreview?.classList.remove("hidden");
-
-    if (file.type.startsWith("image/")) {
-      els.imagePreview.src = url;
-      els.imagePreview.classList.remove("hidden");
-      els.videoPreview?.classList.add("hidden");
-    } else {
-      els.videoPreview.src = url;
-      els.videoPreview.classList.remove("hidden");
-      els.imagePreview?.classList.add("hidden");
-    }
+    toast(
+      isEnglish() ? "Post deleted." : "पोस्ट मेटाइयो।",
+      "success"
+    );
   }
 
-  async function publishPost() {
-    const text = els.postText?.value.trim() || "";
+  function toggleLike(id) {
+    const post = DATA()?.getPost?.(id);
 
-    if (!text && !selectedMedia) {
-      toast("पोस्ट लेख्नुहोस् वा फोटो/भिडियो छान्नुहोस्।", "warning");
-      return;
-    }
+    if (!post) return;
 
-    const button = els.publishButton;
-
-    if (button) {
-      button.disabled = true;
-      button.textContent = "प्रकाशित हुँदैछ...";
-    }
-
-    const post = {
-      id: makeId("post"),
-      author: profile.name || "तपाईं",
-      authorInitial: (profile.name || "त").charAt(0),
-      text,
-      mediaId: "",
-      mediaType: "",
-      createdAt: new Date().toISOString(),
-      likes: 0,
-      liked: false,
-      comments: 0,
-      shares: 0
-    };
-
-    try {
-      if (selectedMedia) {
-        post.mediaId = post.id;
-        post.mediaType = selectedMedia.type;
-
-        await storeMedia(post.mediaId, selectedMedia);
-      }
-
-      posts.unshift(post);
-
-      if (!savePosts()) {
-        posts.shift();
-        deleteMedia(post.mediaId);
-        return;
-      }
-
-      renderFeed();
-
-      if (els.postText) els.postText.value = "";
-
-      resetMedia();
-      closeComposer();
-      showPage("home");
-
-      toast("पोस्ट प्रकाशित भयो।", "success");
-
-    } catch (error) {
-      console.error("Post publishing failed:", error);
-
-      posts = posts.filter(item => item.id !== post.id);
-      deleteMedia(post.mediaId);
-
-      toast("पोस्ट सुरक्षित गर्न सकिएन। फेरि प्रयास गर्नुहोस्।", "error");
-
-    } finally {
-      if (button) {
-        button.disabled = false;
-        button.textContent = "प्रकाशित गर्नुहोस्";
-      }
-    }
-  }
-
-  /* =========================================================
-     POST ACTIONS
-     ========================================================= */
-
-  function updatePost(id, changes) {
-    const old = posts;
-
-    posts = posts.map(post =>
-      post.id === id ? { ...post, ...changes } : post
+    const liked = !post.liked;
+    const likes = Math.max(
+      0,
+      Number(post.likes || 0) + (liked ? 1 : -1)
     );
 
-    if (!savePosts()) {
-      posts = old;
-      return;
-    }
+    DATA()?.updatePost?.(id, {
+      liked,
+      likes
+    });
 
     renderFeed();
+
+    if (currentPage === "profile") {
+      renderProfile();
+    }
+  }
+
+  function toggleSave(id) {
+    const result = DATA()?.toggleSavedPost?.(id);
+
+    if (result === false) {
+      toast(
+        isEnglish() ? "Post removed from saved." : "सेभबाट हटाइयो।",
+        "success"
+      );
+    } else {
+      toast(
+        isEnglish() ? "Post saved." : "पोस्ट सेभ भयो।",
+        "success"
+      );
+    }
+
+    refreshCurrentPage();
+  }
+
+  async function sharePost(id) {
+    const post = DATA()?.getPost?.(id);
+
+    if (!post) return;
+
+    const text = `${post.author || ""}\n${post.text || ""}`.trim();
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+
+        toast(
+          isEnglish()
+            ? "Post copied."
+            : "पोस्ट कपी भयो।",
+          "success"
+        );
+      } else {
+        toast(
+          isEnglish()
+            ? "Sharing is unavailable."
+            : "साझा गर्ने सुविधा उपलब्ध छैन।",
+          "warning"
+        );
+      }
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        toast(
+          isEnglish()
+            ? "Could not share post."
+            : "पोस्ट साझा गर्न सकिएन।",
+          "error"
+        );
+      }
+    }
   }
 
   function handlePostAction(action, id) {
-    const post = posts.find(item => item.id === id);
-    if (!post) return;
+    if (action === "like") toggleLike(id);
 
-    if (action === "like") {
-      const liked = !post.liked;
+    if (action === "save") toggleSave(id);
 
-      updatePost(id, {
-        liked,
-        likes: Math.max(
-          0,
-          Number(post.likes || 0) + (liked ? 1 : -1)
-        )
-      });
-
-      return;
-    }
+    if (action === "share") sharePost(id);
 
     if (action === "comment") {
-      toast("टिप्पणी सुविधा अर्को चरणमा जोडिनेछ।", "info");
-      return;
-    }
-
-    if (action === "share") {
-      const text = `${post.author}: ${post.text || "पोस्ट"}`;
-
-      if (navigator.share) {
-        navigator.share({
-          title: "हाम्रो संसार",
-          text
-        }).catch(() => {});
-      } else if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text)
-          .then(() => toast("पोस्ट Copy भयो।", "success"))
-          .catch(() => toast("Copy गर्न सकिएन।", "error"));
-      } else {
-        toast("Share सुविधा उपलब्ध छैन।");
-      }
-    }
-  }
-
-  function postMenu(id) {
-    const post = posts.find(item => item.id === id);
-    if (!post) return;
-
-    const action = prompt(
-      "१ = Edit पोस्ट\n२ = Delete पोस्ट\n\nविकल्प लेख्नुहोस्।"
-    );
-
-    if (action === "1") {
-      const updated = prompt("पोस्ट सम्पादन गर्नुहोस्:", post.text || "");
-
-      if (updated === null) return;
-
-      updatePost(id, { text: updated.trim() });
-      toast("पोस्ट सम्पादन भयो।", "success");
-    }
-
-    if (action === "2") {
-      if (!confirm("यो पोस्ट हटाउने हो?")) return;
-
-      posts = posts.filter(item => item.id !== id);
-
-      if (savePosts()) {
-        deleteMedia(id);
-        renderFeed();
-        toast("पोस्ट हटाइयो।", "success");
-      }
+      toast(
+        isEnglish()
+          ? "Comments will be added in a later step."
+          : "टिप्पणी सुविधा अर्को चरणमा थपिनेछ।",
+        "info"
+      );
     }
   }
 
   /* =========================================================
-     FRIENDS PAGE
-     ========================================================= */
+     FRIENDS
+  ========================================================= */
 
   function renderFriends() {
-    const suggestions = [
-      { id: "friend_1", name: "साथी १", initial: "स" },
-      { id: "friend_2", name: "साथी २", initial: "क" },
-      { id: "friend_3", name: "साथी ३", initial: "र" }
-    ];
+    const friends = getFriends();
 
-    const list = suggestions.filter(person =>
-      !friends.some(friend => friend.id === person.id)
-    );
+    const list = friends.length
+      ? friends.map(friend => `
+          <article class="card friend-card">
 
-    return `
-      <section>
-        <h3 class="section-title">तपाईंका साथीहरू</h3>
+            <div class="flex align-center gap-3">
+              ${avatarHTML(
+                friend.name,
+                friend.avatar
+              )}
 
-        ${friends.length ? friends.map(friend => `
-          <div class="card" style="padding:12px;margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:10px">
-              <div class="avatar">${escapeHTML(friend.initial)}</div>
-              <strong>${escapeHTML(friend.name)}</strong>
-            </div>
-          </div>
-        `).join("") : `
-          <div class="empty-state">
-            <div class="empty-state-icon">👥</div>
-            <p>अहिलेसम्म साथी थपिएको छैन।</p>
-          </div>
-        `}
+              <div class="flex-column">
+                <strong>${escapeHTML(friend.name)}</strong>
+                <span class="text-muted text-small">
+                  ${escapeHTML(friend.location || "")}
+                </span>
+              </div>
 
-        <h3 class="section-title" style="margin-top:20px">
-          साथी सुझाव
-        </h3>
-
-        ${list.map(person => `
-          <div class="card" style="padding:12px;margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:10px">
-              <div class="avatar">${person.initial}</div>
-              <strong style="flex:1">${person.name}</strong>
-              <button class="btn btn-primary"
+              <button
+                class="icon-button"
                 type="button"
-                data-add-friend="${person.id}">
-                + साथी
+                data-message-friend="${escapeHTML(friend.id)}"
+                aria-label="${isEnglish() ? "Message" : "सन्देश"}">
+                💬
               </button>
             </div>
-          </div>
-        `).join("")}
+
+          </article>
+        `).join("")
+      : `
+        <div class="empty-state">
+          <div class="empty-state-icon">👥</div>
+          <h3 class="empty-state-title">
+            ${isEnglish()
+              ? "No friends added yet"
+              : "अहिलेसम्म साथी थपिएको छैन"}
+          </h3>
+          <p>
+            ${isEnglish()
+              ? "Add a friend by entering their name."
+              : "नाम लेखेर साथी थप्न सक्नुहुन्छ।"}
+          </p>
+        </div>
+      `;
+
+    return `
+      <section class="page-section">
+
+        <div class="flex-between">
+          <h3 class="section-title">
+            ${isEnglish() ? "My Friends" : "मेरा साथीहरू"}
+          </h3>
+
+          <button
+            class="btn btn-primary btn-sm"
+            type="button"
+            data-add-friend-open>
+            + ${isEnglish() ? "Add Friend" : "साथी थप्नुहोस्"}
+          </button>
+        </div>
+
+        <div class="friends-list">
+          ${list}
+        </div>
+
       </section>
     `;
   }
 
-  function addFriend(id) {
-    const names = {
-      friend_1: { name: "साथी १", initial: "स" },
-      friend_2: { name: "साथी २", initial: "क" },
-      friend_3: { name: "साथी ३", initial: "र" }
-    };
+  function openAddFriend() {
+    const modal = openModal({
+      title: isEnglish() ? "Add Friend" : "साथी थप्नुहोस्",
+      content: `
+        <form id="kskAddFriendForm">
 
-    const person = names[id];
-    if (!person || friends.some(item => item.id === id)) return;
+          <label class="form-label" for="kskFriendName">
+            ${isEnglish() ? "Friend's name" : "साथीको नाम"}
+          </label>
 
-    friends.push({ id, ...person });
+          <input
+            id="kskFriendName"
+            class="form-input"
+            maxlength="60"
+            placeholder="${isEnglish()
+              ? "Enter friend's name"
+              : "साथीको नाम लेख्नुहोस्"}"
+            required>
 
-    if (!writeJSON(FRIENDS_KEY, friends)) {
-      friends.pop();
-      return;
-    }
+        </form>
+      `,
+      footer: `
+        <button
+          class="btn btn-secondary"
+          type="button"
+          data-modal-close>
+          ${translate("cancel", "रद्द")}
+        </button>
 
-    renderPageContent("friends");
-    toast("साथी थपियो।", "success");
+        <button
+          class="btn btn-primary"
+          type="submit"
+          form="kskAddFriendForm">
+          ${translate("addFriend", "साथी थप्नुहोस्")}
+        </button>
+      `
+    });
+
+    if (!modal) return;
+
+    $("#kskFriendName", modal.element)?.focus();
+
+    $("#kskAddFriendForm", modal.element)?.addEventListener(
+      "submit",
+      event => {
+        event.preventDefault();
+
+        const name = $("#kskFriendName", modal.element)
+          ?.value.trim();
+
+        if (!name) return;
+
+        const friend = DATA()?.addFriend?.({ name });
+
+        if (!friend) {
+          toast(
+            isEnglish()
+              ? "Friend already exists or could not be added."
+              : "यो साथी पहिल्यै छ वा थप्न सकिएन।",
+            "warning"
+          );
+          return;
+        }
+
+        closeModal();
+        renderFriends();
+
+        toast(
+          isEnglish() ? "Friend added." : "साथी थपियो।",
+          "success"
+        );
+      }
+    );
   }
 
   /* =========================================================
-     MESSAGES PAGE
-     ========================================================= */
+     MESSAGES
+  ========================================================= */
 
   function renderMessages() {
+    const chats = getChats();
+
     if (activeChatId) {
       return renderChat(activeChatId);
     }
 
-    const chatIds = [...new Set(messages.map(item => item.chatId))];
-
-    return `
-      <section>
-        <h3 class="section-title">तपाईंका सन्देशहरू</h3>
-
-        ${chatIds.length ? chatIds.map(id => {
-          const last = messages.filter(item => item.chatId === id).at(-1);
-
-          return `
-            <button class="card"
-              style="display:flex;width:100%;padding:14px;margin-bottom:10px;text-align:left;align-items:center;gap:12px"
-              data-open-chat="${escapeHTML(id)}">
-
-              <div class="avatar">👤</div>
-
-              <div style="flex:1">
-                <strong>${escapeHTML(last?.sender || "साथी")}</strong>
-                <p class="post-time">${escapeHTML(last?.text || "")}</p>
-              </div>
-
-              <span>›</span>
-            </button>
-          `;
-        }).join("") : `
+    if (!chats.length) {
+      return `
+        <section>
           <div class="empty-state">
             <div class="empty-state-icon">💬</div>
-            <p>अहिलेसम्म सन्देश छैन।</p>
+            <h3 class="empty-state-title">
+              ${isEnglish()
+                ? "No conversations yet"
+                : "अहिलेसम्म सन्देश छैन"}
+            </h3>
+            <p>
+              ${isEnglish()
+                ? "Add friends to start a conversation."
+                : "कुरा सुरु गर्न साथी थप्नुहोस्।"}
+            </p>
           </div>
-        `}
-
-        <button class="btn btn-primary"
-          type="button" data-demo-chat>
-          Demo Chat खोल्नुहोस्
-        </button>
-      </section>
-    `;
-  }
-
-  function renderChat(id) {
-    const chatMessages = messages.filter(item => item.chatId === id);
+        </section>
+      `;
+    }
 
     return `
       <section>
-        <button class="btn btn-secondary"
-          type="button" data-back-messages>
-          ← सन्देशमा फर्कनुहोस्
-        </button>
 
-        <div style="padding:12px 0;min-height:180px">
-          ${chatMessages.map(message => `
-            <div class="card"
-              style="padding:10px;margin:8px 0;max-width:85%">
-              <strong>${escapeHTML(message.sender)}</strong>
-              <p>${escapeHTML(message.text)}</p>
-              <small class="post-time">${formatTime(message.createdAt)}</small>
-            </div>
-          `).join("")}
+        <h3 class="section-title">
+          ${isEnglish() ? "Messages" : "सन्देशहरू"}
+        </h3>
+
+        <div class="chat-list">
+
+          ${chats.map(chat => {
+            const last = chat.messages?.at(-1);
+
+            return `
+              <button
+                class="card chat-item"
+                type="button"
+                data-open-chat="${escapeHTML(chat.id)}">
+
+                <div class="flex align-center gap-3">
+                  ${avatarHTML(chat.name, chat.avatar)}
+
+                  <div class="flex-column">
+                    <strong>${escapeHTML(chat.name || "साथी")}</strong>
+                    <span class="text-muted text-small">
+                      ${escapeHTML(last?.text || "")}
+                    </span>
+                  </div>
+                </div>
+
+              </button>
+            `;
+          }).join("")}
+
         </div>
-
-        <form id="chatForm" style="display:flex;gap:8px">
-          <input class="form-input" id="chatMessageInput"
-            placeholder="सन्देश लेख्नुहोस्..." required>
-          <button class="btn btn-primary" type="submit">पठाउनुहोस्</button>
-        </form>
       </section>
     `;
   }
 
-  function sendMessage(chatId, text) {
-    messages.push({
-      id: makeId("message"),
-      chatId,
-      sender: profile.name || "तपाईं",
-      text,
-      createdAt: new Date().toISOString()
-    });
+  function renderChat(chatId) {
+    const chat = getChats().find(
+      item => String(item.id) === String(chatId)
+    );
 
-    if (!writeJSON(MESSAGES_KEY, messages)) {
-      messages.pop();
+    if (!chat) {
+      activeChatId = null;
+      return renderMessages();
+    }
+
+    const messages = chat.messages || [];
+
+    return `
+      <section class="chat-view">
+
+        <div class="chat-heading flex align-center gap-3">
+
+          <button
+            class="btn btn-secondary btn-sm"
+            type="button"
+            data-back-messages>
+            ←
+          </button>
+
+          ${avatarHTML(chat.name, chat.avatar)}
+
+          <strong>${escapeHTML(chat.name || "साथी")}</strong>
+
+        </div>
+
+        <div class="chat-messages">
+
+          ${messages.length
+            ? messages.map(message => `
+                <div class="chat-message ${
+                  message.fromMe ? "chat-message-mine" : ""
+                }">
+
+                  <p>${escapeHTML(message.text || "")}</p>
+
+                  <small class="post-time">
+                    ${escapeHTML(formatTime(
+                      message.time || message.createdAt
+                    ))}
+                  </small>
+
+                </div>
+              `).join("")
+            : `
+                <div class="empty-state">
+                  ${isEnglish()
+                    ? "Start the conversation."
+                    : "कुराकानी सुरु गर्नुहोस्।"}
+                </div>
+              `
+          }
+
+        </div>
+
+        <form id="kskMessageForm" class="chat-form">
+
+          <input
+            id="kskMessageInput"
+            class="form-input"
+            maxlength="2000"
+            placeholder="${isEnglish()
+              ? "Write a message..."
+              : "सन्देश लेख्नुहोस्..."}"
+            required>
+
+          <button
+            class="btn btn-primary"
+            type="submit">
+            ${isEnglish() ? "Send" : "पठाउनुहोस्"}
+          </button>
+
+        </form>
+
+      </section>
+    `;
+  }
+
+  function openFriendChat(friendId) {
+    const friend = getFriends().find(
+      item => String(item.id) === String(friendId)
+    );
+
+    if (!friend) return;
+
+    const chatId = DATA()?.createChat?.(friend);
+
+    if (!chatId) {
+      toast(
+        isEnglish()
+          ? "Could not open conversation."
+          : "कुराकानी खोल्न सकिएन।",
+        "error"
+      );
       return;
     }
 
-    renderPageContent("messages");
+    activeChatId = chatId;
+    navigate("messages");
+  }
+
+  function sendChatMessage(event) {
+    event.preventDefault();
+
+    if (!activeChatId) return;
+
+    const input = $("#kskMessageInput");
+    const text = input?.value.trim();
+
+    if (!text) return;
+
+    const result = DATA()?.sendMessage?.(
+      activeChatId,
+      text,
+      {
+        sender: displayName(),
+        fromMe: true
+      }
+    );
+
+    if (!result) {
+      toast(
+        isEnglish()
+          ? "Message could not be sent."
+          : "सन्देश पठाउन सकिएन।",
+        "error"
+      );
+      return;
+    }
+
+    renderMessages();
+    $("#kskMessageInput")?.focus();
   }
 
   /* =========================================================
-     PROFILE PAGE
-     ========================================================= */
+     PROFILE
+  ========================================================= */
 
   function renderProfile() {
-    const name = escapeHTML(profile.name || "तपाईं");
-    const bio = escapeHTML(profile.bio || "");
+    const user = profile();
+    const posts = getPosts().filter(post => {
+      return post.author === user.name;
+    });
 
     return `
-      <section class="empty-state">
-        <div class="avatar"
-          style="width:78px;height:78px;font-size:28px;margin:auto">
-          ${escapeHTML((profile.name || "त").charAt(0))}
+      <section class="profile-section">
+
+        <div class="card profile-card">
+
+          <div class="profile-avatar">
+            ${avatarHTML(
+              user.name,
+              user.avatar,
+              "avatar-xl"
+            )}
+          </div>
+
+          <h2 class="text-center">
+            ${escapeHTML(user.name || (
+              isEnglish() ? "Your Profile" : "तपाईंको प्रोफाइल"
+            ))}
+          </h2>
+
+          ${user.bio
+            ? `<p class="text-center">${escapeHTML(user.bio)}</p>`
+            : ""
+          }
+
+          ${user.location
+            ? `<p class="text-center text-muted">
+                📍 ${escapeHTML(user.location)}
+              </p>`
+            : ""
+          }
+
+          <div class="text-center">
+            <span class="badge badge-primary">
+              ${posts.length} ${isEnglish() ? "Posts" : "पोस्ट"}
+            </span>
+          </div>
+
+          <div class="flex-center" style="margin-top:16px">
+            <button
+              class="btn btn-primary"
+              type="button"
+              data-edit-profile>
+              ✏️ ${isEnglish()
+                ? "Edit Profile"
+                : "प्रोफाइल सम्पादन"}
+            </button>
+          </div>
+
         </div>
 
-        <h2>${name}</h2>
-        <p>${bio}</p>
+        <h3 class="section-title" style="margin-top:20px">
+          ${isEnglish() ? "My Posts" : "मेरा पोस्टहरू"}
+        </h3>
 
-        <p class="post-time">
-          ${posts.length} पोस्ट
-        </p>
+        <div class="profile-posts">
+          ${posts.length
+            ? posts.map(renderPost).join("")
+            : `
+              <div class="empty-state">
+                ${isEnglish()
+                  ? "You have not published any posts."
+                  : "तपाईंले अहिलेसम्म पोस्ट गर्नुभएको छैन।"}
+              </div>
+            `
+          }
+        </div>
 
-        <button class="btn btn-primary"
-          type="button" data-edit-profile>
-          ✏️ प्रोफाइल सम्पादन
-        </button>
-
-        <div style="margin-top:16px">
-          <button class="btn btn-secondary"
-            type="button" data-open-settings>
-            ⚙️ सेटिङ
+        <div class="flex-center" style="margin-top:18px">
+          <button
+            class="btn btn-secondary"
+            type="button"
+            data-open-settings>
+            ⚙️ ${isEnglish() ? "Settings" : "सेटिङ"}
           </button>
         </div>
+
       </section>
-
-      <h3 class="section-title" style="margin-top:20px">
-        मेरा पोस्टहरू
-      </h3>
-
-      <div>
-        ${posts.filter(post => post.author === profile.name)
-          .map(renderPost).join("")}
-      </div>
     `;
   }
 
-  function editProfile() {
-    const name = prompt("तपाईंको नाम:", profile.name || "");
-    if (name === null) return;
+  function openProfileEditor() {
+    const user = profile();
 
-    const bio = prompt("तपाईंको परिचय:", profile.bio || "");
-    if (bio === null) return;
+    const modal = openModal({
+      title: isEnglish() ? "Edit Profile" : "प्रोफाइल सम्पादन",
 
-    profile = {
-      ...profile,
-      name: name.trim() || "तपाईं",
-      bio: bio.trim()
-    };
+      content: `
+        <form id="kskProfileForm">
 
-    if (writeJSON(PROFILE_KEY, profile)) {
-      renderPageContent("profile");
-      toast("प्रोफाइल सुरक्षित भयो।", "success");
-    }
+          <div class="form-group">
+            <label class="form-label" for="kskProfileName">
+              ${isEnglish() ? "Name" : "नाम"}
+            </label>
+
+            <input
+              id="kskProfileName"
+              class="form-input"
+              maxlength="60"
+              value="${escapeHTML(user.name || "")}">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="kskProfileBio">
+              ${isEnglish() ? "About me" : "मेरो परिचय"}
+            </label>
+
+            <textarea
+              id="kskProfileBio"
+              class="form-textarea"
+              maxlength="240"
+              rows="3">${escapeHTML(user.bio || "")}</textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="kskProfileLocation">
+              ${isEnglish() ? "Location" : "ठेगाना"}
+            </label>
+
+            <input
+              id="kskProfileLocation"
+              class="form-input"
+              maxlength="100"
+              value="${escapeHTML(user.location || "")}">
+          </div>
+
+        </form>
+      `,
+
+      footer: `
+        <button
+          class="btn btn-secondary"
+          type="button"
+          data-modal-close>
+          ${translate("cancel", "रद्द")}
+        </button>
+
+        <button
+          class="btn btn-primary"
+          type="submit"
+          form="kskProfileForm">
+          ${isEnglish() ? "Save Profile" : "सुरक्षित गर्नुहोस्"}
+        </button>
+      `
+    });
+
+    if (!modal) return;
+
+    $("#kskProfileForm", modal.element)?.addEventListener(
+      "submit",
+      event => {
+        event.preventDefault();
+
+        const updated = DATA()?.saveProfile?.({
+          name: $("#kskProfileName", modal.element)?.value.trim() || "",
+          bio: $("#kskProfileBio", modal.element)?.value.trim() || "",
+          location: $("#kskProfileLocation", modal.element)?.value.trim() || ""
+        });
+
+        if (!updated) {
+          toast(
+            isEnglish()
+              ? "Profile could not be saved."
+              : "प्रोफाइल सुरक्षित गर्न सकिएन।",
+            "error"
+          );
+          return;
+        }
+
+        closeModal();
+        renderProfile();
+
+        toast(
+          isEnglish()
+            ? "Profile saved."
+            : "प्रोफाइल सुरक्षित भयो।",
+          "success"
+        );
+      }
+    );
   }
 
   /* =========================================================
-     OTHER PAGES
-     ========================================================= */
+     NOTIFICATIONS
+  ========================================================= */
 
-  function renderFallbackPage(page) {
-    const pages = {
-      notifications: `
+  function renderNotifications() {
+    const notifications = DATA()?.getNotifications?.() || [];
+
+    if (!notifications.length) {
+      return `
         <div class="empty-state">
           <div class="empty-state-icon">🔔</div>
-          <h3>सूचनाहरू</h3>
-          <p>अहिले नयाँ सूचना छैन।</p>
-        </div>
-      `,
-
-      saved: `
-        <div class="empty-state">
-          <div class="empty-state-icon">🔖</div>
-          <h3>सेभ गरिएका पोस्ट</h3>
-          <p>अहिलेसम्म पोस्ट सेभ गरिएको छैन।</p>
-        </div>
-      `
-    };
-
-    return pages[page] || `
-      <div class="empty-state">
-        <div class="empty-state-icon">📄</div>
-        <p>यो पृष्ठ उपलब्ध छैन।</p>
-      </div>
-    `;
-  }
-
-  function renderPageContent(page) {
-    if (!els.otherPageText) return;
-
-    try {
-      if (page === "friends") {
-        els.otherPageText.innerHTML = renderFriends();
-      } else if (page === "messages") {
-        els.otherPageText.innerHTML = renderMessages();
-      } else if (page === "profile") {
-        els.otherPageText.innerHTML = renderProfile();
-      } else {
-        els.otherPageText.innerHTML = renderFallbackPage(page);
-      }
-
-      attachMediaToElements(els.otherPageText);
-
-    } catch (error) {
-      console.error("Page rendering failed:", error);
-
-      els.otherPageText.innerHTML = `
-        <div class="empty-state">
-          <p>पृष्ठ खोल्न समस्या भयो।</p>
+          <h3 class="empty-state-title">
+            ${isEnglish()
+              ? "No notifications"
+              : "अहिले कुनै सूचना छैन"}
+          </h3>
         </div>
       `;
     }
+
+    return `
+      <section>
+
+        <h3 class="section-title">
+          ${isEnglish() ? "Notifications" : "सूचनाहरू"}
+        </h3>
+
+        ${notifications.map(item => `
+          <article class="card notification-item">
+            <p>${escapeHTML(item.text)}</p>
+            <small class="post-time">
+              ${escapeHTML(formatDate(item.createdAt))}
+            </small>
+          </article>
+        `).join("")}
+
+      </section>
+    `;
   }
 
   /* =========================================================
-     NAVIGATION — SINGLE CONTROLLER
-     ========================================================= */
+     SAVED POSTS
+  ========================================================= */
 
-  function setActiveNavigation(page) {
-    const activePage = page === "posts" ? "home" : page;
+  function renderSaved() {
+    const ids = DATA()?.getSavedPosts?.() || [];
 
-    $$(".nav-item").forEach(item => {
-      item.classList.toggle(
-        "active",
-        item.dataset.page === activePage
-      );
-    });
+    const posts = ids
+      .map(id => DATA()?.getPost?.(id))
+      .filter(Boolean);
+
+    return `
+      <section>
+
+        <h3 class="section-title">
+          ${isEnglish() ? "Saved Posts" : "सेभ गरिएका पोस्ट"}
+        </h3>
+
+        ${posts.length
+          ? posts.map(renderPost).join("")
+          : `
+            <div class="empty-state">
+              <div class="empty-state-icon">🔖</div>
+              <p>
+                ${isEnglish()
+                  ? "No saved posts yet."
+                  : "अहिलेसम्म पोस्ट सेभ गरिएको छैन।"}
+              </p>
+            </div>
+          `
+        }
+
+      </section>
+    `;
   }
 
-  function showPage(page, options = {}) {
-    if (page === "posts") page = "home";
+  /* =========================================================
+     SETTINGS
+  ========================================================= */
 
-    if (page === "create") {
-      openComposer();
+  function syncSettingsControls() {
+    const settings = global.KSKSettings?.getSettings?.();
+
+    if (!settings) return;
+
+    if (els.languageSelect) {
+      els.languageSelect.value = settings.language;
+    }
+
+    if (els.settingsThemeToggle) {
+      els.settingsThemeToggle.textContent =
+        settings.theme === "dark"
+          ? (isEnglish() ? "Dark Mode" : "डार्क मोड")
+          : (isEnglish() ? "Light Mode" : "लाइट मोड");
+    }
+  }
+
+  function openSettings() {
+    if (els.settingsModal) {
+      els.settingsModal.classList.remove("hidden");
+      els.settingsModal.setAttribute("aria-hidden", "false");
+      syncSettingsControls();
       return;
     }
 
-    const allowed = [
-      "home",
-      "friends",
-      "messages",
-      "profile",
-      "notifications",
-      "saved",
-      "settings"
-    ];
+    const settings = global.KSKSettings?.getSettings?.() || {};
 
-    if (!allowed.includes(page)) return;
+    const modal = openModal({
+      title: isEnglish() ? "Settings" : "सेटिङ",
+
+      content: `
+        <div class="settings-row">
+          <div>
+            <strong>${isEnglish() ? "Theme" : "Theme"}</strong>
+            <p class="settings-description">
+              ${isEnglish() ? "Light or Dark mode" : "लाइट वा डार्क मोड"}
+            </p>
+          </div>
+
+          <button
+            class="btn btn-secondary"
+            type="button"
+            data-toggle-theme>
+            ${settings.theme === "dark" ? "Dark" : "Light"}
+          </button>
+        </div>
+
+        <div class="settings-row">
+          <label for="kskSettingsLanguage">
+            ${isEnglish() ? "Language" : "भाषा"}
+          </label>
+
+          <select
+            id="kskSettingsLanguage"
+            class="form-input settings-select">
+            <option value="ne">नेपाली</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+      `
+    });
+
+    if (!modal) return;
+
+    const select = $("#kskSettingsLanguage", modal.element);
+
+    if (select) {
+      select.value = language();
+
+      select.addEventListener("change", () => {
+        LANG()?.setLanguage?.(select.value);
+        syncSettingsControls();
+      });
+    }
+
+    $("[data-toggle-theme]", modal.element)?.addEventListener(
+      "click",
+      toggleTheme
+    );
+  }
+
+  function closeSettings() {
+    els.settingsModal?.classList.add("hidden");
+    els.settingsModal?.setAttribute("aria-hidden", "true");
+  }
+
+  function toggleTheme() {
+    const next = THEME()?.toggleTheme?.();
+
+    syncSettingsControls();
+
+    toast(
+      next === "dark"
+        ? (isEnglish() ? "Dark theme enabled." : "डार्क Theme सक्रिय भयो।")
+        : (isEnglish() ? "Light theme enabled." : "लाइट Theme सक्रिय भयो।"),
+      "success"
+    );
+  }
+
+  function changeLanguage(value) {
+    const selected = value === "en" ? "en" : "ne";
+
+    LANG()?.setLanguage?.(selected);
+
+    syncSettingsControls();
+    refreshCurrentPage();
+
+    toast(
+      selected === "en"
+        ? "Language updated."
+        : "भाषा परिवर्तन भयो।",
+      "success"
+    );
+  }
+
+  function clearLocalPosts() {
+    if (!confirmAction(
+      isEnglish()
+        ? "Delete all posts?"
+        : "सबै पोस्ट मेटाउने हो?"
+    )) return;
+
+    const posts = getPosts();
+
+    posts.forEach(post => {
+      DATA()?.deletePost?.(post.id);
+    });
+
+    closeSettings();
+    renderFeed();
+
+    toast(
+      isEnglish()
+        ? "Posts deleted."
+        : "पोस्टहरू मेटाइयो।",
+      "success"
+    );
+  }
+
+  /* =========================================================
+     NAVIGATION
+  ========================================================= */
+
+  function navigate(page, options = {}) {
+    if (!NAV()?.isValidPage?.(page)) return;
+
+    if (page === "create") {
+      openPostComposer();
+      return;
+    }
 
     if (page === "settings") {
-      showPage("profile");
+      navigate("profile");
       openSettings();
       return;
     }
@@ -1243,362 +1668,379 @@
       activeChatId = null;
     }
 
-    const isHome = page === "home";
+    STATE()?.setCurrentPage?.(page);
 
-    els.homePage?.classList.toggle("hidden", !isHome);
-    els.otherPage?.classList.toggle("hidden", isHome);
+    refreshNavigation(page);
+    refreshCurrentPage();
+  }
 
-    setActiveNavigation(page);
+  function refreshCurrentPage() {
+    if (currentPage === "home" || currentPage === "posts") {
+      currentPage = "home";
 
-    window.HamroState?.setCurrentPage(page);
-
-    if (isHome) {
+      showHomeLayout();
       renderStories();
       renderFeed();
+
       return;
     }
 
-    const titles = {
-      friends: "साथीहरू",
-      messages: "सन्देशहरू",
-      profile: "प्रोफाइल",
-      notifications: "सूचनाहरू",
-      saved: "सेभ गरिएका पोस्ट"
+    showOtherLayout();
+
+    const pages = {
+      friends: {
+        title: isEnglish() ? "Friends" : "साथीहरू",
+        html: renderFriends
+      },
+
+      messages: {
+        title: isEnglish() ? "Messages" : "सन्देशहरू",
+        html: renderMessages
+      },
+
+      profile: {
+        title: isEnglish() ? "Profile" : "प्रोफाइल",
+        html: renderProfile
+      },
+
+      notifications: {
+        title: isEnglish() ? "Notifications" : "सूचनाहरू",
+        html: renderNotifications
+      },
+
+      saved: {
+        title: isEnglish() ? "Saved Posts" : "सेभ गरिएका पोस्ट",
+        html: renderSaved
+      }
     };
 
-    if (els.otherPageTitle) {
-      els.otherPageTitle.textContent = titles[page] || "पृष्ठ";
-    }
+    const selected = pages[currentPage];
 
-    renderPageContent(page);
+    if (!selected) return;
+
+    setPageTitle(selected.title);
+    setPageContent(selected.html());
   }
 
-  function navigate(page) {
-    if (window.HamroNavigation) {
-      window.HamroNavigation.navigate(page);
+  /* =========================================================
+     SEARCH
+  ========================================================= */
+
+  function toggleSearch() {
+    if (!els.searchPanel) return;
+
+    els.searchPanel.classList.toggle("hidden");
+
+    if (!els.searchPanel.classList.contains("hidden")) {
+      els.searchInput?.focus();
     } else {
-      showPage(page);
-    }
-  }
+      searchQuery = "";
 
-  /* =========================================================
-     SETTINGS
-     ========================================================= */
+      if (els.searchInput) {
+        els.searchInput.value = "";
+      }
 
-  function openSettings() {
-    if (!els.settingsModal) return;
-
-    els.settingsModal.classList.remove("hidden");
-    els.settingsModal.setAttribute("aria-hidden", "false");
-
-    initializeLanguageControl();
-  }
-
-  function closeSettings() {
-    els.settingsModal?.classList.add("hidden");
-    els.settingsModal?.setAttribute("aria-hidden", "true");
-  }
-
-  function clearLocalPosts() {
-    if (!confirm("यस उपकरणका सबै स्थानीय पोस्ट हटाउने हो?")) return;
-
-    posts.forEach(post => deleteMedia(post.mediaId));
-
-    posts = [];
-
-    if (savePosts()) {
       renderFeed();
-      closeSettings();
-      toast("स्थानीय पोस्टहरू हटाइयो।", "success");
+    }
+  }
+
+  function search(value) {
+    searchQuery = String(value || "").trim();
+
+    STATE()?.setSearchQuery?.(searchQuery);
+
+    if (currentPage !== "home") {
+      navigate("home");
+    } else {
+      renderFeed();
     }
   }
 
   /* =========================================================
-     EVENT BINDING
-     ========================================================= */
+     EVENT DELEGATION
+  ========================================================= */
 
-  function bindNavigationEvents() {
-    // IMPORTANT:
-    // Only the shared Navigation Controller handles button clicks.
-    // app.js listens only for its navigation event.
+  function bindGlobalClickEvents() {
+    document.addEventListener("click", event => {
+      const target = event.target;
 
-    window.addEventListener("hamro:navigate", event => {
-      const page = event.detail?.page;
-      if (page) showPage(page, event.detail?.options || {});
-    });
+      if (!target?.closest) return;
 
-    window.addEventListener("hamro:open-composer", openComposer);
+      const createStory = target.closest("[data-story-create]");
 
-    els.notificationsToggle?.addEventListener("click", () => {
-      navigate("notifications");
-    });
-  }
+      if (createStory) {
+        openStoryCreator();
+        return;
+      }
 
-  function bindComposerEvents() {
-    els.openComposer?.addEventListener("click", openComposer);
-    els.quickText?.addEventListener("click", openComposer);
+      const viewStoryButton = target.closest("[data-story-view]");
 
-    els.quickPhoto?.addEventListener("click", () => {
-      openComposer();
-      chooseMedia("image");
-    });
+      if (viewStoryButton) {
+        viewStory(viewStoryButton.dataset.storyView);
+        return;
+      }
 
-    els.quickVideo?.addEventListener("click", () => {
-      openComposer();
-      chooseMedia("video");
-    });
+      const postMenu = target.closest("[data-post-menu]");
 
-    els.closeComposer?.addEventListener("click", closeComposer);
-    els.cancelComposer?.addEventListener("click", closeComposer);
+      if (postMenu) {
+        openPostMenu(postMenu.dataset.postMenu);
+        return;
+      }
 
-    els.composerModal?.addEventListener("click", event => {
-      if (event.target === els.composerModal) closeComposer();
-    });
+      const postAction = target.closest("[data-post-action]");
 
-    els.choosePhoto?.addEventListener("click", () => chooseMedia("image"));
-    els.chooseVideo?.addEventListener("click", () => chooseMedia("video"));
-
-    els.mediaInput?.addEventListener("change", event => {
-      handleMedia(event.target.files?.[0]);
-    });
-
-    els.removeMedia?.addEventListener("click", resetMedia);
-    els.publishButton?.addEventListener("click", publishPost);
-  }
-
-  function bindFeedEvents() {
-    els.feedList?.addEventListener("click", event => {
-      const action = event.target.closest("[data-post-action]");
-
-      if (action) {
+      if (postAction) {
         handlePostAction(
-          action.dataset.postAction,
-          action.dataset.postId
+          postAction.dataset.postAction,
+          postAction.dataset.postId
         );
         return;
       }
 
-      const menu = event.target.closest("[data-post-menu]");
+      const editPostButton = target.closest("[data-edit-post]");
 
-      if (menu) postMenu(menu.dataset.postMenu);
-    });
-  }
-
-  function bindStoryEvents() {
-    els.storiesList?.addEventListener("click", event => {
-      const create = event.target.closest("[data-story-create]");
-
-      if (create) {
-        openStoryPicker();
+      if (editPostButton) {
+        const id = editPostButton.dataset.editPost;
+        closeModal();
+        editPost(id);
         return;
       }
 
-      const story = event.target.closest("[data-story-view]");
+      const deletePostButton = target.closest("[data-delete-post]");
 
-      if (story) viewStory(story.dataset.storyView);
-    });
+      if (deletePostButton) {
+        deletePost(deletePostButton.dataset.deletePost);
+        return;
+      }
 
-    document.addEventListener("click", event => {
-      if (event.target.closest("[data-close-story]")) {
-        $("#storyViewer")?.remove();
+      if (target.closest("[data-add-friend-open]")) {
+        openAddFriend();
+        return;
+      }
+
+      const messageFriend = target.closest("[data-message-friend]");
+
+      if (messageFriend) {
+        openFriendChat(messageFriend.dataset.messageFriend);
+        return;
+      }
+
+      const openChat = target.closest("[data-open-chat]");
+
+      if (openChat) {
+        activeChatId = openChat.dataset.openChat;
+        refreshCurrentPage();
+        return;
+      }
+
+      if (target.closest("[data-back-messages]")) {
+        activeChatId = null;
+        refreshCurrentPage();
+        return;
+      }
+
+      if (target.closest("[data-edit-profile]")) {
+        openProfileEditor();
+        return;
+      }
+
+      if (target.closest("[data-open-settings]")) {
+        openSettings();
       }
     });
   }
 
-  function bindSearchEvents() {
-    els.searchToggle?.addEventListener("click", () => {
-      els.searchPanel?.classList.toggle("hidden");
+  function bindEvents() {
+    // Navigation controller is the only owner of data-page clicks.
+    NAV()?.initializeNavigation?.(document);
 
-      if (!els.searchPanel?.classList.contains("hidden")) {
-        els.searchInput?.focus();
+    global.addEventListener("ksk:navigate", event => {
+      const page = event.detail?.page;
+
+      if (page) {
+        navigate(page, event.detail?.options || {});
       }
     });
 
-    els.searchInput?.addEventListener("input", () => {
-      searchQuery = els.searchInput.value.trim();
-      window.HamroState?.setSearchQuery(searchQuery);
-      renderFeed();
-    });
-  }
+    global.addEventListener("ksk:open-composer", openPostComposer);
 
-  function bindSettingsEvents() {
+    global.addEventListener("ksk:language-change", () => {
+      syncSettingsControls();
+      refreshCurrentPage();
+    });
+
+    global.addEventListener("ksk:theme-change", syncSettingsControls);
+
+    global.addEventListener("ksk:data-change", event => {
+      const collection = event.detail?.collection || "";
+
+      if (
+        collection.includes("posts") ||
+        collection === "profile" ||
+        collection.includes("stories") ||
+        collection.includes("friends") ||
+        collection.includes("messages") ||
+        collection.includes("saved") ||
+        collection.includes("notifications")
+      ) {
+        refreshCurrentPage();
+        renderStories();
+      }
+    });
+
+    els.openComposer?.addEventListener(
+      "click",
+      openPostComposer
+    );
+
+    els.quickText?.addEventListener(
+      "click",
+      openPostComposer
+    );
+
+    // Upload controls are intentionally inactive in this version.
+    els.quickPhoto?.addEventListener("click", () => {
+      toast(
+        isEnglish()
+          ? "Photo sharing will be added later."
+          : "फोटो सुविधा अर्को चरणमा थपिनेछ।",
+        "info"
+      );
+    });
+
+    els.quickVideo?.addEventListener("click", () => {
+      toast(
+        isEnglish()
+          ? "Video sharing will be added later."
+          : "भिडियो सुविधा अर्को चरणमा थपिनेछ।",
+        "info"
+      );
+    });
+
+    els.searchToggle?.addEventListener("click", toggleSearch);
+
+    els.searchInput?.addEventListener("input", event => {
+      search(event.target.value);
+    });
+
+    els.notificationsToggle?.addEventListener("click", () => {
+      DATA()?.markNotificationsRead?.();
+      navigate("notifications");
+    });
+
     els.settingsToggle?.addEventListener("click", openSettings);
     els.closeSettings?.addEventListener("click", closeSettings);
 
     els.settingsModal?.addEventListener("click", event => {
-      if (event.target === els.settingsModal) closeSettings();
-    });
-
-    els.settingsThemeToggle?.addEventListener("click", toggleTheme);
-    els.clearPosts?.addEventListener("click", clearLocalPosts);
-
-    els.languageSelect?.addEventListener("change", () => {
-      const selected = els.languageSelect.value === "en" ? "en" : "ne";
-
-      window.HamroSettings?.updateSettings({
-        language: selected
-      });
-
-      window.HamroLanguage?.setLanguage(selected);
-
-      toast(
-        selected === "en"
-          ? "Language updated."
-          : "भाषा परिवर्तन भयो।",
-        "success"
-      );
-    });
-  }
-
-  function bindOtherPageEvents() {
-    els.otherPageText?.addEventListener("click", event => {
-      const addButton = event.target.closest("[data-add-friend]");
-
-      if (addButton) {
-        addFriend(addButton.dataset.addFriend);
-        return;
-      }
-
-      if (event.target.closest("[data-edit-profile]")) {
-        editProfile();
-        return;
-      }
-
-      if (event.target.closest("[data-open-settings]")) {
-        openSettings();
-        return;
-      }
-
-      if (event.target.closest("[data-demo-chat]")) {
-        activeChatId = "demo_chat";
-        showPage("messages", { keepChat: true });
-        return;
-      }
-
-      const chatButton = event.target.closest("[data-open-chat]");
-
-      if (chatButton) {
-        activeChatId = chatButton.dataset.openChat;
-        showPage("messages", { keepChat: true });
-        return;
-      }
-
-      if (event.target.closest("[data-back-messages]")) {
-        activeChatId = null;
-        showPage("messages");
-      }
-    });
-
-    els.otherPageText?.addEventListener("submit", event => {
-      if (event.target.id !== "chatForm") return;
-
-      event.preventDefault();
-
-      const input = $("#chatMessageInput", event.target);
-      const text = input?.value.trim();
-
-      if (!text || !activeChatId) return;
-
-      sendMessage(activeChatId, text);
-    });
-  }
-
-  function bindKeyboardEvents() {
-    document.addEventListener("keydown", event => {
-      if (event.key === "Escape") {
-        closeComposer();
+      if (event.target === els.settingsModal) {
         closeSettings();
-        $("#storyViewer")?.remove();
       }
     });
+
+    els.settingsThemeToggle?.addEventListener(
+      "click",
+      toggleTheme
+    );
+
+    els.languageSelect?.addEventListener("change", event => {
+      changeLanguage(event.target.value);
+    });
+
+    els.clearPosts?.addEventListener(
+      "click",
+      clearLocalPosts
+    );
+
+    document.addEventListener("submit", event => {
+      if (event.target.id === "kskMessageForm") {
+        sendChatMessage(event);
+      }
+    });
+
+    bindGlobalClickEvents();
   }
 
   /* =========================================================
-     INITIALIZE
-     ========================================================= */
+     INITIALIZATION
+  ========================================================= */
 
-  async function initialize() {
+  function initialize() {
     if (initialized) return;
+
     initialized = true;
 
-    try {
-      await openMediaDatabase();
-    } catch (error) {
-      console.warn("Media database unavailable:", error);
+    cacheElements();
+
+    DATA()?.initialize?.();
+    global.KSKSettings?.initialize?.();
+    THEME()?.initializeTheme?.();
+    LANG()?.initialize?.();
+
+    currentPage = STATE()?.getState?.()?.currentPage || "home";
+
+    if (currentPage === "create" || currentPage === "settings") {
+      currentPage = "home";
     }
 
-    posts = loadPosts();
-    stories = loadStories();
+    syncSettingsControls();
 
-    loadOtherData();
-
-    if (window.HamroTheme) {
-      window.HamroTheme.initializeTheme();
-    }
-
-    initializeLanguageControl();
-
-    window.HamroState?.setPosts(posts);
-    window.HamroState?.setStories(stories);
+    bindEvents();
 
     renderStories();
     renderFeed();
 
-    bindNavigationEvents();
-    bindComposerEvents();
-    bindFeedEvents();
-    bindStoryEvents();
-    bindSearchEvents();
-    bindSettingsEvents();
-    bindOtherPageEvents();
-    bindKeyboardEvents();
+    refreshNavigation(currentPage);
+    refreshCurrentPage();
 
-    showPage("home");
-
-    window.addEventListener("hamro:language-change", () => {
-      renderStories();
-      renderFeed();
-
-      if (currentPage !== "home") {
-        renderPageContent(currentPage);
-      }
-    });
-
-    window.HamroApp = Object.freeze({
-      showPage,
-      navigate,
-      openComposer,
-      closeComposer,
-      openSettings,
-      toggleTheme,
-
-      getCurrentPage() {
-        return currentPage;
-      },
-
-      getPosts() {
-        return [...posts];
-      },
-
-      getStories() {
-        return [...stories];
-      },
-
-      refreshFeed() {
-        posts = loadPosts();
-        renderFeed();
-      }
-    });
-
-    console.info("Hamro Sansar initialized successfully.");
+    console.info("KSK application initialized.");
   }
 
+  /* =========================================================
+     PUBLIC APPLICATION API
+  ========================================================= */
+
+  global.KSKApp = Object.freeze({
+
+    initialize,
+    navigate,
+    refreshCurrentPage,
+
+    openPostComposer,
+    openStoryCreator,
+    openSettings,
+    closeSettings,
+
+    renderFeed,
+    renderStories,
+
+    getCurrentPage() {
+      return currentPage;
+    },
+
+    getPosts,
+    getStories,
+    getFriends,
+    getChats,
+
+    getProfile: profile,
+
+    search,
+
+    refresh() {
+      renderStories();
+      refreshCurrentPage();
+    }
+
+  });
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialize, {
-      once: true
-    });
+    document.addEventListener(
+      "DOMContentLoaded",
+      initialize,
+      { once: true }
+    );
   } else {
     initialize();
   }
 
-})();
+})(window);
