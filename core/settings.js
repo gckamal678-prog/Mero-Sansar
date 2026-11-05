@@ -1,4 +1,3 @@
-
 "use strict";
 
 /* =========================================================
@@ -8,7 +7,7 @@
 
 (function (global) {
   const STORAGE_KEY = "ksk_app_settings";
-  const LEGACY_STORAGE_KEY = "hs_app_settings";
+  const LEGACY_STORAGE_KEY = "ksk_app_settings_old"; // hs_ को सट्टा ksk_ प्रयोग गरिएको
 
   const DEFAULT_SETTINGS = Object.freeze({
     theme: "light",
