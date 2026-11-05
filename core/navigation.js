@@ -1,8 +1,9 @@
 "use strict";
 
-/* Hamro Sansar — Shared Navigation Controller */
+/* HAMRO SANSAR — GLOBAL NAVIGATION CONTROLLER */
+
 (function (global) {
-  const allowedPages = new Set([
+  const allowedPages = [
     "home",
     "posts",
     "create",
@@ -12,13 +13,23 @@
     "profile",
     "settings",
     "saved"
-  ]);
+  ];
 
-  function navigate(page) {
-    if (!allowedPages.has(page)) return false;
+  function isValidPage(page) {
+    return allowedPages.includes(page);
+  }
+
+  function navigate(page, options = {}) {
+    if (!isValidPage(page)) {
+      global.HamroToast?.error("यो पृष्ठ उपलब्ध छैन।");
+      return false;
+    }
 
     if (page === "create") {
-      global.dispatchEvent(new CustomEvent("hamro:open-composer"));
+      global.dispatchEvent(
+        new CustomEvent("hamro:open-composer")
+      );
+
       return true;
     }
 
@@ -28,31 +39,48 @@
 
     global.dispatchEvent(
       new CustomEvent("hamro:navigate", {
-        detail: { page }
+        detail: {
+          page,
+          options
+        }
       })
     );
 
     return true;
   }
 
+  function getCurrentPage() {
+    return global.HamroState?.state?.currentPage || "home";
+  }
+
   function initializeNavigation(root = document) {
-    if (root.dataset.hamroNavigationReady === "true") return;
+    if (!root || root.dataset.hamroNavigationReady === "true") {
+      return;
+    }
+
     root.dataset.hamroNavigationReady = "true";
 
     root.addEventListener("click", (event) => {
       const button = event.target.closest("[data-page]");
-      if (!button) return;
 
-      const page = button.dataset.page;
-      if (!allowedPages.has(page)) return;
+      if (!button || !root.contains(button)) {
+        return;
+      }
 
-      navigate(page);
+      navigate(button.dataset.page);
     });
+  }
+
+  function getPages() {
+    return [...allowedPages];
   }
 
   global.HamroNavigation = Object.freeze({
     navigate,
-    initializeNavigation,
-    allowedPages: [...allowedPages]
+    getCurrentPage,
+    getPages,
+    isValidPage,
+    initializeNavigation
   });
+
 })(window);
