@@ -5,14 +5,23 @@
 (function (global) {
   const STORAGE_KEY = "hs_app_settings";
 
-  const DEFAULT_SETTINGS = {
+  const DEFAULT_SETTINGS = Object.freeze({
     theme: "light",
     language: "ne",
     notifications: true,
     compactMode: false
-  };
+  });
 
   const listeners = new Set();
+
+  function normalizeSettings(input = {}) {
+    return {
+      theme: input.theme === "dark" ? "dark" : "light",
+      language: input.language === "en" ? "en" : "ne",
+      notifications: input.notifications !== false,
+      compactMode: input.compactMode === true
+    };
+  }
 
   function loadSettings() {
     try {
@@ -20,15 +29,9 @@
         localStorage.getItem(STORAGE_KEY) || "{}"
       );
 
-      return {
-        ...DEFAULT_SETTINGS,
-        ...saved,
-        theme: saved.theme === "dark" ? "dark" : "light",
-        language: saved.language === "en" ? "en" : "ne",
-        notifications: saved.notifications !== false,
-        compactMode: saved.compactMode === true
-      };
-    } catch {
+      return normalizeSettings(saved);
+    } catch (error) {
+      console.error("Settings could not be loaded:", error);
       return { ...DEFAULT_SETTINGS };
     }
   }
@@ -45,19 +48,20 @@
         STORAGE_KEY,
         JSON.stringify(settings)
       );
+
       return true;
     } catch (error) {
-      console.error("Settings storage failed:", error);
+      console.error("Settings could not be saved:", error);
       return false;
     }
   }
 
-  function notify() {
+  function notify(changeName = "settings-change") {
     const snapshot = getSettings();
 
     listeners.forEach((listener) => {
       try {
-        listener(snapshot);
+        listener(snapshot, changeName);
       } catch (error) {
         console.error("Settings listener error:", error);
       }
@@ -65,9 +69,25 @@
 
     global.dispatchEvent(
       new CustomEvent("hamro:settings-change", {
-        detail: snapshot
+        detail: {
+          settings: snapshot,
+          change: changeName
+        }
       })
     );
+  }
+
+  function syncGlobalState(changeName) {
+    if (!global.HamroState) return;
+
+    global.HamroState.setState({
+      theme: settings.theme,
+      language: settings.language,
+      settings: {
+        notifications: settings.notifications,
+        compactMode: settings.compactMode
+      }
+    }, changeName);
   }
 
   function updateSettings(values = {}) {
@@ -75,58 +95,41 @@
       return getSettings();
     }
 
-    const allowed = Object.keys(DEFAULT_SETTINGS);
+    const next = {
+      ...settings
+    };
 
-    allowed.forEach((key) => {
-      if (!Object.prototype.hasOwnProperty.call(values, key)) {
-        return;
-      }
-
-      const value = values[key];
-
-      if (key === "theme") {
-        settings.theme = value === "dark" ? "dark" : "light";
-      } else if (key === "language") {
-        settings.language = value === "en" ? "en" : "ne";
-      } else if (key === "notifications" || key === "compactMode") {
-        settings[key] = Boolean(value);
-      }
-    });
-
-    persist();
-
-    if (global.HamroState) {
-      global.HamroState.setState({
-        theme: settings.theme,
-        language: settings.language,
-        settings: {
-          notifications: settings.notifications,
-          compactMode: settings.compactMode
-        }
-      }, "settings-change");
+    if (Object.prototype.hasOwnProperty.call(values, "theme")) {
+      next.theme = values.theme === "dark" ? "dark" : "light";
     }
 
-    notify();
+    if (Object.prototype.hasOwnProperty.call(values, "language")) {
+      next.language = values.language === "en" ? "en" : "ne";
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values, "notifications")) {
+      next.notifications = Boolean(values.notifications);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(values, "compactMode")) {
+      next.compactMode = Boolean(values.compactMode);
+    }
+
+    settings = next;
+
+    persist();
+    syncGlobalState("settings-change");
+    notify("settings-change");
 
     return getSettings();
   }
 
   function resetSettings() {
     settings = { ...DEFAULT_SETTINGS };
+
     persist();
-
-    if (global.HamroState) {
-      global.HamroState.setState({
-        theme: settings.theme,
-        language: settings.language,
-        settings: {
-          notifications: settings.notifications,
-          compactMode: settings.compactMode
-        }
-      }, "settings-reset");
-    }
-
-    notify();
+    syncGlobalState("settings-reset");
+    notify("settings-reset");
 
     return getSettings();
   }
@@ -138,7 +141,9 @@
 
     listeners.add(listener);
 
-    return () => listeners.delete(listener);
+    return function unsubscribe() {
+      listeners.delete(listener);
+    };
   }
 
   global.HamroSettings = Object.freeze({
@@ -146,7 +151,7 @@
     updateSettings,
     resetSettings,
     subscribeSettings,
-    DEFAULT_SETTINGS: Object.freeze({ ...DEFAULT_SETTINGS })
+    DEFAULT_SETTINGS
   });
 
 })(window);
