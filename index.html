@@ -10,92 +10,18 @@
 
   <title>हाम्रो संसार</title>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="core/design-system.css">
   <link rel="stylesheet" href="app.css">
   <link rel="manifest" href="manifest.json">
-
-  <style>
-    /* PROFILE SETTINGS ENTRY */
-
-    .profile-settings-entry {
-      display: none;
-      justify-content: flex-end;
-      margin: 0 0 14px;
-    }
-
-    body:has(.nav-item[data-page="profile"].active)
-    .profile-settings-entry {
-      display: flex;
-    }
-
-    .profile-settings-button {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 40px;
-      padding: 8px 15px;
-      border: 1px solid var(--color-border);
-      border-radius: 999px;
-      background: var(--color-surface);
-      color: var(--color-text);
-      font-weight: 700;
-    }
-
-    .profile-settings-button:hover {
-      background: var(--color-primary-soft);
-      color: var(--color-primary);
-    }
-
-    /* HIDDEN LEGACY THEME CONTROL
-       Kept for compatibility with the current app.js.
-    */
-
-    .legacy-theme-control {
-      display: none !important;
-    }
-
-    .brand {
-      flex-shrink: 0;
-    }
-
-    .header-actions {
-      margin-left: auto;
-    }
-
-    .icon-button {
-      cursor: pointer;
-    }
-
-    .bottom-nav {
-      padding-bottom: calc(5px + env(safe-area-inset-bottom));
-    }
-
-    .nav-item {
-      cursor: pointer;
-    }
-
-    .nav-item:active {
-      transform: scale(.97);
-    }
-
-    @media (max-width: 380px) {
-      .nav-item {
-        font-size: 9px;
-      }
-
-      .nav-icon {
-        font-size: 17px;
-      }
-    }
-  </style>
 </head>
 
 <body>
 
-  <!-- =====================================
-       HEADER
-       Logo + App Name + Search + Notification
-       ===================================== -->
+  <!-- HEADER -->
 
   <header class="app-header">
     <div class="header-inner">
@@ -139,9 +65,7 @@
   </header>
 
 
-  <!-- =====================================
-       MAIN CONTENT
-       ===================================== -->
+  <!-- MAIN CONTENT -->
 
   <main class="app-main">
 
@@ -162,10 +86,7 @@
     </section>
 
 
-    <!-- =================================
-         HOME PAGE
-         Stories + Composer + Feed
-         ================================= -->
+    <!-- HOME PAGE -->
 
     <section id="homePage" class="page">
 
@@ -187,12 +108,12 @@
 
       <!-- POST COMPOSER -->
 
-      <section class="composer-card">
+      <section class="composer-card card">
 
         <div class="composer-top">
 
           <div class="avatar" aria-hidden="true">
-            त
+            +
           </div>
 
           <button
@@ -207,36 +128,13 @@
 
         </div>
 
-
         <div class="composer-actions">
-
-          <button
-            class="composer-tool"
-            id="quickPhoto"
-            type="button"
-            data-i18n="photo">
-
-            📷 फोटो
-
-          </button>
-
-          <button
-            class="composer-tool"
-            id="quickVideo"
-            type="button"
-            data-i18n="video">
-
-            🎥 भिडियो
-
-          </button>
 
           <button
             class="composer-tool"
             id="quickText"
             type="button">
-
             ✍️ लेख्नुहोस्
-
           </button>
 
         </div>
@@ -258,16 +156,12 @@
           id="emptyFeed"
           class="empty-state hidden">
 
-          <div class="empty-state-icon">
-            📝
-          </div>
+          <div class="empty-state-icon">📝</div>
 
           <h3
             class="empty-state-title"
             data-i18n="emptyFeed">
-
             अहिलेसम्म पोस्ट छैन
-
           </h3>
 
           <p>
@@ -281,42 +175,31 @@
     </section>
 
 
-    <!-- =================================
-         OTHER PAGES
-         Friends / Messages / Profile
-         ================================= -->
+    <!-- OTHER PAGES -->
 
     <section
       id="otherPage"
       class="page hidden">
 
-      <div class="card">
+      <div class="card page-content-card">
 
-        <h2 id="otherPageTitle">
-          पृष्ठ
-        </h2>
+        <div class="other-page-heading">
 
-        <!-- SETTINGS ENTRY
-             Visible only when Profile is selected.
-        -->
-
-        <div class="profile-settings-entry">
+          <h2 id="otherPageTitle">
+            पृष्ठ
+          </h2>
 
           <button
             id="settingsToggle"
             class="profile-settings-button"
             type="button">
-
             ⚙️ सेटिङ
-
           </button>
 
         </div>
 
         <div id="otherPageText">
-          <p>
-            यो सुविधा क्रमशः थपिँदैछ।
-          </p>
+          <p>यो सुविधा क्रमशः थपिँदैछ।</p>
         </div>
 
       </div>
@@ -326,10 +209,7 @@
   </main>
 
 
-  <!-- =====================================
-       BOTTOM NAVIGATION
-       Exactly 5 items
-       ===================================== -->
+  <!-- BOTTOM NAVIGATION -->
 
   <nav
     class="bottom-nav"
@@ -363,13 +243,13 @@
 
 
       <button
-        class="nav-item"
+        class="nav-item nav-create"
         type="button"
         data-page="create"
         aria-label="Create">
 
-        <span class="nav-icon">➕</span>
-        <span data-i18n="create">बनाउनुहोस्</span>
+        <span class="nav-icon">＋</span>
+        <span data-i18n="create">पोस्ट</span>
 
       </button>
 
@@ -402,148 +282,7 @@
   </nav>
 
 
-  <!-- =====================================
-       CREATE POST MODAL
-       ===================================== -->
-
-  <div
-    id="composerModal"
-    class="modal-backdrop hidden"
-    aria-hidden="true">
-
-    <section
-      class="modal"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="composerTitle">
-
-      <header class="modal-header">
-
-        <h2
-          id="composerTitle"
-          class="modal-title">
-
-          नयाँ पोस्ट
-
-        </h2>
-
-        <button
-          id="closeComposer"
-          class="icon-button"
-          type="button"
-          aria-label="बन्द गर्नुहोस्">
-
-          ×
-
-        </button>
-
-      </header>
-
-
-      <div class="modal-body">
-
-        <textarea
-          id="postText"
-          class="form-textarea"
-          placeholder="के सोच्दै हुनुहुन्छ?"
-          rows="5">
-        </textarea>
-
-
-        <!-- MEDIA PREVIEW -->
-
-        <div
-          id="mediaPreview"
-          class="media-preview hidden">
-
-          <img
-            id="imagePreview"
-            class="hidden"
-            alt="छानिएको फोटो">
-
-          <video
-            id="videoPreview"
-            class="hidden"
-            controls
-            playsinline>
-          </video>
-
-          <button
-            id="removeMedia"
-            class="btn btn-secondary"
-            type="button">
-
-            फाइल हटाउनुहोस्
-
-          </button>
-
-        </div>
-
-
-        <!-- MEDIA SELECT -->
-
-        <div class="composer-actions">
-
-          <button
-            id="choosePhoto"
-            class="composer-tool"
-            type="button">
-
-            📷 फोटो
-
-          </button>
-
-          <button
-            id="chooseVideo"
-            class="composer-tool"
-            type="button">
-
-            🎥 भिडियो
-
-          </button>
-
-          <input
-            id="mediaInput"
-            type="file"
-            accept="image/*,video/*"
-            hidden>
-
-        </div>
-
-      </div>
-
-
-      <footer class="modal-footer">
-
-        <button
-          id="cancelComposer"
-          class="btn btn-secondary"
-          type="button">
-
-          रद्द
-
-        </button>
-
-        <button
-          id="publishButton"
-          class="btn btn-primary"
-          type="button">
-
-          प्रकाशित गर्नुहोस्
-
-        </button>
-
-      </footer>
-
-    </section>
-
-  </div>
-
-
-  <!-- =====================================
-       SETTINGS MODAL
-       Opened from Profile only
-       ===================================== -->
+  <!-- SETTINGS MODAL -->
 
   <div
     id="settingsModal"
@@ -561,9 +300,7 @@
         <h2
           id="settingsTitle"
           class="modal-title">
-
           ⚙️ सेटिङ
-
         </h2>
 
         <button
@@ -571,9 +308,7 @@
           class="icon-button"
           type="button"
           aria-label="बन्द गर्नुहोस्">
-
           ×
-
         </button>
 
       </header>
@@ -581,13 +316,11 @@
 
       <div class="modal-body">
 
-
-        <!-- THEME SETTINGS -->
+        <!-- THEME -->
 
         <div class="settings-row">
 
           <div>
-
             <div class="settings-label" data-i18n="theme">
               Theme
             </div>
@@ -595,11 +328,8 @@
             <div
               class="settings-description"
               data-i18n="themeDescription">
-
               Light वा Dark mode
-
             </div>
-
           </div>
 
           <button
@@ -607,20 +337,17 @@
             class="btn btn-secondary"
             type="button"
             data-i18n="change">
-
             बदल्नुहोस्
-
           </button>
 
         </div>
 
 
-        <!-- LANGUAGE SETTINGS -->
+        <!-- LANGUAGE -->
 
         <div class="settings-row">
 
           <div>
-
             <div class="settings-label" data-i18n="language">
               भाषा
             </div>
@@ -628,11 +355,8 @@
             <div
               class="settings-description"
               data-i18n="languageDescription">
-
               एपको भाषा छान्नुहोस्।
-
             </div>
-
           </div>
 
           <select
@@ -648,34 +372,25 @@
         </div>
 
 
-        <!-- LOCAL DATA -->
+        <!-- CLEAR POSTS -->
 
         <div class="settings-row">
 
           <div>
-
-            <div class="settings-label" data-i18n="localData">
-              स्थानीय डाटा
+            <div class="settings-label">
+              पोस्ट व्यवस्थापन
             </div>
 
-            <div
-              class="settings-description"
-              data-i18n="localDataDescription">
-
-              यस उपकरणमा सुरक्षित demo data
-
+            <div class="settings-description">
+              आफ्ना पोस्टहरू मेटाउनुहोस्।
             </div>
-
           </div>
 
           <button
             id="clearPosts"
             class="btn btn-danger"
-            type="button"
-            data-i18n="delete">
-
-            मेटाउनुहोस्
-
+            type="button">
+            पोस्ट मेटाउनुहोस्
           </button>
 
         </div>
@@ -687,9 +402,7 @@
   </div>
 
 
-  <!-- =====================================
-       TOAST NOTIFICATIONS
-       ===================================== -->
+  <!-- TOAST -->
 
   <div
     id="toastContainer"
@@ -699,64 +412,21 @@
   </div>
 
 
-  <!-- =====================================
-       APP SCRIPTS
-       Keep dependency order
-       ===================================== -->
+  <!-- KSK CORE — DEPENDENCY ORDER -->
 
   <script src="core/state.js"></script>
   <script src="core/settings.js"></script>
   <script src="core/theme.js"></script>
   <script src="core/language.js"></script>
-  <script src="core/navigation.js"></script>
   <script src="core/toast.js"></script>
   <script src="core/utils.js"></script>
+  <script src="core/modal.js"></script>
+  <script src="core/data.js"></script>
+  <script src="core/navigation.js"></script>
+
+  <!-- MAIN APPLICATION -->
 
   <script src="app.js"></script>
-
-
-  <!-- LANGUAGE SELECT CONNECTION -->
-
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-
-      const languageSelect =
-        document.getElementById("languageSelect");
-
-      if (!languageSelect) return;
-
-      if (window.HamroLanguage) {
-        languageSelect.value =
-          window.HamroLanguage.getLanguage();
-      }
-
-      languageSelect.addEventListener("change", function () {
-
-        const language =
-          this.value === "en" ? "en" : "ne";
-
-        if (window.HamroSettings) {
-          window.HamroSettings.updateSettings({
-            language: language
-          });
-        }
-
-        if (window.HamroLanguage) {
-          window.HamroLanguage.setLanguage(language);
-        }
-
-        if (window.HamroToast) {
-          window.HamroToast.success(
-            language === "en"
-              ? "Language updated."
-              : "भाषा परिवर्तन भयो।"
-          );
-        }
-
-      });
-
-    });
-  </script>
 
 </body>
 </html>
