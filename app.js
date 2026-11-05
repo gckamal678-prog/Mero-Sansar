@@ -1,6 +1,6 @@
 "use strict";
 
-/* Hamro Sansar — Frontend Prototype */
+/* Hamro Sansar — Integrated Frontend App */
 
 (() => {
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -19,20 +19,24 @@
     closeSettings: $("#closeSettings"),
     settingsThemeToggle: $("#settingsThemeToggle"),
     clearPosts: $("#clearPosts"),
+
     homePage: $("#homePage"),
     otherPage: $("#otherPage"),
     otherPageTitle: $("#otherPageTitle"),
     otherPageText: $("#otherPageText"),
+
     storiesList: $("#storiesList"),
     feedList: $("#feedList"),
     emptyFeed: $("#emptyFeed"),
     bottomNav: $("#bottomNav"),
+
     composerModal: $("#composerModal"),
     openComposer: $("#openComposer"),
     closeComposer: $("#closeComposer"),
     cancelComposer: $("#cancelComposer"),
     postText: $("#postText"),
     publishButton: $("#publishButton"),
+
     mediaInput: $("#mediaInput"),
     choosePhoto: $("#choosePhoto"),
     chooseVideo: $("#chooseVideo"),
@@ -43,6 +47,7 @@
     imagePreview: $("#imagePreview"),
     videoPreview: $("#videoPreview"),
     removeMedia: $("#removeMedia"),
+
     toastContainer: $("#toastContainer")
   };
 
@@ -50,6 +55,7 @@
   let selectedMedia = null;
   let currentPage = "home";
   let searchQuery = "";
+  let activeChatId = null;
 
   function loadPosts() {
     try {
@@ -76,7 +82,7 @@
   }
 
   function escapeHTML(value = "") {
-    return String(value).replace(/[&<>"']/g, char => ({
+    return String(value).replace(/[&<>"']/g, (char) => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
@@ -85,12 +91,16 @@
     })[char]);
   }
 
-  function showToast(message) {
+  function showToast(message, type = "info") {
+    if (window.HamroToast) {
+      window.HamroToast.show(message, type);
+      return;
+    }
+
     const toast = document.createElement("div");
     toast.className = "toast";
     toast.textContent = message;
     els.toastContainer.appendChild(toast);
-
     window.setTimeout(() => toast.remove(), 2800);
   }
 
@@ -113,10 +123,15 @@
   }
 
   function toggleTheme() {
-    const next = document.documentElement.dataset.theme === "dark"
-      ? "light"
-      : "dark";
-    applyTheme(next);
+    const current = document.documentElement.dataset.theme || "light";
+    const next = current === "dark" ? "light" : "dark";
+
+    if (window.HamroTheme) {
+      window.HamroTheme.toggleTheme();
+      applyTheme(window.HamroState?.state?.theme || next);
+    } else {
+      applyTheme(next);
+    }
   }
 
   function renderStories() {
@@ -146,7 +161,7 @@
   }
 
   function renderFeed() {
-    const filtered = posts.filter(post => {
+    const filtered = posts.filter((post) => {
       const content = `${post.author || ""} ${post.text || ""}`.toLowerCase();
       return content.includes(searchQuery.toLowerCase());
     });
@@ -183,18 +198,18 @@
   }
 
   function chooseMedia(type) {
-    els.mediaInput.accept = type === "image"
-      ? "image/*"
-      : "video/*";
+    els.mediaInput.accept = type === "image" ? "image/*" : "video/*";
     els.mediaInput.click();
   }
 
   function resetMedia() {
     selectedMedia = null;
     els.mediaInput.value = "";
+
     els.mediaPreview.classList.add("hidden");
     els.imagePreview.classList.add("hidden");
     els.videoPreview.classList.add("hidden");
+
     els.imagePreview.removeAttribute("src");
     els.videoPreview.removeAttribute("src");
     els.videoPreview.load();
@@ -271,26 +286,33 @@
     resetMedia();
     closeComposer();
     showPage("home");
-    showToast("पोस्ट प्रकाशित भयो।");
+    showToast("पोस्ट प्रकाशित भयो।", "success");
   }
 
   function updatePost(id, changes) {
-    posts = posts.map(post =>
-      post.id === id ? { ...post, ...changes } : post
+    posts = posts.map((post) =>
+      String(post.id) === String(id)
+        ? { ...post, ...changes }
+        : post
     );
+
     savePosts();
     renderFeed();
   }
 
   function handlePostAction(action, id) {
-    const post = posts.find(item => item.id === id);
+    const post = posts.find((item) => String(item.id) === String(id));
     if (!post) return;
 
     if (action === "like") {
       const liked = !post.liked;
+
       updatePost(id, {
         liked,
-        likes: Math.max(0, Number(post.likes || 0) + (liked ? 1 : -1))
+        likes: Math.max(
+          0,
+          Number(post.likes || 0) + (liked ? 1 : -1)
+        )
       });
       return;
     }
@@ -301,13 +323,13 @@
     }
 
     if (action === "share") {
-      const shareText = `${post.author}: ${post.text || "पोस्ट"}`;
+      const shareText = `${post.author || "तपाईं"}: ${post.text || "पोस्ट"}`;
 
       if (navigator.share) {
         navigator.share({ text: shareText }).catch(() => {});
       } else if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(shareText)
-          .then(() => showToast("पोस्टको विवरण copy भयो।"))
+          .then(() => showToast("पोस्टको विवरण copy भयो।", "success"))
           .catch(() => showToast("Copy गर्न सकिएन।"));
       } else {
         showToast("Share सुविधा उपलब्ध छैन।");
@@ -318,47 +340,111 @@
   function deletePost(id) {
     if (!window.confirm("यो पोस्ट हटाउने हो?")) return;
 
-    posts = posts.filter(post => post.id !== id);
+    posts = posts.filter((post) => String(post.id) !== String(id));
     savePosts();
     renderFeed();
-    showToast("पोस्ट हटाइयो।");
+    showToast("पोस्ट हटाइयो।", "success");
   }
 
-  function showPage(page) {
-    currentPage = page;
+  function setActiveNavigation(page) {
+    $$(".nav-item").forEach((item) => {
+      item.classList.toggle("active", item.dataset.page === page);
+    });
+  }
 
-    const titles = {
-      home: ["गृहपृष्ठ", "तपाईंको feed"],
-      posts: ["पोस्टहरू", "यहाँ सबै पोस्टहरू देखिन्छन्।"],
-      messages: ["सन्देश", "Chat सुविधा अर्को चरणमा जोडिनेछ।"],
-      profile: ["प्रोफाइल", "Profile सुविधा अर्को चरणमा जोडिनेछ।"]
-    };
+  function showPage(page, options = {}) {
+    currentPage = page;
 
     if (page === "create") {
       openComposer();
       return;
     }
 
+    if (page !== "messages" || !options.keepChat) {
+      activeChatId = null;
+    }
+
     const isHome = page === "home" || page === "posts";
+
     els.homePage.classList.toggle("hidden", !isHome);
     els.otherPage.classList.toggle("hidden", isHome);
 
-    if (!isHome) {
-      const info = titles[page] || ["पृष्ठ", "यो सुविधा क्रमशः थपिँदैछ।"];
-      els.otherPageTitle.textContent = info[0];
-      els.otherPageText.textContent = info[1];
+    setActiveNavigation(page);
+
+    if (window.HamroState) {
+      window.HamroState.setCurrentPage(page);
     }
 
-    $$(".nav-item").forEach(item => {
-      item.classList.toggle("active", item.dataset.page === page);
-    });
+    if (isHome) {
+      renderFeed();
+      return;
+    }
 
-    if (isHome) renderFeed();
+    const titles = {
+      friends: "साथीहरू",
+      messages: activeChatId ? "Chat" : "सन्देश",
+      notifications: "सूचनाहरू",
+      profile: "प्रोफाइल",
+      settings: "सेटिङ",
+      saved: "सेभ गरिएका पोस्टहरू"
+    };
+
+    els.otherPageTitle.textContent = titles[page] || "पृष्ठ";
+
+    if (page === "messages" && activeChatId && window.HamroChatPage) {
+      els.otherPageText.innerHTML = window.HamroChatPage.renderChat(activeChatId);
+      return;
+    }
+
+    if (window.HamroPages && window.HamroPages.has(page)) {
+      els.otherPageText.innerHTML = window.HamroPages.render(page) || "";
+    } else {
+      els.otherPageText.innerHTML = `
+        <div class="card">
+          <h3>यो पृष्ठ उपलब्ध छैन</h3>
+          <p>यस पृष्ठको module load भएको छैन।</p>
+        </div>
+      `;
+    }
+  }
+
+  function navigate(page) {
+    if (window.HamroNavigation) {
+      window.HamroNavigation.navigate(page);
+    } else {
+      showPage(page);
+    }
+  }
+
+  function handlePageAction(button) {
+    const action = button.dataset.hsAction;
+    const data = {
+      userId: button.dataset.userId,
+      chatId: button.dataset.chatId,
+      postId: button.dataset.postId
+    };
+
+    if (action === "back-to-messages") {
+      activeChatId = null;
+      showPage("messages");
+      return;
+    }
+
+    if (action === "toggle-theme") {
+      toggleTheme();
+      showPage("settings");
+      return;
+    }
+
+    if (window.HamroPages) {
+      window.HamroPages.handle(action, data, els.otherPageText);
+    }
   }
 
   function bindEvents() {
     els.searchToggle.addEventListener("click", () => {
       els.searchPanel.classList.toggle("hidden");
+
       if (!els.searchPanel.classList.contains("hidden")) {
         els.searchInput.focus();
       }
@@ -366,6 +452,11 @@
 
     els.searchInput.addEventListener("input", () => {
       searchQuery = els.searchInput.value.trim();
+
+      if (window.HamroState) {
+        window.HamroState.setSearchQuery(searchQuery);
+      }
+
       renderFeed();
     });
 
@@ -374,25 +465,28 @@
     els.settingsToggle.addEventListener("click", openSettings);
     els.closeSettings.addEventListener("click", closeSettings);
 
-    els.settingsModal.addEventListener("click", event => {
+    els.settingsModal.addEventListener("click", (event) => {
       if (event.target === els.settingsModal) closeSettings();
     });
 
     els.clearPosts.addEventListener("click", () => {
       if (!window.confirm("यस उपकरणमा सुरक्षित सबै पोस्ट मेटाउने हो?")) return;
+
       posts = [];
       savePosts();
       renderFeed();
       closeSettings();
-      showToast("स्थानीय पोस्टहरू मेटाइयो।");
+      showToast("स्थानीय पोस्टहरू मेटाइयो।", "success");
     });
 
     els.openComposer.addEventListener("click", openComposer);
     els.quickText.addEventListener("click", openComposer);
+
     els.quickPhoto.addEventListener("click", () => {
       openComposer();
       chooseMedia("image");
     });
+
     els.quickVideo.addEventListener("click", () => {
       openComposer();
       chooseMedia("video");
@@ -401,22 +495,28 @@
     els.closeComposer.addEventListener("click", closeComposer);
     els.cancelComposer.addEventListener("click", closeComposer);
 
-    els.composerModal.addEventListener("click", event => {
+    els.composerModal.addEventListener("click", (event) => {
       if (event.target === els.composerModal) closeComposer();
     });
 
     els.choosePhoto.addEventListener("click", () => chooseMedia("image"));
     els.chooseVideo.addEventListener("click", () => chooseMedia("video"));
-    els.mediaInput.addEventListener("change", event => {
+
+    els.mediaInput.addEventListener("change", (event) => {
       handleMedia(event.target.files?.[0]);
     });
+
     els.removeMedia.addEventListener("click", resetMedia);
     els.publishButton.addEventListener("click", publishPost);
 
-    els.feedList.addEventListener("click", event => {
-      const actionButton = event.target.closest("[data-action]");
+    els.feedList.addEventListener("click", (event) => {
+      const actionButton = event.target.closest("[data-post-action]");
+
       if (actionButton) {
-        handlePostAction(actionButton.dataset.action, actionButton.dataset.id);
+        handlePostAction(
+          actionButton.dataset.postAction,
+          actionButton.dataset.postId
+        );
         return;
       }
 
@@ -424,29 +524,42 @@
       if (menuButton) deletePost(menuButton.dataset.postMenu);
     });
 
-    els.storiesList.addEventListener("click", event => {
+    els.storiesList.addEventListener("click", (event) => {
       if (event.target.closest("[data-create-story]")) {
         showToast("Story सुविधा अर्को चरणमा जोडिनेछ।");
       }
     });
 
-    els.bottomNav.addEventListener("click", event => {
+    els.bottomNav.addEventListener("click", (event) => {
       const item = event.target.closest("[data-page]");
-      if (item) showPage(item.dataset.page);
+      if (item) navigate(item.dataset.page);
     });
 
-    document.addEventListener("keydown", event => {
+    els.otherPageText.addEventListener("click", (event) => {
+      const pageButton = event.target.closest("[data-page]");
+      if (pageButton) {
+        navigate(pageButton.dataset.page);
+        return;
+      }
+
+      const actionButton = event.target.closest("[data-hs-action]");
+      if (actionButton) handlePageAction(actionButton);
+    });
+
+    window.addEventListener("hamro:navigate", (event) => {
+      const page = event.detail?.page;
+      if (page) showPage(page);
+    });
+
+    window.addEventListener("hamro:open-composer", openComposer);
+
+    document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         closeComposer();
         closeSettings();
       }
     });
   }
-
-  window.addEventListener("hamro:navigate", (event) => {
-    const page = event.detail?.page;
-    if (page) showPage(page);
-  });
 
   function initialize() {
     let savedTheme = "light";
@@ -460,19 +573,24 @@
       window.HamroState.setCurrentPage("home");
     }
 
-    if (window.HamroNavigation) {
-      window.HamroNavigation.initializeNavigation(document);
-    }
-
-    if (window.HamroTheme) {
-      window.HamroTheme.initializeTheme();
-    }
-
     applyTheme(savedTheme);
     renderStories();
     renderFeed();
     bindEvents();
     showPage("home");
+
+    window.HamroApp = Object.freeze({
+      showPage,
+
+      refreshPage() {
+        showPage(currentPage, { keepChat: Boolean(activeChatId) });
+      },
+
+      openChat(chatId) {
+        activeChatId = chatId;
+        showPage("messages", { keepChat: true });
+      }
+    });
   }
 
   if (document.readyState === "loading") {
@@ -483,11 +601,9 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js")
-        .catch((error) => {
-          console.error("Service Worker registration failed:", error);
-        });
+      navigator.serviceWorker.register("./sw.js").catch((error) => {
+        console.error("Service Worker registration failed:", error);
+      });
     });
   }
-  
 })();
