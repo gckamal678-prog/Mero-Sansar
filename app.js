@@ -65,6 +65,10 @@
   function savePosts() {
     try {
       localStorage.setItem(STORAGE_POSTS, JSON.stringify(posts));
+
+      if (window.HamroState) {
+        window.HamroState.setPosts(posts);
+      }
     } catch (error) {
       console.error("Could not save posts:", error);
       showToast("डाटा सुरक्षित गर्न सकिएन। केही पोस्ट वा media हटाउनुहोस्।");
@@ -92,11 +96,18 @@
 
   function applyTheme(theme) {
     const safeTheme = theme === "dark" ? "dark" : "light";
+
     document.documentElement.dataset.theme = safeTheme;
+    document.documentElement.style.colorScheme = safeTheme;
 
     try {
       localStorage.setItem(STORAGE_THEME, safeTheme);
     } catch {}
+
+    if (window.HamroState &&
+        window.HamroState.state.theme !== safeTheme) {
+      window.HamroState.setTheme(safeTheme);
+    }
 
     els.themeToggle.textContent = safeTheme === "dark" ? "☀️" : "🌙";
   }
@@ -106,20 +117,6 @@
       ? "light"
       : "dark";
     applyTheme(next);
-  }
-
-  function formatTime(value) {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "भर्खरै";
-
-    try {
-      return new Intl.DateTimeFormat("ne-NP", {
-        dateStyle: "medium",
-        timeStyle: "short"
-      }).format(date);
-    } catch {
-      return date.toLocaleString();
-    }
   }
 
   function renderStories() {
@@ -140,55 +137,12 @@
     `).join("");
   }
 
-  function renderMedia(post) {
-    if (!post.mediaData) return "";
-
-    const src = escapeHTML(post.mediaData);
-
-    if ((post.mediaType || "").startsWith("video/")) {
-      return `<video class="post-media" src="${src}" controls
-        preload="metadata" playsinline></video>`;
+  function renderPost(post) {
+    if (window.HamroPostCard) {
+      return window.HamroPostCard.renderPostCard(post);
     }
 
-    return `<img class="post-media" src="${src}" alt="पोस्टको फोटो" loading="lazy">`;
-  }
-
-  function renderPost(post) {
-    const id = escapeHTML(post.id);
-    const author = escapeHTML(post.author || "हाम्रो संसार सदस्य");
-    const initial = escapeHTML(post.authorInitial || "ह");
-    const text = escapeHTML(post.text || "");
-    const liked = Boolean(post.liked);
-
-    return `
-      <article class="post-card" data-post-id="${id}">
-        <header class="post-header">
-          <div class="avatar">${initial}</div>
-          <div class="post-author">
-            <p class="post-author-name">${author}</p>
-            <p class="post-time">${escapeHTML(formatTime(post.createdAt))}</p>
-          </div>
-          <button class="icon-button" type="button"
-            data-post-menu="${id}" aria-label="पोस्ट विकल्प">⋯</button>
-        </header>
-
-        ${text ? `<div class="post-content">${text}</div>` : ""}
-        ${renderMedia(post)}
-
-        <div class="post-actions">
-          <button class="post-action ${liked ? "is-active" : ""}"
-            data-action="like" data-id="${id}" aria-pressed="${liked}">
-            ${liked ? "❤️" : "♡"} मन पर्‍यो ${Number(post.likes || 0)}
-          </button>
-          <button class="post-action" data-action="comment" data-id="${id}">
-            💬 टिप्पणी ${Number(post.comments || 0)}
-          </button>
-          <button class="post-action" data-action="share" data-id="${id}">
-            ↗️ साझा ${Number(post.shares || 0)}
-          </button>
-        </div>
-      </article>
-    `;
+    return "";
   }
 
   function renderFeed() {
@@ -489,12 +443,30 @@
     });
   }
 
+  window.addEventListener("hamro:navigate", (event) => {
+    const page = event.detail?.page;
+    if (page) showPage(page);
+  });
+
   function initialize() {
     let savedTheme = "light";
 
     try {
       savedTheme = localStorage.getItem(STORAGE_THEME) || "light";
     } catch {}
+
+    if (window.HamroState) {
+      window.HamroState.setPosts(posts);
+      window.HamroState.setCurrentPage("home");
+    }
+
+    if (window.HamroNavigation) {
+      window.HamroNavigation.initializeNavigation(document);
+    }
+
+    if (window.HamroTheme) {
+      window.HamroTheme.initializeTheme();
+    }
 
     applyTheme(savedTheme);
     renderStories();
@@ -508,13 +480,14 @@
   } else {
     initialize();
   }
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js")
-      .catch((error) => {
-        console.error("Service Worker registration failed:", error);
-      });
-  });
-}
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js")
+        .catch((error) => {
+          console.error("Service Worker registration failed:", error);
+        });
+    });
+  }
   
 })();
