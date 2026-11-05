@@ -1,10 +1,8 @@
 
 "use strict";
-
 /*
  * KSK COMMENTS MODULE
  * Facebook-style Comments, Replies and Mentions
- *
  * Dependencies:
  * core/data.js
  * core/modal.js
