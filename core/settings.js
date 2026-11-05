@@ -10,6 +10,7 @@
     notifications: true,
     compactMode: false
   };
+  
 
   let settings = loadSettings();
   const listeners = new Set();
