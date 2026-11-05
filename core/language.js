@@ -1,4 +1,10 @@
+
 "use strict";
+
+/* =====================================================
+   HAMRO SANSAR — GLOBAL LANGUAGE ENGINE
+   Safe Translation + Mutation Observer
+   ===================================================== */
 
 (function (global) {
   const dictionaries = {
@@ -135,85 +141,162 @@
     }
   };
 
+
+  /* LANGUAGE STORAGE */
+
   function getLanguage() {
     try {
       const saved = localStorage.getItem("hs_language_v1");
-      if (saved === "ne" || saved === "en") return saved;
-    } catch {}
 
-    return global.HamroState?.state?.language === "en" ? "en" : "ne";
+      if (saved === "ne" || saved === "en") {
+        return saved;
+      }
+    } catch (error) {
+      console.warn("Language storage unavailable.");
+    }
+
+    if (global.HamroSettings) {
+      return global.HamroSettings.getSettings().language;
+    }
+
+    return global.HamroState?.state?.language === "en"
+      ? "en"
+      : "ne";
   }
+
+
+  /* TRANSLATION */
 
   function translate(key, language = getLanguage()) {
-    return dictionaries[language]?.[key] ??
+    return (
+      dictionaries[language]?.[key] ??
       dictionaries.ne[key] ??
-      key;
+      key
+    );
   }
+
 
   function findKeyForText(text) {
     for (const key of Object.keys(dictionaries.ne)) {
-      if (dictionaries.ne[key] === text || dictionaries.en[key] === text) {
+      if (
+        dictionaries.ne[key] === text ||
+        dictionaries.en[key] === text
+      ) {
         return key;
       }
     }
+
     return null;
   }
+
+
+  /* SAFE TEXT NODE TRANSLATION */
 
   function translateTextNode(node, language) {
     const original = node.nodeValue;
     const trimmed = original.trim();
+
     if (!trimmed) return;
 
     const key = findKeyForText(trimmed);
+
     if (!key) return;
 
     const translated = translate(key, language);
+
     const leading = original.match(/^\s*/)?.[0] || "";
     const trailing = original.match(/\s*$/)?.[0] || "";
-    node.nodeValue = leading + translated + trailing;
+
+    const nextValue = leading + translated + trailing;
+
+    // Critical fix:
+    // Do not rewrite an unchanged text node.
+    // This prevents MutationObserver from repeatedly triggering itself.
+    if (node.nodeValue !== nextValue) {
+      node.nodeValue = nextValue;
+    }
   }
 
+
+  /* APPLY TRANSLATIONS */
+
   function applyTranslations(root = document) {
+    if (!root) return;
+
     const language = getLanguage();
 
+    // Translate elements with data-i18n.
     if (root.querySelectorAll) {
-      root.querySelectorAll("[data-i18n]").forEach((element) => {
-        element.textContent = translate(element.dataset.i18n, language);
-      });
+      root.querySelectorAll("[data-i18n]").forEach(element => {
+        const key = element.dataset.i18n;
+        const translated = translate(key, language);
 
-      root.querySelectorAll("[data-i18n-placeholder]").forEach((element) => {
-        element.placeholder = translate(element.dataset.i18nPlaceholder, language);
-      });
-
-      const walker = document.createTreeWalker(
-        root,
-        NodeFilter.SHOW_TEXT,
-        {
-          acceptNode(node) {
-            const parent = node.parentElement;
-            if (!parent) return NodeFilter.FILTER_REJECT;
-            if (parent.closest("script, style, textarea, input, select, option")) {
-              return NodeFilter.FILTER_REJECT;
-            }
-            return NodeFilter.FILTER_ACCEPT;
-          }
+        // Only update when content actually changes.
+        if (element.textContent !== translated) {
+          element.textContent = translated;
         }
-      );
+      });
 
-      const nodes = [];
-      while (walker.nextNode()) nodes.push(walker.currentNode);
-      nodes.forEach((node) => translateTextNode(node, language));
+      // Translate placeholders.
+      root.querySelectorAll("[data-i18n-placeholder]").forEach(element => {
+        const key = element.dataset.i18nPlaceholder;
+        const translated = translate(key, language);
+
+        if (element.placeholder !== translated) {
+          element.placeholder = translated;
+        }
+      });
     }
+
+    // Translate ordinary text nodes.
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode(node) {
+          const parent = node.parentElement;
+
+          if (!parent) {
+            return NodeFilter.FILTER_REJECT;
+          }
+
+          if (
+            parent.closest(
+              "script, style, textarea, input, select, option"
+            )
+          ) {
+            return NodeFilter.FILTER_REJECT;
+          }
+
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+
+    const nodes = [];
+
+    while (walker.nextNode()) {
+      nodes.push(walker.currentNode);
+    }
+
+    nodes.forEach(node => {
+      translateTextNode(node, language);
+    });
 
     document.documentElement.lang = language;
   }
+
+
+  /* CHANGE LANGUAGE */
 
   function setLanguage(language) {
     const selected = language === "en" ? "en" : "ne";
 
     try {
       localStorage.setItem("hs_language_v1", selected);
-    } catch {}
+    } catch (error) {
+      console.warn("Could not save language preference.");
+    }
 
     if (global.HamroState) {
       global.HamroState.setLanguage(selected);
@@ -221,39 +304,74 @@
 
     applyTranslations(document);
 
-    global.dispatchEvent(new CustomEvent("hamro:language-change", {
-      detail: { language: selected }
-    }));
+    global.dispatchEvent(
+      new CustomEvent("hamro:language-change", {
+        detail: {
+          language: selected
+        }
+      })
+    );
 
     return selected;
   }
 
+
+  /* INITIALIZATION */
+
+  let observer = null;
+
   function initialize() {
+    if (document.body.dataset.languageReady === "true") {
+      return;
+    }
+
+    document.body.dataset.languageReady = "true";
+
     document.documentElement.lang = getLanguage();
+
     applyTranslations(document);
 
+    // Keep the language in sync with shared state.
     if (global.HamroState?.subscribe) {
       global.HamroState.subscribe((state, changeName) => {
         if (changeName === "language-change") {
           try {
-            localStorage.setItem("hs_language_v1", state.language);
-          } catch {}
+            localStorage.setItem(
+              "hs_language_v1",
+              state.language
+            );
+          } catch (error) {
+            console.warn("Language sync unavailable.");
+          }
+
           applyTranslations(document);
         }
       });
     }
 
-    const observer = new MutationObserver((mutations) => {
-      if (mutations.some((mutation) => mutation.addedNodes.length)) {
-        applyTranslations(document);
-      }
-    });
+    // Observe newly added content.
+    // The translation functions now avoid unchanged writes,
+    // so this observer cannot create an infinite update loop.
+    if ("MutationObserver" in global) {
+      observer = new MutationObserver(mutations => {
+        const hasNewContent = mutations.some(mutation =>
+          mutation.addedNodes.length > 0
+        );
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+        if (hasNewContent) {
+          applyTranslations(document);
+        }
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
   }
+
+
+  /* PUBLIC API */
 
   global.HamroLanguage = Object.freeze({
     translate,
@@ -264,9 +382,17 @@
     dictionaries
   });
 
+
+  /* START */
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialize, { once: true });
+    document.addEventListener(
+      "DOMContentLoaded",
+      initialize,
+      { once: true }
+    );
   } else {
     initialize();
   }
+
 })(window);
