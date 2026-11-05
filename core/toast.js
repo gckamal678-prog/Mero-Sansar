@@ -1,19 +1,40 @@
+
 "use strict";
 
-/* HAMRO SANSAR — GLOBAL TOAST SYSTEM */
+/* =========================================================
+   KSK — GLOBAL TOAST NOTIFICATION SYSTEM
+   Clear, safe and consistent user notifications.
+========================================================= */
 
 (function (global) {
+
   const DEFAULT_DURATION = 3000;
+  const EXIT_DURATION = 200;
+
+  const ALLOWED_TYPES = Object.freeze([
+    "success",
+    "error",
+    "warning",
+    "info"
+  ]);
+
+  let container = null;
 
   function getContainer() {
-    let container = document.getElementById("toastContainer");
+    if (container && container.isConnected) {
+      return container;
+    }
+
+    container = document.getElementById("toastContainer");
 
     if (!container) {
       container = document.createElement("div");
+
       container.id = "toastContainer";
       container.className = "toast-container";
+
       container.setAttribute("aria-live", "polite");
-      container.setAttribute("aria-atomic", "true");
+      container.setAttribute("aria-atomic", "false");
 
       document.body.appendChild(container);
     }
@@ -21,42 +42,68 @@
     return container;
   }
 
+  function normalizeMessage(message) {
+    if (message === null || message === undefined) {
+      return "";
+    }
+
+    return String(message).trim();
+  }
+
+  function normalizeDuration(duration) {
+    const value = Number(duration);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      return DEFAULT_DURATION;
+    }
+
+    return Math.max(1000, value);
+  }
+
   function show(message, type = "info", duration = DEFAULT_DURATION) {
-    const container = getContainer();
+    const text = normalizeMessage(message);
 
-    const toast = document.createElement("div");
+    if (!text) return null;
 
-    const allowedTypes = [
-      "success",
-      "error",
-      "warning",
-      "info"
-    ];
-
-    const safeType = allowedTypes.includes(type)
+    const safeType = ALLOWED_TYPES.includes(type)
       ? type
       : "info";
 
+    const toast = document.createElement("div");
+
     toast.className = `toast toast-${safeType}`;
-    toast.setAttribute("role", "status");
-    toast.textContent = String(message || "");
-
-    container.appendChild(toast);
-
-    const time = Math.max(
-      1000,
-      Number(duration) || DEFAULT_DURATION
+    toast.setAttribute(
+      "role",
+      safeType === "error" ? "alert" : "status"
     );
 
-    global.setTimeout(() => {
+    toast.textContent = text;
+
+    getContainer().appendChild(toast);
+
+    const displayTime = normalizeDuration(duration);
+
+    const hideTimer = global.setTimeout(() => {
       toast.classList.add("toast-hiding");
 
       global.setTimeout(() => {
         toast.remove();
-      }, 200);
-    }, time);
+      }, EXIT_DURATION);
+    }, displayTime);
 
-    return toast;
+    toast.dataset.kskToast = "true";
+
+    return Object.freeze({
+      element: toast,
+      close() {
+        global.clearTimeout(hideTimer);
+        toast.classList.add("toast-hiding");
+
+        global.setTimeout(() => {
+          toast.remove();
+        }, EXIT_DURATION);
+      }
+    });
   }
 
   function success(message, duration) {
@@ -76,17 +123,22 @@
   }
 
   function clear() {
-    const container = getContainer();
-    container.replaceChildren();
+    const currentContainer = getContainer();
+    currentContainer.replaceChildren();
   }
 
-  global.HamroToast = Object.freeze({
+  function initialize() {
+    getContainer();
+  }
+
+  global.KSKToast = Object.freeze({
     show,
     success,
     error,
     warning,
     info,
-    clear
+    clear,
+    initialize
   });
 
 })(window);
