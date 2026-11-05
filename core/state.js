@@ -1,50 +1,49 @@
 "use strict";
 
-/*
- * Shared application state.
- * Do not store passwords, tokens, or private user information here.
- */
-
+/* Hamro Sansar — Shared App State */
 (function (global) {
   const STORAGE_KEYS = Object.freeze({
-    theme: "hamroSansar.theme",
-    language: "hamroSansar.language",
-    posts: "hamroSansar.posts"
+    theme: "hs_theme_v1",
+    language: "hs_language_v1",
+    posts: "hs_posts_v1"
   });
 
-  function safeRead(key, fallback) {
+  function readStorage(key, fallback) {
     try {
-      const value = global.localStorage.getItem(key);
+      const value = localStorage.getItem(key);
       return value === null ? fallback : value;
     } catch {
       return fallback;
     }
   }
 
-  function safeWrite(key, value) {
+  function writeStorage(key, value) {
     try {
-      global.localStorage.setItem(key, value);
+      localStorage.setItem(key, value);
       return true;
-    } catch {
+    } catch (error) {
+      console.error("Storage write failed:", error);
       return false;
     }
   }
 
   function readPosts() {
     try {
-      const raw = global.localStorage.getItem(STORAGE_KEYS.posts);
-      if (!raw) return [];
-
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      const raw = localStorage.getItem(STORAGE_KEYS.posts);
+      const value = raw ? JSON.parse(raw) : [];
+      return Array.isArray(value) ? value : [];
     } catch {
       return [];
     }
   }
 
   const state = {
-    theme: safeRead(STORAGE_KEYS.theme, "light"),
-    language: safeRead(STORAGE_KEYS.language, "ne"),
+    theme: readStorage(STORAGE_KEYS.theme, "light") === "dark"
+      ? "dark"
+      : "light",
+    language: readStorage(STORAGE_KEYS.language, "ne") === "en"
+      ? "en"
+      : "ne",
     currentPage: "home",
     searchQuery: "",
     posts: readPosts(),
@@ -65,28 +64,25 @@
 
   function subscribe(listener) {
     if (typeof listener !== "function") {
-      throw new TypeError("State listener must be a function.");
+      throw new TypeError("Listener must be a function.");
     }
 
     listeners.add(listener);
-
-    return function unsubscribe() {
-      listeners.delete(listener);
-    };
+    return () => listeners.delete(listener);
   }
 
   function setState(updates, changeName = "state-change") {
-    if (!updates || typeof updates !== "object") return;
-
+    if (!updates || typeof updates !== "object") return false;
     Object.assign(state, updates);
     notify(changeName);
+    return true;
   }
 
   function setTheme(theme) {
     if (theme !== "light" && theme !== "dark") return false;
 
     state.theme = theme;
-    safeWrite(STORAGE_KEYS.theme, theme);
+    writeStorage(STORAGE_KEYS.theme, theme);
     notify("theme-change");
     return true;
   }
@@ -95,7 +91,7 @@
     if (language !== "ne" && language !== "en") return false;
 
     state.language = language;
-    safeWrite(STORAGE_KEYS.language, language);
+    writeStorage(STORAGE_KEYS.language, language);
     notify("language-change");
     return true;
   }
@@ -104,36 +100,38 @@
     if (!Array.isArray(posts)) return false;
 
     state.posts = posts;
+    const saved = writeStorage(
+      STORAGE_KEYS.posts,
+      JSON.stringify(posts)
+    );
 
-    const saved = safeWrite(STORAGE_KEYS.posts, JSON.stringify(posts));
     notify("posts-change");
     return saved;
   }
 
   function addPost(post) {
     if (!post || typeof post !== "object") return false;
-
-    const nextPosts = [post, ...state.posts];
-    return setPosts(nextPosts);
+    return setPosts([post, ...state.posts]);
   }
 
   function updatePost(postId, updater) {
     if (typeof updater !== "function") return false;
 
-    const updated = state.posts.map((post) => {
-      if (String(post.id) !== String(postId)) return post;
-      return updater({ ...post });
-    });
+    const next = state.posts.map((post) =>
+      String(post.id) === String(postId)
+        ? updater({ ...post })
+        : post
+    );
 
-    return setPosts(updated);
+    return setPosts(next);
   }
 
   function removePost(postId) {
-    const updated = state.posts.filter(
-      (post) => String(post.id) !== String(postId)
+    return setPosts(
+      state.posts.filter(
+        (post) => String(post.id) !== String(postId)
+      )
     );
-
-    return setPosts(updated);
   }
 
   function setCurrentPage(page) {
