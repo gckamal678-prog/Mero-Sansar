@@ -1,9 +1,14 @@
+
 "use strict";
 
-/* HAMRO SANSAR — CENTRAL SETTINGS MANAGER */
+/* =========================================================
+   KSK — CENTRAL SETTINGS MANAGER
+   Shared settings for theme, language and app preferences.
+========================================================= */
 
 (function (global) {
-  const STORAGE_KEY = "hs_app_settings";
+  const STORAGE_KEY = "ksk_app_settings";
+  const LEGACY_STORAGE_KEY = "hs_app_settings";
 
   const DEFAULT_SETTINGS = Object.freeze({
     theme: "light",
@@ -23,20 +28,26 @@
     };
   }
 
-  function loadSettings() {
+  function readStorage() {
     try {
-      const saved = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) || "{}"
-      );
+      let saved = global.localStorage.getItem(STORAGE_KEY);
 
-      return normalizeSettings(saved);
+      if (!saved) {
+        saved = global.localStorage.getItem(LEGACY_STORAGE_KEY);
+
+        if (saved) {
+          global.localStorage.setItem(STORAGE_KEY, saved);
+        }
+      }
+
+      return saved ? JSON.parse(saved) : {};
     } catch (error) {
-      console.error("Settings could not be loaded:", error);
-      return { ...DEFAULT_SETTINGS };
+      console.warn("KSKSettings: Unable to load settings.", error);
+      return {};
     }
   }
 
-  let settings = loadSettings();
+  let settings = normalizeSettings(readStorage());
 
   function getSettings() {
     return { ...settings };
@@ -44,14 +55,14 @@
 
   function persist() {
     try {
-      localStorage.setItem(
+      global.localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(settings)
       );
 
       return true;
     } catch (error) {
-      console.error("Settings could not be saved:", error);
+      console.warn("KSKSettings: Unable to save settings.", error);
       return false;
     }
   }
@@ -59,16 +70,16 @@
   function notify(changeName = "settings-change") {
     const snapshot = getSettings();
 
-    listeners.forEach((listener) => {
+    listeners.forEach(listener => {
       try {
         listener(snapshot, changeName);
       } catch (error) {
-        console.error("Settings listener error:", error);
+        console.error("KSKSettings listener error:", error);
       }
     });
 
     global.dispatchEvent(
-      new CustomEvent("hamro:settings-change", {
+      new CustomEvent("ksk:settings-change", {
         detail: {
           settings: snapshot,
           change: changeName
@@ -78,9 +89,9 @@
   }
 
   function syncGlobalState(changeName) {
-    if (!global.HamroState) return;
+    if (!global.KSKState) return;
 
-    global.HamroState.setState({
+    global.KSKState.setState({
       theme: settings.theme,
       language: settings.language,
       settings: {
@@ -91,13 +102,15 @@
   }
 
   function updateSettings(values = {}) {
-    if (!values || typeof values !== "object") {
+    if (
+      !values ||
+      typeof values !== "object" ||
+      Array.isArray(values)
+    ) {
       return getSettings();
     }
 
-    const next = {
-      ...settings
-    };
+    const next = { ...settings };
 
     if (Object.prototype.hasOwnProperty.call(values, "theme")) {
       next.theme = values.theme === "dark" ? "dark" : "light";
@@ -115,7 +128,7 @@
       next.compactMode = Boolean(values.compactMode);
     }
 
-    settings = next;
+    settings = normalizeSettings(next);
 
     persist();
     syncGlobalState("settings-change");
@@ -136,7 +149,9 @@
 
   function subscribeSettings(listener) {
     if (typeof listener !== "function") {
-      throw new TypeError("Listener must be a function.");
+      throw new TypeError(
+        "KSKSettings.subscribeSettings requires a function."
+      );
     }
 
     listeners.add(listener);
@@ -146,11 +161,17 @@
     };
   }
 
-  global.HamroSettings = Object.freeze({
+  function initialize() {
+    syncGlobalState("settings-initialize");
+    return getSettings();
+  }
+
+  global.KSKSettings = Object.freeze({
     getSettings,
     updateSettings,
     resetSettings,
     subscribeSettings,
+    initialize,
     DEFAULT_SETTINGS
   });
 
