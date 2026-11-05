@@ -1,11 +1,23 @@
 "use strict";
 
-/* HAMRO SANSAR — GLOBAL THEME ENGINE */
+/* =========================================================
+   KSK — GLOBAL THEME ENGINE
+   Centralized Light / Dark theme management.
+========================================================= */
 
 (function (global) {
+  const THEME_COLORS = Object.freeze({
+    light: "#2563eb",
+    dark: "#0b1220"
+  });
+
   function getTheme() {
-    if (global.HamroState) {
-      return global.HamroState.state.theme;
+    if (global.KSKSettings) {
+      return global.KSKSettings.getSettings().theme;
+    }
+
+    if (global.KSKState) {
+      return global.KSKState.getState().theme;
     }
 
     return document.documentElement.dataset.theme === "dark"
@@ -15,36 +27,37 @@
 
   function applyTheme(theme, save = true) {
     const selected = theme === "dark" ? "dark" : "light";
+    const root = document.documentElement;
 
-    document.documentElement.dataset.theme = selected;
-    document.documentElement.style.colorScheme = selected;
+    root.dataset.theme = selected;
+    root.style.colorScheme = selected;
 
     const meta = document.querySelector(
       'meta[name="theme-color"]'
     );
 
     if (meta) {
-      meta.setAttribute(
-        "content",
-        selected === "dark" ? "#0b1220" : "#2563eb"
-      );
+      meta.setAttribute("content", THEME_COLORS[selected]);
     }
 
-    if (save && global.HamroSettings) {
-      const settings = global.HamroSettings.getSettings();
+    if (save && global.KSKSettings) {
+      const settings = global.KSKSettings.getSettings();
 
       if (settings.theme !== selected) {
-        global.HamroSettings.updateSettings({
+        global.KSKSettings.updateSettings({
           theme: selected
         });
       }
-    } else if (global.HamroState &&
-               global.HamroState.state.theme !== selected) {
-      global.HamroState.setTheme(selected);
+    } else if (global.KSKState) {
+      const currentTheme = global.KSKState.getState().theme;
+
+      if (currentTheme !== selected) {
+        global.KSKState.setTheme(selected);
+      }
     }
 
     global.dispatchEvent(
-      new CustomEvent("hamro:theme-change", {
+      new CustomEvent("ksk:theme-change", {
         detail: { theme: selected }
       })
     );
@@ -53,28 +66,41 @@
   }
 
   function toggleTheme() {
-    return applyTheme(
-      getTheme() === "dark" ? "light" : "dark"
-    );
+    const nextTheme = getTheme() === "dark"
+      ? "light"
+      : "dark";
+
+    return applyTheme(nextTheme);
   }
 
   function initializeTheme() {
-    const settings = global.HamroSettings
-      ? global.HamroSettings.getSettings()
+    const settings = global.KSKSettings
+      ? global.KSKSettings.getSettings()
       : null;
 
-    const theme = settings?.theme ||
-      global.HamroState?.state?.theme ||
+    const state = global.KSKState
+      ? global.KSKState.getState()
+      : null;
+
+    const selected = settings?.theme ||
+      state?.theme ||
       "light";
 
-    return applyTheme(theme, false);
+    const applied = applyTheme(selected, false);
+
+    if (global.KSKState && state?.theme !== applied) {
+      global.KSKState.setTheme(applied);
+    }
+
+    return applied;
   }
 
-  global.HamroTheme = Object.freeze({
+  global.KSKTheme = Object.freeze({
     getTheme,
     applyTheme,
     toggleTheme,
-    initializeTheme
+    initializeTheme,
+    THEME_COLORS
   });
 
 })(window);
