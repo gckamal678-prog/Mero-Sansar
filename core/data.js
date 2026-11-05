@@ -1,8 +1,9 @@
+
 "use strict";
 
 /*
  * KSK — SINGLE DATA LAYER
- * Central data access for every application feature.
+ * Central data access for the entire application.
  *
  * All features must use window.KSKData.
  * No feature should access localStorage directly.
@@ -29,12 +30,16 @@
     name: "",
     bio: "",
     location: "",
-    avatar: ""
+    avatar: "",
+    cover: ""
   });
 
   const listeners = new Set();
-
   let initialized = false;
+
+  /* =========================================
+     HELPERS
+  ========================================= */
 
   function clone(value) {
     if (value === undefined || value === null) {
@@ -73,7 +78,7 @@
       console.error("KSK data save failed:", error);
 
       global.KSKToast?.error(
-        "डाटा सुरक्षित गर्न सकिएन। फेरि प्रयास गर्नुहोस्।"
+        "डाटा सुरक्षित गर्न सकिएन। भण्डारण क्षमता जाँच गर्नुहोस्।"
       );
 
       return false;
@@ -106,7 +111,7 @@
       timestamp: Date.now()
     };
 
-    listeners.forEach((listener) => {
+    listeners.forEach(listener => {
       try {
         listener(detail);
       } catch (error) {
@@ -115,9 +120,7 @@
     });
 
     global.dispatchEvent(
-      new CustomEvent("ksk:data-change", {
-        detail
-      })
+      new CustomEvent("ksk:data-change", { detail })
     );
 
     if (global.KSKState?.setState) {
@@ -138,14 +141,14 @@
 
   function subscribe(listener) {
     if (typeof listener !== "function") {
-      throw new TypeError("KSKData subscriber must be a function.");
+      throw new TypeError(
+        "KSKData subscriber must be a function."
+      );
     }
 
     listeners.add(listener);
 
-    return function unsubscribe() {
-      listeners.delete(listener);
-    };
+    return () => listeners.delete(listener);
   }
 
   function saveCollection(key, collection, action, item) {
@@ -158,12 +161,19 @@
     return saved;
   }
 
+  function sortNewest(items) {
+    return items.sort((a, b) =>
+      new Date(b.createdAt || 0) -
+      new Date(a.createdAt || 0)
+    );
+  }
+
   /* =========================================
      LEGACY DATA MIGRATION
-     ========================================= */
+  ========================================= */
 
   function migrateLegacyData() {
-    let migrated = [];
+    const migrated = [];
 
     const migrations = [
       {
@@ -188,22 +198,18 @@
       }
     ];
 
-    migrations.forEach((migration) => {
+    migrations.forEach(migration => {
       try {
         const existing = global.localStorage.getItem(
           migration.target
         );
 
-        if (existing !== null) {
-          return;
-        }
+        if (existing !== null) return;
 
         for (const source of migration.sources) {
           const oldValue = global.localStorage.getItem(source);
 
-          if (oldValue === null) {
-            continue;
-          }
+          if (oldValue === null) continue;
 
           const parsed = JSON.parse(oldValue);
 
@@ -228,24 +234,28 @@
 
   /* =========================================
      POSTS
-     ========================================= */
+  ========================================= */
 
   function getPosts() {
     const posts = read(STORAGE.posts, null);
 
     if (Array.isArray(posts)) {
-      return posts.sort((a, b) =>
-        new Date(b.createdAt || 0) -
-        new Date(a.createdAt || 0)
-      );
+      return sortNewest(posts);
     }
 
-    const oldPosts = read(STORAGE.oldPosts, []);
-
-    return isArray(oldPosts).sort((a, b) =>
-      new Date(b.createdAt || 0) -
-      new Date(a.createdAt || 0)
+    return sortNewest(
+      isArray(read(STORAGE.oldPosts, []))
     );
+  }
+
+  function getPost(postId) {
+    const id = String(postId || "");
+
+    const post = getPosts().find(
+      item => String(item.id) === id
+    );
+
+    return post ? clone(post) : null;
   }
 
   function addPost(post = {}) {
@@ -257,18 +267,27 @@
       ...clone(post),
       id: post.id || makeId("post"),
       text: cleanText(post.text, 10000),
+      comments: isArray(post.comments),
       createdAt: post.createdAt || new Date().toISOString()
     };
 
-    if (!item.text && !item.mediaId && !item.mediaData) {
+    if (
+      !item.text &&
+      !item.mediaId &&
+      !item.mediaData
+    ) {
       return false;
     }
 
     const posts = getPosts();
-
     posts.unshift(item);
 
-    if (!saveCollection(STORAGE.posts, posts, "add", item)) {
+    if (!saveCollection(
+      STORAGE.posts,
+      posts,
+      "add",
+      item
+    )) {
       return false;
     }
 
@@ -283,13 +302,12 @@
     }
 
     const posts = getPosts();
+
     const index = posts.findIndex(
-      (post) => String(post.id) === id
+      post => String(post.id) === id
     );
 
-    if (index === -1) {
-      return false;
-    }
+    if (index === -1) return false;
 
     const updated = {
       ...posts[index],
@@ -297,8 +315,17 @@
       id: posts[index].id
     };
 
-    if (Object.prototype.hasOwnProperty.call(changes, "text")) {
+    if (
+      Object.prototype.hasOwnProperty.call(changes, "text")
+    ) {
       updated.text = cleanText(changes.text, 10000);
+    }
+
+    // Keep comments intact unless explicitly supplied.
+    if (!Object.prototype.hasOwnProperty.call(changes, "comments")) {
+      updated.comments = isArray(posts[index].comments);
+    } else {
+      updated.comments = isArray(changes.comments);
     }
 
     posts[index] = updated;
@@ -316,12 +343,10 @@
     const posts = getPosts();
 
     const next = posts.filter(
-      (post) => String(post.id) !== id
+      post => String(post.id) !== id
     );
 
-    if (next.length === posts.length) {
-      return false;
-    }
+    if (next.length === posts.length) return false;
 
     return saveCollection(
       STORAGE.posts,
@@ -331,25 +356,293 @@
     );
   }
 
-  function getPost(postId) {
-    const id = String(postId || "");
+  /* =========================================
+     COMMENTS — FACEBOOK STYLE
+     Flat comment structure with parentId.
+  ========================================= */
 
-    const post = getPosts().find(
-      (item) => String(item.id) === id
+  function getComments(postId) {
+    const post = getPost(postId);
+
+    if (!post) return [];
+
+    return sortNewest(
+      isArray(post.comments)
+    );
+  }
+
+  function getComment(postId, commentId) {
+    const comments = getComments(postId);
+    const id = String(commentId || "");
+
+    const comment = comments.find(
+      item => String(item.id) === id
     );
 
-    return post ? clone(post) : null;
+    return comment ? clone(comment) : null;
+  }
+
+  /*
+   * Add a comment or reply.
+   *
+   * options:
+   * {
+   *   parentId: "parent comment ID",
+   *   replyTo: "person name",
+   *   mentions: [{ id, name }]
+   * }
+   */
+
+  function addComment(postId, comment = {}, options = {}) {
+    const id = String(postId || "");
+    const post = getPost(id);
+
+    if (!post || !comment || typeof comment !== "object") {
+      return false;
+    }
+
+    const text = cleanText(comment.text, 3000);
+
+    if (!text) return false;
+
+    const comments = isArray(post.comments);
+
+    const parentId = String(
+      options.parentId ||
+      comment.parentId ||
+      ""
+    );
+
+    // Replies must point to an existing comment.
+    if (parentId) {
+      const parentExists = comments.some(
+        item => String(item.id) === parentId
+      );
+
+      if (!parentExists) return false;
+    }
+
+    const mentions = isArray(
+      options.mentions || comment.mentions
+    ).map(mention => ({
+      id: cleanText(mention?.id, 120),
+      name: cleanText(mention?.name, 60)
+    })).filter(mention => mention.name);
+
+    const item = {
+      id: comment.id || makeId("comment"),
+      postId: id,
+      parentId: parentId || null,
+      replyTo: cleanText(
+        options.replyTo || comment.replyTo,
+        60
+      ),
+      author: cleanText(comment.author || "सदस्य", 60),
+      authorId: cleanText(comment.authorId, 120),
+      authorInitial: cleanText(
+        comment.authorInitial ||
+        comment.author?.charAt?.(0) ||
+        "स",
+        4
+      ),
+      avatar: cleanText(comment.avatar, 200000),
+      text,
+      mentions,
+      likes: Number(comment.likes || 0),
+      liked: Boolean(comment.liked),
+      createdAt: comment.createdAt || new Date().toISOString(),
+      editedAt: null
+    };
+
+    comments.push(item);
+
+    const updated = {
+      ...post,
+      comments
+    };
+
+    if (!saveCollection(
+      STORAGE.posts,
+      replacePostInList(id, updated),
+      parentId ? "reply-add" : "comment-add",
+      item
+    )) {
+      return false;
+    }
+
+    return clone(item);
+  }
+
+  function replacePostInList(postId, updatedPost) {
+    const posts = getPosts();
+
+    const index = posts.findIndex(
+      post => String(post.id) === String(postId)
+    );
+
+    if (index === -1) return posts;
+
+    posts[index] = updatedPost;
+
+    return posts;
+  }
+
+  function updateComment(postId, commentId, changes = {}) {
+    const id = String(postId || "");
+    const post = getPost(id);
+
+    if (!post || !changes || typeof changes !== "object") {
+      return false;
+    }
+
+    const comments = isArray(post.comments);
+
+    const index = comments.findIndex(
+      item => String(item.id) === String(commentId)
+    );
+
+    if (index === -1) return false;
+
+    const updatedComment = {
+      ...comments[index],
+      ...clone(changes),
+      id: comments[index].id,
+      postId: id,
+      editedAt: new Date().toISOString()
+    };
+
+    if (
+      Object.prototype.hasOwnProperty.call(changes, "text")
+    ) {
+      updatedComment.text = cleanText(changes.text, 3000);
+
+      if (!updatedComment.text) return false;
+    }
+
+    comments[index] = updatedComment;
+
+    const updatedPost = {
+      ...post,
+      comments
+    };
+
+    return saveCollection(
+      STORAGE.posts,
+      replacePostInList(id, updatedPost),
+      "comment-update",
+      updatedComment
+    );
+  }
+
+  /*
+   * Deleting a parent comment also deletes its replies.
+   */
+
+  function deleteComment(postId, commentId) {
+    const id = String(postId || "");
+    const targetId = String(commentId || "");
+    const post = getPost(id);
+
+    if (!post || !targetId) return false;
+
+    const comments = isArray(post.comments);
+
+    const exists = comments.some(
+      item => String(item.id) === targetId
+    );
+
+    if (!exists) return false;
+
+    const idsToDelete = new Set([targetId]);
+
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+
+      comments.forEach(item => {
+        if (
+          item.parentId &&
+          idsToDelete.has(String(item.parentId)) &&
+          !idsToDelete.has(String(item.id))
+        ) {
+          idsToDelete.add(String(item.id));
+          changed = true;
+        }
+      });
+    }
+
+    const nextComments = comments.filter(
+      item => !idsToDelete.has(String(item.id))
+    );
+
+    const updatedPost = {
+      ...post,
+      comments: nextComments
+    };
+
+    return saveCollection(
+      STORAGE.posts,
+      replacePostInList(id, updatedPost),
+      "comment-delete",
+      {
+        id: targetId,
+        deletedIds: [...idsToDelete]
+      }
+    );
+  }
+
+  function toggleCommentLike(postId, commentId) {
+    const post = getPost(postId);
+
+    if (!post) return false;
+
+    const comments = isArray(post.comments);
+
+    const index = comments.findIndex(
+      item => String(item.id) === String(commentId)
+    );
+
+    if (index === -1) return false;
+
+    const comment = comments[index];
+    const liked = !Boolean(comment.liked);
+
+    comments[index] = {
+      ...comment,
+      liked,
+      likes: Math.max(
+        0,
+        Number(comment.likes || 0) + (liked ? 1 : -1)
+      )
+    };
+
+    const updatedPost = {
+      ...post,
+      comments
+    };
+
+    return saveCollection(
+      STORAGE.posts,
+      replacePostInList(postId, updatedPost),
+      "comment-like",
+      comments[index]
+    );
+  }
+
+  function getCommentCount(postId) {
+    return getComments(postId).length;
   }
 
   /* =========================================
      STORIES
-     ========================================= */
+  ========================================= */
 
   function getStories(includeExpired = false) {
     const now = Date.now();
 
     return read(STORAGE.stories, [])
-      .filter((story) => {
+      .filter(story => {
         if (includeExpired) return true;
 
         return !story.expiresAt ||
@@ -376,12 +669,15 @@
         new Date(now + 24 * 60 * 60 * 1000).toISOString()
     };
 
-    if (!item.mediaId && !item.mediaData && !item.text) {
+    if (
+      !item.mediaId &&
+      !item.mediaData &&
+      !item.text
+    ) {
       return false;
     }
 
     const stories = getStories(true);
-
     stories.unshift(item);
 
     if (!saveCollection(
@@ -401,12 +697,10 @@
     const stories = getStories(true);
 
     const next = stories.filter(
-      (story) => String(story.id) !== id
+      story => String(story.id) !== id
     );
 
-    if (next.length === stories.length) {
-      return false;
-    }
+    if (next.length === stories.length) return false;
 
     return saveCollection(
       STORAGE.stories,
@@ -418,7 +712,7 @@
 
   /* =========================================
      FRIENDS
-     ========================================= */
+  ========================================= */
 
   function getFriends() {
     return isArray(read(STORAGE.friends, []));
@@ -426,27 +720,21 @@
 
   function addFriend(friend) {
     const item = typeof friend === "string"
-      ? {
-          name: cleanText(friend, 60)
-        }
+      ? { name: cleanText(friend, 60) }
       : clone(friend || {});
 
     const name = cleanText(item.name, 60);
 
-    if (!name) {
-      return false;
-    }
+    if (!name) return false;
 
     const friends = getFriends();
 
-    const duplicate = friends.some((existing) =>
+    const duplicate = friends.some(existing =>
       String(existing.name || "").toLowerCase() ===
       name.toLowerCase()
     );
 
-    if (duplicate) {
-      return false;
-    }
+    if (duplicate) return false;
 
     const newFriend = {
       ...item,
@@ -475,12 +763,10 @@
     const friends = getFriends();
 
     const index = friends.findIndex(
-      (friend) => String(friend.id) === id
+      friend => String(friend.id) === id
     );
 
-    if (index === -1) {
-      return false;
-    }
+    if (index === -1) return false;
 
     friends[index] = {
       ...friends[index],
@@ -501,12 +787,10 @@
     const friends = getFriends();
 
     const next = friends.filter(
-      (friend) => String(friend.id) !== id
+      friend => String(friend.id) !== id
     );
 
-    if (next.length === friends.length) {
-      return false;
-    }
+    if (next.length === friends.length) return false;
 
     return saveCollection(
       STORAGE.friends,
@@ -518,7 +802,7 @@
 
   /* =========================================
      PROFILE
-     ========================================= */
+  ========================================= */
 
   function getProfile() {
     const profile = read(
@@ -546,16 +830,25 @@
       ...clone(profile)
     };
 
-    if (Object.prototype.hasOwnProperty.call(profile, "name")) {
+    if ("name" in profile) {
       next.name = cleanText(profile.name, 60);
     }
 
-    if (Object.prototype.hasOwnProperty.call(profile, "bio")) {
+    if ("bio" in profile) {
       next.bio = cleanText(profile.bio, 240);
     }
 
-    if (Object.prototype.hasOwnProperty.call(profile, "location")) {
+    if ("location" in profile) {
       next.location = cleanText(profile.location, 100);
+    }
+
+    // Avatar and cover are image data/URLs.
+    if ("avatar" in profile) {
+      next.avatar = cleanText(profile.avatar, 200000);
+    }
+
+    if ("cover" in profile) {
+      next.cover = cleanText(profile.cover, 200000);
     }
 
     if (!write(STORAGE.profile, next)) {
@@ -569,7 +862,7 @@
 
   /* =========================================
      MESSAGES AND CHATS
-     ========================================= */
+  ========================================= */
 
   function getMessages() {
     return isArray(read(STORAGE.messages, []))
@@ -587,14 +880,14 @@
     const messages = getMessages();
     const chatsById = new Map();
 
-    storedChats.forEach((chat) => {
+    storedChats.forEach(chat => {
       chatsById.set(String(chat.id), {
         ...chat,
         messages: isArray(chat.messages)
       });
     });
 
-    messages.forEach((message) => {
+    messages.forEach(message => {
       const chatId = String(message.chatId || "general");
 
       if (!chatsById.has(chatId)) {
@@ -610,7 +903,7 @@
       const chat = chatsById.get(chatId);
 
       const exists = chat.messages.some(
-        (item) => String(item.id) === String(message.id)
+        item => String(item.id) === String(message.id)
       );
 
       if (!exists) {
@@ -623,7 +916,7 @@
       }
     });
 
-    return [...chatsById.values()].map((chat) => ({
+    return [...chatsById.values()].map(chat => ({
       ...chat,
       messages: chat.messages.sort((a, b) =>
         new Date(a.time || a.createdAt || 0) -
@@ -639,13 +932,11 @@
 
     const chats = getChats();
 
-    const existing = chats.find((chat) =>
+    const existing = chats.find(chat =>
       String(chat.userId) === String(friend.id)
     );
 
-    if (existing) {
-      return existing.id;
-    }
+    if (existing) return existing.id;
 
     const chat = {
       id: makeId("chat"),
@@ -657,7 +948,6 @@
     };
 
     const stored = isArray(read(STORAGE.chats, []));
-
     stored.unshift(chat);
 
     if (!saveCollection(
@@ -679,9 +969,7 @@
       ? cleanText(message.text, 2000)
       : cleanText(message, 2000);
 
-    if (!id || !text) {
-      return false;
-    }
+    if (!id || !text) return false;
 
     const item = {
       id: makeId("message"),
@@ -694,7 +982,6 @@
     };
 
     const messages = getMessages();
-
     messages.push(item);
 
     if (!saveCollection(
@@ -711,7 +998,7 @@
 
   /* =========================================
      NOTIFICATIONS
-     ========================================= */
+  ========================================= */
 
   function getNotifications() {
     return isArray(read(STORAGE.notifications, []))
@@ -735,12 +1022,9 @@
       time: notification.time || Date.now()
     };
 
-    if (!item.text) {
-      return false;
-    }
+    if (!item.text) return false;
 
     const notifications = getNotifications();
-
     notifications.unshift(item);
 
     if (!saveCollection(
@@ -756,7 +1040,7 @@
   }
 
   function markNotificationsRead() {
-    const notifications = getNotifications().map((item) => ({
+    const notifications = getNotifications().map(item => ({
       ...item,
       read: true
     }));
@@ -770,13 +1054,13 @@
 
   function getUnreadNotificationCount() {
     return getNotifications().filter(
-      (item) => !item.read
+      item => !item.read
     ).length;
   }
 
   /* =========================================
      SAVED POSTS
-     ========================================= */
+  ========================================= */
 
   function getSavedPosts() {
     return isArray(read(STORAGE.saved, []));
@@ -789,7 +1073,7 @@
 
     const saved = getSavedPosts();
 
-    if (saved.some((item) => String(item) === id)) {
+    if (saved.some(item => String(item) === id)) {
       return true;
     }
 
@@ -808,12 +1092,10 @@
     const saved = getSavedPosts();
 
     const next = saved.filter(
-      (item) => String(item) !== id
+      item => String(item) !== id
     );
 
-    if (next.length === saved.length) {
-      return false;
-    }
+    if (next.length === saved.length) return false;
 
     return saveCollection(
       STORAGE.saved,
@@ -829,7 +1111,7 @@
     if (!id) return false;
 
     const exists = getSavedPosts().some(
-      (item) => String(item) === id
+      item => String(item) === id
     );
 
     return exists
@@ -838,13 +1120,11 @@
   }
 
   /* =========================================
-     DATA INITIALIZATION
-     ========================================= */
+     INITIALIZATION
+  ========================================= */
 
   function initialize() {
-    if (initialized) {
-      return true;
-    }
+    if (initialized) return true;
 
     initialized = true;
 
@@ -864,45 +1144,62 @@
 
   /* =========================================
      PUBLIC API
-     ========================================= */
+  ========================================= */
 
   const api = Object.freeze({
     initialize,
     subscribe,
 
+    // Posts
     getPosts,
     getPost,
     addPost,
     updatePost,
     deletePost,
 
+    // Comments and replies
+    getComments,
+    getComment,
+    addComment,
+    updateComment,
+    deleteComment,
+    toggleCommentLike,
+    getCommentCount,
+
+    // Stories
     getStories,
     addStory,
     deleteStory,
 
+    // Friends
     getFriends,
     addFriend,
     updateFriend,
     removeFriend,
 
+    // Profile
     getProfile,
     saveProfile,
 
+    // Messages
     getMessages,
     getChats,
     createChat,
     sendMessage,
 
+    // Notifications
     getNotifications,
     addNotification,
     markNotificationsRead,
     getUnreadNotificationCount,
 
+    // Saved posts
     getSavedPosts,
     savePost,
     unsavePost,
     toggleSavedPost,
 
+    // Utilities
     migrateLegacyData,
     makeId
   });
