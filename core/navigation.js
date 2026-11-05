@@ -1,10 +1,14 @@
 
 "use strict";
 
-/* HAMRO SANSAR — GLOBAL NAVIGATION CONTROLLER */
+/* =========================================================
+   KSK — GLOBAL NAVIGATION CONTROLLER
+   Centralized application page navigation.
+========================================================= */
 
 (function (global) {
-  const allowedPages = [
+
+  const ALLOWED_PAGES = Object.freeze([
     "home",
     "posts",
     "create",
@@ -14,79 +18,171 @@
     "profile",
     "settings",
     "saved"
-  ];
+  ]);
 
   const initializedRoots = new WeakSet();
 
   function isValidPage(page) {
-    return allowedPages.includes(page);
+    return (
+      typeof page === "string" &&
+      ALLOWED_PAGES.includes(page)
+    );
+  }
+
+  function getCurrentPage() {
+    return global.KSKState?.getState()?.currentPage || "home";
   }
 
   function navigate(page, options = {}) {
     if (!isValidPage(page)) {
-      global.HamroToast?.error("यो पृष्ठ उपलब्ध छैन।");
+      global.KSKToast?.error(
+        global.KSKLanguage?.translate("pageUnavailable") ||
+        "यो पृष्ठ उपलब्ध छैन।"
+      );
+
       return false;
     }
 
+    const navigationOptions = (
+      options &&
+      typeof options === "object" &&
+      !Array.isArray(options)
+    ) ? { ...options } : {};
+
+    /* OPEN POST COMPOSER */
+
     if (page === "create") {
       global.dispatchEvent(
-        new CustomEvent("hamro:open-composer")
+        new CustomEvent("ksk:open-composer", {
+          detail: {
+            options: navigationOptions
+          }
+        })
       );
+
       return true;
     }
 
-    global.HamroState?.setCurrentPage(page);
+    /* UPDATE SHARED STATE */
+
+    global.KSKState?.setCurrentPage(page);
+
+    /* NOTIFY APPLICATION */
 
     global.dispatchEvent(
-      new CustomEvent("hamro:navigate", {
-        detail: { page, options }
+      new CustomEvent("ksk:navigate", {
+        detail: {
+          page,
+          options: navigationOptions
+        }
       })
     );
 
     return true;
   }
 
-  function getCurrentPage() {
-    return global.HamroState?.state?.currentPage || "home";
-  }
-
   function initializeNavigation(root = document) {
-    if (!root || initializedRoots.has(root)) return;
+    if (
+      !root ||
+      typeof root.addEventListener !== "function" ||
+      initializedRoots.has(root)
+    ) {
+      return false;
+    }
 
     initializedRoots.add(root);
 
     root.addEventListener("click", function (event) {
-      const button = event.target.closest("[data-page]");
+      const target = event.target;
 
-      if (!button || !root.contains(button)) return;
+      if (!target || typeof target.closest !== "function") {
+        return;
+      }
+
+      const trigger = target.closest("[data-page]");
+
+      if (!trigger || !root.contains(trigger)) {
+        return;
+      }
+
+      if (
+        trigger.disabled ||
+        trigger.getAttribute("aria-disabled") === "true"
+      ) {
+        return;
+      }
 
       event.preventDefault();
 
-      navigate(button.dataset.page);
+      const page = trigger.dataset.page;
+
+      navigate(page);
     });
+
+    return true;
   }
 
   function getPages() {
-    return [...allowedPages];
+    return [...ALLOWED_PAGES];
   }
 
-  global.HamroNavigation = Object.freeze({
+  function isCurrentPage(page) {
+    return isValidPage(page) && getCurrentPage() === page;
+  }
+
+  function refreshNavigation() {
+    const currentPage = getCurrentPage();
+
+    document.querySelectorAll("[data-page]").forEach(element => {
+      const active = element.dataset.page === currentPage;
+
+      element.classList.toggle("active", active);
+
+      if (active) {
+        element.setAttribute("aria-current", "page");
+      } else {
+        element.removeAttribute("aria-current");
+      }
+    });
+
+    return currentPage;
+  }
+
+  /* PUBLIC API */
+
+  global.KSKNavigation = Object.freeze({
     navigate,
     getCurrentPage,
     getPages,
     isValidPage,
-    initializeNavigation
+    isCurrentPage,
+    initializeNavigation,
+    refreshNavigation
   });
 
-  // Automatically activate navigation.
+  /* INITIALIZATION */
+
+  function initialize() {
+    initializeNavigation(document);
+    refreshNavigation();
+
+    global.addEventListener("ksk:navigate", refreshNavigation);
+
+    global.addEventListener("ksk:state-change", function (event) {
+      if (event.detail?.change === "page-change") {
+        refreshNavigation();
+      }
+    });
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener(
       "DOMContentLoaded",
-      () => initializeNavigation(document),
+      initialize,
       { once: true }
     );
   } else {
-    initializeNavigation(document);
+    initialize();
   }
 
 })(window);
