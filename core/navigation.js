@@ -1,3 +1,4 @@
+
 "use strict";
 
 /* HAMRO SANSAR — GLOBAL NAVIGATION CONTROLLER */
@@ -15,6 +16,8 @@
     "saved"
   ];
 
+  const initializedRoots = new WeakSet();
+
   function isValidPage(page) {
     return allowedPages.includes(page);
   }
@@ -29,20 +32,14 @@
       global.dispatchEvent(
         new CustomEvent("hamro:open-composer")
       );
-
       return true;
     }
 
-    if (global.HamroState) {
-      global.HamroState.setCurrentPage(page);
-    }
+    global.HamroState?.setCurrentPage(page);
 
     global.dispatchEvent(
       new CustomEvent("hamro:navigate", {
-        detail: {
-          page,
-          options
-        }
+        detail: { page, options }
       })
     );
 
@@ -54,18 +51,16 @@
   }
 
   function initializeNavigation(root = document) {
-    if (!root || root.dataset.hamroNavigationReady === "true") {
-      return;
-    }
+    if (!root || initializedRoots.has(root)) return;
 
-    root.dataset.hamroNavigationReady = "true";
+    initializedRoots.add(root);
 
-    root.addEventListener("click", (event) => {
+    root.addEventListener("click", function (event) {
       const button = event.target.closest("[data-page]");
 
-      if (!button || !root.contains(button)) {
-        return;
-      }
+      if (!button || !root.contains(button)) return;
+
+      event.preventDefault();
 
       navigate(button.dataset.page);
     });
@@ -82,5 +77,16 @@
     isValidPage,
     initializeNavigation
   });
+
+  // Automatically activate navigation.
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      () => initializeNavigation(document),
+      { once: true }
+    );
+  } else {
+    initializeNavigation(document);
+  }
 
 })(window);
