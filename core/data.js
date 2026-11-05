@@ -10,19 +10,19 @@
 
 (function (global) {
   const STORAGE = Object.freeze({
-    posts: "hs_posts_v2",
-    oldPosts: "hs_posts_v1",
-    stories: "hs_stories_v1",
-    friends: "hs_friends_v1",
-    messages: "hs_messages_v1",
-    profile: "hs_profile_v1",
-    saved: "hs_saved_v1",
-    notifications: "hs_notifications_v1",
-    chats: "hs_feature_chats",
-    featureFriends: "hs_feature_friends",
-    featureProfile: "hs_feature_profile",
-    featureNotifications: "hs_feature_notifications",
-    featureSaved: "hs_feature_savedPosts"
+    posts: "ksk_posts_v2",
+    oldPosts: "ksk_posts_v1",
+    stories: "ksk_stories_v1",
+    friends: "ksk_friends_v1",
+    messages: "ksk_messages_v1",
+    profile: "ksk_profile_v1",
+    saved: "ksk_saved_v1",
+    notifications: "ksk_notifications_v1",
+    chats: "ksk_feature_chats",
+    featureFriends: "ksk_feature_friends",
+    featureProfile: "ksk_feature_profile",
+    featureNotifications: "ksk_feature_notifications",
+    featureSaved: "ksk_feature_savedPosts"
   });
 
   const DEFAULT_PROFILE = Object.freeze({
