@@ -1,41 +1,80 @@
 "use strict";
 
-/* Shared light / dark theme controller */
+/* HAMRO SANSAR — GLOBAL THEME ENGINE */
 
 (function (global) {
-  function applyTheme(theme) {
-    const selectedTheme = theme === "dark" ? "dark" : "light";
+  function getTheme() {
+    if (global.HamroState) {
+      return global.HamroState.state.theme;
+    }
 
-    document.documentElement.dataset.theme = selectedTheme;
-    document.documentElement.style.colorScheme = selectedTheme;
-
-    return selectedTheme;
+    return document.documentElement.dataset.theme === "dark"
+      ? "dark"
+      : "light";
   }
 
-  function getTheme() {
-    return global.HamroState?.state?.theme === "dark" ? "dark" : "light";
+  function applyTheme(theme, save = true) {
+    const selected = theme === "dark" ? "dark" : "light";
+
+    document.documentElement.dataset.theme = selected;
+    document.documentElement.style.colorScheme = selected;
+
+    const meta = document.querySelector(
+      'meta[name="theme-color"]'
+    );
+
+    if (meta) {
+      meta.setAttribute(
+        "content",
+        selected === "dark" ? "#0b1220" : "#2563eb"
+      );
+    }
+
+    if (save && global.HamroSettings) {
+      const settings = global.HamroSettings.getSettings();
+
+      if (settings.theme !== selected) {
+        global.HamroSettings.updateSettings({
+          theme: selected
+        });
+      }
+    } else if (global.HamroState &&
+               global.HamroState.state.theme !== selected) {
+      global.HamroState.setTheme(selected);
+    }
+
+    global.dispatchEvent(
+      new CustomEvent("hamro:theme-change", {
+        detail: { theme: selected }
+      })
+    );
+
+    return selected;
   }
 
   function toggleTheme() {
-    const nextTheme = getTheme() === "dark" ? "light" : "dark";
-
-    if (global.HamroState) {
-      global.HamroState.setTheme(nextTheme);
-    } else {
-      applyTheme(nextTheme);
-    }
-
-    return nextTheme;
+    return applyTheme(
+      getTheme() === "dark" ? "light" : "dark"
+    );
   }
 
   function initializeTheme() {
-    applyTheme(getTheme());
+    const settings = global.HamroSettings
+      ? global.HamroSettings.getSettings()
+      : null;
+
+    const theme = settings?.theme ||
+      global.HamroState?.state?.theme ||
+      "light";
+
+    return applyTheme(theme, false);
   }
 
   global.HamroTheme = Object.freeze({
-    applyTheme,
     getTheme,
+    applyTheme,
     toggleTheme,
     initializeTheme
   });
+
 })(window);
