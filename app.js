@@ -969,51 +969,24 @@
 
   /* =======================================================
      SHARE POST
+     KSKShare owns all sharing functionality.
   ======================================================= */
 
-  async function sharePost(id) {
-    const post = DATA()?.getPost?.(id);
+  function sharePost(id) {
 
-    if (!post) return;
+    const share = global.KSKShare;
 
-    const text = `${post.author || ""}\n${post.text || ""}`.trim();
-
-    try {
-      if (navigator.share) {
-        await navigator.share({ text });
-        return;
-      }
-
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-
-        toast(
-          isEnglish()
-            ? "Post copied."
-            : "पोस्ट कपी भयो।",
-          "success"
-        );
-
-        return;
-      }
-
-      toast(
-        isEnglish()
-          ? "Sharing is unavailable."
-          : "साझा गर्ने सुविधा उपलब्ध छैन।",
-        "warning"
-      );
-
-    } catch (error) {
-      if (error.name !== "AbortError") {
-        toast(
-          isEnglish()
-            ? "Could not share post."
-            : "पोस्ट साझा गर्न सकिएन।",
-          "error"
-        );
-      }
+    if (share?.sharePost) {
+      share.sharePost(id);
+      return;
     }
+
+    toast(
+      isEnglish()
+        ? "Sharing is temporarily unavailable."
+        : "Share सुविधा अहिले उपलब्ध छैन।",
+      "warning"
+    );
   }
 
   /* =======================================================
