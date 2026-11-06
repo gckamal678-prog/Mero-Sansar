@@ -1,19 +1,21 @@
+
 "use strict";
 
 /*
  * =========================================================
- * KSK — AVATAR DISPLAY SYSTEM
+ * KSK AVATAR UI — POST & COMMENT PROFILE PHOTOS
  *
- * Responsibility:
- * - Post author profile photos
- * - Comment author profile photos
+ * RESPONSIBILITY:
+ * - Post author avatars
+ * - Comment and reply author avatars
  * - Resolve KSK Media IDs into image URLs
- * - Support existing and new posts/comments
+ * - Support existing posts and comments
  *
- * Data source : KSKData
- * Media source: KSKMedia
+ * DEPENDENCIES:
+ * - KSKData
+ * - KSKMedia
  *
- * Does not own:
+ * Does NOT own:
  * - Profile photo upload/crop
  * - Post creation
  * - Comment creation
@@ -53,7 +55,7 @@
 
 
   /* =======================================================
-     HELPERS
+     SOURCE HELPERS
   ======================================================= */
 
   function isMediaId(value) {
@@ -129,17 +131,18 @@
 
     if (!friend) return "";
 
-    return (
+    const source =
       friend.avatarMediaId ||
       friend.avatar ||
       friend.photo ||
-      ""
-    );
+      "";
+
+    return isValidSource(source) ? source : "";
   }
 
 
   /* =======================================================
-     MEDIA URL RESOLUTION
+     MEDIA RESOLUTION
   ======================================================= */
 
   async function resolveImage(source) {
@@ -159,7 +162,7 @@
       return await global.KSKMedia?.getImageURL?.(value) || "";
     } catch (error) {
       console.warn(
-        "KSK Avatar: Could not load image.",
+        "KSK Avatar: Image loading failed.",
         error
       );
 
@@ -169,7 +172,7 @@
 
 
   /* =======================================================
-     POST AUTHOR PHOTO
+     AUTHOR AVATAR SOURCE
   ======================================================= */
 
   function getPostAvatarSource(post) {
@@ -177,12 +180,10 @@
 
     const user = getProfile();
 
-    // Use the photo saved with the post first.
     if (isValidSource(post.authorAvatar)) {
       return post.authorAvatar;
     }
 
-    // Existing posts may not contain authorAvatar.
     if (
       sameUser(
         post.authorId,
@@ -199,37 +200,6 @@
     );
   }
 
-  function findPost(postId) {
-    return getPosts().find(
-      post => String(post.id) === String(postId)
-    );
-  }
-
-
-  /* =======================================================
-     COMMENT AUTHOR PHOTO
-  ======================================================= */
-
-  function findComment(commentId) {
-    const posts = getPosts();
-
-    for (const post of posts) {
-      const comments = Array.isArray(post.comments)
-        ? post.comments
-        : [];
-
-      const comment = comments.find(
-        item => String(item.id) === String(commentId)
-      );
-
-      if (comment) {
-        return comment;
-      }
-    }
-
-    return null;
-  }
-
   function getCommentAvatarSource(comment) {
     if (!comment) return "";
 
@@ -239,7 +209,6 @@
       return comment.avatar;
     }
 
-    // Older comments may not have stored an avatar.
     if (
       sameUser(
         comment.authorId,
@@ -258,109 +227,88 @@
 
 
   /* =======================================================
-     IMAGE DISPLAY
+     DATA LOOKUP
   ======================================================= */
 
-  function getFallbackText(element) {
-    if (!element) return "स";
+  function findPost(postId) {
+    return getPosts().find(
+      post => String(post.id) === String(postId)
+    );
+  }
 
+  function findComment(commentId) {
+    const posts = getPosts();
+
+    for (const post of posts) {
+      const comments = Array.isArray(post.comments)
+        ? post.comments
+        : [];
+
+      const comment = comments.find(
+        item => String(item.id) === String(commentId)
+      );
+
+      if (comment) return comment;
+    }
+
+    return null;
+  }
+
+
+  /* =======================================================
+     FALLBACK
+  ======================================================= */
+
+  function getInitial(name) {
+    const value = String(name || "").trim();
+
+    return value.charAt(0) || "स";
+  }
+
+  function getFallbackText(element, author) {
     return (
-      element.dataset.avatarFallback ||
-      element.textContent.trim() ||
+      element?.dataset?.avatarFallback ||
+      getInitial(author) ||
       "स"
     );
   }
 
-  function createImage(url, className, author) {
-    const image = document.createElement("img");
+  function createFallback(author, className = "") {
+    const span = document.createElement("span");
 
     if (className) {
-      image.className = className;
+      span.className = className;
     }
+
+    span.textContent = getInitial(author);
+    span.setAttribute("aria-label", author || "सदस्य");
+
+    return span;
+  }
+
+
+  /* =======================================================
+     IMAGE ELEMENT
+  ======================================================= */
+
+  function createImage(url, author, className = "") {
+    const image = document.createElement("img");
 
     image.src = url;
     image.alt = author || "Profile Photo";
     image.loading = "lazy";
     image.decoding = "async";
 
+    if (className) {
+      image.className = className;
+    }
+
     return image;
-  }
-
-  async function updateAvatar(
-    element,
-    source,
-    author,
-    imageClass = ""
-  ) {
-    if (!element || !source) return;
-
-    const value = String(source);
-
-    if (
-      element.dataset.kskAvatarSource === value &&
-      (
-        element.dataset.kskAvatarReady === "true" ||
-        element.dataset.kskAvatarReady === "loading"
-      )
-    ) {
-      return;
-    }
-
-    element.dataset.kskAvatarSource = value;
-    element.dataset.kskAvatarReady = "loading";
-
-    const url = await resolveImage(value);
-
-    // Ignore old asynchronous results.
-    if (
-      !element.isConnected ||
-      element.dataset.kskAvatarSource !== value
-    ) {
-      return;
-    }
-
-    if (!url) {
-      element.dataset.kskAvatarReady = "false";
-      return;
-    }
-
-    const currentImage = $("img", element);
-
-    if (currentImage?.src === url) {
-      element.dataset.kskAvatarReady = "true";
-      return;
-    }
-
-    const image = createImage(
-      url,
-      imageClass,
-      author
-    );
-
-    image.addEventListener("error", () => {
-      if (!element.isConnected) return;
-
-      element.dataset.kskAvatarReady = "false";
-
-      const fallback = document.createElement("span");
-
-      fallback.className = imageClass.includes("ksk-comment")
-        ? "ksk-comment-avatar-fallback"
-        : "";
-
-      fallback.textContent = getFallbackText(element);
-
-      element.replaceChildren(fallback);
-    }, { once: true });
-
-    element.replaceChildren(image);
-
-    element.dataset.kskAvatarReady = "true";
   }
 
 
   /* =======================================================
-     POST AVATAR RENDERING
+     POST AVATAR
   ======================================================= */
 
   async function renderPostAvatar(card) {
@@ -385,22 +333,69 @@
 
     if (!source) return;
 
-    await updateAvatar(
-      avatar,
-      source,
+    const value = String(source);
+
+    if (
+      avatar.dataset.kskAvatarSource === value &&
+      (
+        avatar.dataset.kskAvatarReady === "true" ||
+        avatar.dataset.kskAvatarReady === "loading"
+      )
+    ) {
+      return;
+    }
+
+    avatar.dataset.kskAvatarSource = value;
+    avatar.dataset.kskAvatarReady = "loading";
+
+    const url = await resolveImage(value);
+
+    if (
+      !avatar.isConnected ||
+      avatar.dataset.kskAvatarSource !== value
+    ) {
+      return;
+    }
+
+    if (!url) {
+      avatar.dataset.kskAvatarReady = "false";
+      return;
+    }
+
+    const image = createImage(
+      url,
       post.author || "सदस्य"
     );
+
+    image.addEventListener("error", () => {
+      if (!avatar.isConnected) return;
+
+      if (avatar.dataset.kskAvatarSource !== value) {
+        return;
+      }
+
+      avatar.dataset.kskAvatarReady = "false";
+
+      avatar.replaceChildren(
+        createFallback(post.author)
+      );
+    }, { once: true });
+
+    avatar.replaceChildren(image);
+
+    avatar.dataset.kskAvatarReady = "true";
   }
 
 
   /* =======================================================
-     COMMENT AVATAR RENDERING
+     COMMENT & REPLY AVATAR
+     Preserve the original comment structure.
   ======================================================= */
 
-  async function renderCommentAvatar(element) {
-    if (!element) return;
+  async function renderCommentAvatar(commentElement) {
+    if (!commentElement) return;
 
-    const commentId = element.dataset.commentId;
+    const commentId = commentElement.dataset.commentId;
 
     if (!commentId) return;
 
@@ -410,7 +405,7 @@
 
     const avatar = $(
       ".ksk-comment-avatar",
-      element
+      commentElement
     );
 
     if (!avatar) return;
@@ -419,28 +414,70 @@
 
     if (!source) return;
 
-    if (avatar.tagName === "IMG") {
-      await updateAvatar(
-        avatar.parentElement || element,
-        source,
-        comment.author,
-        "ksk-comment-avatar"
-      );
+    const value = String(source);
 
+    if (
+      avatar.dataset.kskAvatarSource === value &&
+      (
+        avatar.dataset.kskAvatarReady === "true" ||
+        avatar.dataset.kskAvatarReady === "loading"
+      )
+    ) {
       return;
     }
 
-    await updateAvatar(
-      avatar,
-      source,
-      comment.author,
+    avatar.dataset.kskAvatarSource = value;
+    avatar.dataset.kskAvatarReady = "loading";
+
+    const url = await resolveImage(value);
+
+    if (
+      !avatar.isConnected ||
+      avatar.dataset.kskAvatarSource !== value
+    ) {
+      return;
+    }
+
+    if (!url) {
+      avatar.dataset.kskAvatarReady = "false";
+      return;
+    }
+
+    const image = createImage(
+      url,
+      comment.author || "सदस्य",
       "ksk-comment-avatar"
     );
+
+    image.dataset.kskAvatarSource = value;
+    image.dataset.kskAvatarReady = "true";
+    image.dataset.avatarFallback = getInitial(
+      comment.authorInitial || comment.author
+    );
+
+    image.addEventListener("error", () => {
+      if (!image.isConnected) return;
+
+      const fallback = createFallback(
+        comment.authorInitial || comment.author,
+        "ksk-comment-avatar ksk-comment-avatar-fallback"
+      );
+
+      fallback.dataset.avatarFallback = getInitial(
+        comment.authorInitial || comment.author
+      );
+
+      image.replaceWith(fallback);
+    }, { once: true });
+
+    // Replace only the avatar element.
+    // Never replace the comment body or its parent.
+    avatar.replaceWith(image);
   }
 
 
   /* =======================================================
-     RENDER ALL
+     RENDER ALL POSTS
   ======================================================= */
 
   function renderPostAvatars() {
@@ -449,11 +486,21 @@
     });
   }
 
+
+  /* =======================================================
+     RENDER ALL COMMENTS & REPLIES
+  ======================================================= */
+
   function renderCommentAvatars() {
     $$(".ksk-comment[data-comment-id]").forEach(item => {
       renderCommentAvatar(item);
     });
   }
+
+
+  /* =======================================================
+     REFRESH
+  ======================================================= */
 
   function refresh() {
     renderPostAvatars();
@@ -466,11 +513,9 @@
   ======================================================= */
 
   function observeDOM() {
-    if (observer) return;
+    if (observer || !document.body) return;
 
     observer = new MutationObserver(records => {
-      let shouldRefresh = false;
-
       for (const record of records) {
         if (
           record.type === "childList" &&
@@ -479,13 +524,9 @@
             record.removedNodes.length
           )
         ) {
-          shouldRefresh = true;
-          break;
+          refresh();
+          return;
         }
-      }
-
-      if (shouldRefresh) {
-        refresh();
       }
     });
 
@@ -514,6 +555,11 @@
 
     global.addEventListener(
       "ksk:data-change",
+      refresh
+    );
+
+    global.addEventListener(
+      "ksk:data-ready",
       refresh
     );
 
