@@ -4,23 +4,54 @@
 /*
  * KSK — MEDIA UI
  * Story and Post photo composer + media rendering.
- * Dependencies: KSKMedia, KSKData, KSKModal
+ *
+ * RESPONSIBILITY:
+ * - Post / Story photo upload
+ * - Image preview
+ * - Media publishing
+ * - Feed post photo rendering
+ * - Story thumbnail rendering
+ * - Story photo viewer
+ *
+ * DEPENDENCIES:
+ * KSKMedia, KSKData, KSKModal, KSKApp
  */
 
 (function (global) {
+
+  /* =====================================================
+     CORE
+  ===================================================== */
+
   const $ = (selector, root = document) =>
     root.querySelector(selector);
 
-  let observer = null;
-  let renderQueued = false;
+  let postObserver = null;
+  let storyObserver = null;
+
+  let postRenderQueued = false;
+  let storyRenderQueued = false;
 
   const mediaURLCache = new Map();
 
+
+  /* =====================================================
+     LANGUAGE
+  ===================================================== */
+
   function isEnglish() {
-    return global.KSKLanguage?.getLanguage?.() === "en";
+    return (
+      global.KSKLanguage?.getLanguage?.() === "en"
+    );
   }
 
+
+  /* =====================================================
+     TOAST
+  ===================================================== */
+
   function toast(message, type = "info") {
+
     const api = global.KSKToast;
 
     if (api?.[type]) {
@@ -30,35 +61,61 @@
     }
   }
 
+
+  /* =====================================================
+     HTML ESCAPE
+  ===================================================== */
+
   function escapeHTML(value = "") {
-    return global.KSKUtils?.escapeHTML
-      ? global.KSKUtils.escapeHTML(value)
-      : String(value).replace(/[&<>"']/g, char => ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#039;"
-        })[char]);
+
+    if (global.KSKUtils?.escapeHTML) {
+      return global.KSKUtils.escapeHTML(value);
+    }
+
+    return String(value).replace(
+      /[&<>"']/g,
+      char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[char]
+    );
   }
+
+
+  /* =====================================================
+     PROFILE
+  ===================================================== */
 
   function getProfile() {
     return global.KSKData?.getProfile?.() || {};
   }
 
+
   function getDisplayName() {
+
     const profile = getProfile();
 
     return profile.name ||
       (isEnglish() ? "You" : "तपाईं");
   }
 
+
+  /* =====================================================
+     MODAL
+  ===================================================== */
+
   function getModal() {
     return global.KSKModal;
   }
 
+
   function openModal(options) {
+
     if (!getModal()?.openModal) {
+
       toast(
         isEnglish()
           ? "This feature is unavailable."
@@ -72,15 +129,64 @@
     return getModal().openModal(options);
   }
 
+
   function closeModal() {
     getModal()?.closeModal?.();
   }
+
+
+  /* =====================================================
+     MEDIA URL
+  ===================================================== */
+
+  async function getMediaURL(mediaId) {
+
+    if (!mediaId) return "";
+
+    const key = String(mediaId);
+
+    if (mediaURLCache.has(key)) {
+      return mediaURLCache.get(key);
+    }
+
+    try {
+
+      const url =
+        await global.KSKMedia?.getImageURL?.(key);
+
+      if (url) {
+        mediaURLCache.set(key, url);
+      }
+
+      return url || "";
+
+    } catch (error) {
+
+      console.error(
+        "KSK Media URL loading failed:",
+        error
+      );
+
+      return "";
+    }
+  }
+
+
+  /* =====================================================
+     FILE INPUT
+  ===================================================== */
 
   function getFileInput(form) {
     return $("input[type='file']", form);
   }
 
+
+  /* =====================================================
+     IMAGE PICKER + PREVIEW
+  ===================================================== */
+
   function bindImagePicker(form, preview) {
+
     const input = getFileInput(form);
 
     if (!input || !preview) return;
@@ -88,11 +194,14 @@
     let previewURL = "";
 
     input.addEventListener("change", () => {
+
       const file = input.files?.[0];
 
       if (!file) return;
 
+
       if (!String(file.type).startsWith("image/")) {
+
         input.value = "";
 
         toast(
@@ -105,7 +214,9 @@
         return;
       }
 
+
       if (file.size > 12 * 1024 * 1024) {
+
         input.value = "";
 
         toast(
@@ -118,6 +229,7 @@
         return;
       }
 
+
       if (previewURL) {
         URL.revokeObjectURL(previewURL);
       }
@@ -127,32 +239,50 @@
       preview.innerHTML = `
         <img
           src="${previewURL}"
-          alt="${isEnglish() ? "Image preview" : "फोटो पूर्वावलोकन"}">
+          alt="${isEnglish()
+            ? "Image preview"
+            : "फोटो पूर्वावलोकन"}">
+
         <button
           type="button"
           class="ksk-media-remove"
-          aria-label="${isEnglish() ? "Remove photo" : "फोटो हटाउनुहोस्"}">
+          aria-label="${isEnglish()
+            ? "Remove photo"
+            : "फोटो हटाउनुहोस्"}">
           ×
         </button>
       `;
 
       preview.classList.remove("hidden");
 
+
       $(".ksk-media-remove", preview)?.addEventListener(
         "click",
         () => {
+
           input.value = "";
+
           preview.innerHTML = "";
+
           preview.classList.add("hidden");
 
-          URL.revokeObjectURL(previewURL);
-          previewURL = "";
+          if (previewURL) {
+            URL.revokeObjectURL(previewURL);
+            previewURL = "";
+          }
         }
       );
+
     });
   }
 
+
+  /* =====================================================
+     STYLES
+  ===================================================== */
+
   function injectStyles() {
+
     if ($("#kskMediaStyles")) return;
 
     const style = document.createElement("style");
@@ -160,6 +290,9 @@
     style.id = "kskMediaStyles";
 
     style.textContent = `
+
+      /* MEDIA PICKER */
+
       .ksk-media-tools {
         display:flex;
         align-items:center;
@@ -185,6 +318,9 @@
       .ksk-media-pick input {
         display:none;
       }
+
+
+      /* IMAGE PREVIEW */
 
       .ksk-media-preview {
         position:relative;
@@ -216,6 +352,9 @@
         cursor:pointer;
       }
 
+
+      /* POST MEDIA */
+
       .ksk-post-media {
         display:block;
         width:100%;
@@ -232,6 +371,9 @@
         object-fit:contain;
       }
 
+
+      /* STORY MEDIA */
+
       .ksk-story-media {
         display:block;
         width:100%;
@@ -242,17 +384,43 @@
         background:var(--color-surface-secondary);
       }
 
+
+      /* STORY THUMBNAIL */
+
+      .story-avatar {
+        position:relative;
+        overflow:hidden;
+      }
+
+      .story-avatar img.ksk-story-thumbnail {
+        display:block;
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        border-radius:inherit;
+      }
+
+
+      /* MEDIA ERROR */
+
       .ksk-media-error {
         padding:14px;
         color:var(--color-text-secondary);
         text-align:center;
       }
+
     `;
 
     document.head.appendChild(style);
   }
 
+
+  /* =====================================================
+     COMPOSER CONTENT
+  ===================================================== */
+
   function composerContent(type) {
+
     const isStory = type === "story";
 
     const title = isStory
@@ -260,8 +428,12 @@
       : (isEnglish() ? "Create Post" : "नयाँ पोस्ट");
 
     const placeholder = isStory
-      ? (isEnglish() ? "Write your story..." : "आफ्नो Story लेख्नुहोस्...")
-      : (isEnglish() ? "What is on your mind?" : "के सोच्दै हुनुहुन्छ?");
+      ? (isEnglish()
+          ? "Write your story..."
+          : "आफ्नो Story लेख्नुहोस्...")
+      : (isEnglish()
+          ? "What is on your mind?"
+          : "के सोच्दै हुनुहुन्छ?");
 
     const formId = isStory
       ? "kskMediaStoryForm"
@@ -275,7 +447,9 @@
       ? "kskMediaStoryPreview"
       : "kskMediaPostPreview";
 
+
     return {
+
       title,
 
       content: `
@@ -291,11 +465,15 @@
           <div class="ksk-media-tools">
 
             <label class="ksk-media-pick">
-              📷 ${isEnglish() ? "Add Photo" : "फोटो थप्नुहोस्"}
+
+              📷 ${isEnglish()
+                ? "Add Photo"
+                : "फोटो थप्नुहोस्"}
 
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif">
+
             </label>
 
           </div>
@@ -314,16 +492,30 @@
     };
   }
 
-  async function publishMedia(type, modal, ids) {
-    const form = $(`#${ids.formId}`, modal.element);
 
-    const text = $(`#${ids.textId}`, modal.element)
-      ?.value.trim() || "";
+  /* =====================================================
+     PUBLISH POST / STORY
+  ===================================================== */
+
+  async function publishMedia(type, modal, ids) {
+
+    const form = $(
+      `#${ids.formId}`,
+      modal.element
+    );
+
+    const text = $(
+      `#${ids.textId}`,
+      modal.element
+    )?.value.trim() || "";
 
     const input = getFileInput(form);
+
     const file = input?.files?.[0] || null;
 
+
     if (!text && !file) {
+
       toast(
         isEnglish()
           ? "Write something or add a photo."
@@ -334,15 +526,31 @@
       return;
     }
 
+
     let media = null;
 
+
+    /* SAVE IMAGE */
+
     if (file) {
+
       try {
-        media = await global.KSKMedia.saveImage(file, {
-          name: file.name
-        });
+
+        media = await global.KSKMedia.saveImage(
+          file,
+          { name: file.name }
+        );
+
+        if (!media?.id) {
+          throw new Error("Image could not be saved.");
+        }
+
       } catch (error) {
-        console.error("KSK media save failed:", error);
+
+        console.error(
+          "KSK media save failed:",
+          error
+        );
 
         toast(
           error.message ||
@@ -356,35 +564,77 @@
       }
     }
 
+
+    /* PREPARE DATA */
+
     const user = getProfile();
 
     const payload = {
+
       author: getDisplayName(),
+
       authorId: user.id || "",
-      authorInitial: user.name?.charAt(0) || "स",
+
+      authorInitial:
+        user.name?.charAt(0) || "स",
+
       text
+
     };
 
+
     if (media) {
+
       payload.mediaId = media.id;
+
       payload.mediaType = media.type;
     }
 
+
+    /* SAVE TO SINGLE DATA LAYER */
+
     let result = false;
 
-    if (type === "story") {
-      result = global.KSKData?.addStory?.(payload);
-    } else {
-      result = global.KSKData?.addPost?.({
-        ...payload,
-        likes: 0,
-        liked: false
-      });
+    try {
+
+      if (type === "story") {
+
+        result =
+          global.KSKData?.addStory?.(payload);
+
+      } else {
+
+        result =
+          global.KSKData?.addPost?.({
+
+            ...payload,
+
+            likes: 0,
+
+            liked: false
+
+          });
+      }
+
+    } catch (error) {
+
+      console.error(
+        "KSK publishing failed:",
+        error
+      );
+
+      result = false;
     }
 
+
+    /* CLEANUP IF PUBLISH FAILED */
+
     if (!result) {
+
       if (media?.id) {
-        await global.KSKMedia.deleteImage(media.id)
+
+        await global.KSKMedia
+          ?.deleteImage?.(media.id)
           .catch(() => {});
       }
 
@@ -398,220 +648,543 @@
       return;
     }
 
+
+    /* REFRESH */
+
     closeModal();
 
     global.KSKApp?.renderStories?.();
+
     global.KSKApp?.renderFeed?.();
+
+    queueStoryRender();
+
+    queuePostRender();
+
 
     toast(
       type === "story"
-        ? (isEnglish() ? "Story published." : "Story प्रकाशित भयो।")
-        : (isEnglish() ? "Post published." : "पोस्ट प्रकाशित भयो।"),
+        ? (
+            isEnglish()
+              ? "Story published."
+              : "Story प्रकाशित भयो।"
+          )
+        : (
+            isEnglish()
+              ? "Post published."
+              : "पोस्ट प्रकाशित भयो।"
+          ),
       "success"
     );
   }
 
+
+  /* =====================================================
+     OPEN COMPOSER
+  ===================================================== */
+
   function openComposer(type) {
+
     const ids = composerContent(type);
 
     const modal = openModal({
+
       title: ids.title,
+
       content: ids.content,
 
       footer: `
+
         <button
           type="button"
           class="btn btn-secondary"
           data-modal-close>
+
           ${isEnglish() ? "Cancel" : "रद्द"}
+
         </button>
 
         <button
           type="submit"
           form="${ids.formId}"
           class="btn btn-primary">
-          ${isEnglish() ? "Publish" : "प्रकाशित गर्नुहोस्"}
+
+          ${isEnglish()
+            ? "Publish"
+            : "प्रकाशित गर्नुहोस्"}
+
         </button>
+
       `
     });
 
+
     if (!modal) return;
 
-    const form = $(`#${ids.formId}`, modal.element);
-    const preview = $(`#${ids.previewId}`, modal.element);
+
+    const form = $(
+      `#${ids.formId}`,
+      modal.element
+    );
+
+    const preview = $(
+      `#${ids.previewId}`,
+      modal.element
+    );
+
 
     bindImagePicker(form, preview);
 
+
     $(`#${ids.textId}`, modal.element)?.focus();
 
-    form?.addEventListener("submit", event => {
-      event.preventDefault();
 
-      const submit = $("button[type='submit']", modal.element);
+    form?.addEventListener(
+      "submit",
+      event => {
 
-      if (submit) submit.disabled = true;
+        event.preventDefault();
 
-      publishMedia(type, modal, ids)
-        .finally(() => {
-          if (submit && modal.element.isConnected) {
-            submit.disabled = false;
-          }
-        });
-    });
+        const submit = $(
+          "button[type='submit']",
+          modal.element
+        );
+
+        if (submit) {
+          submit.disabled = true;
+        }
+
+        publishMedia(type, modal, ids)
+          .finally(() => {
+
+            if (
+              submit &&
+              modal.element.isConnected
+            ) {
+              submit.disabled = false;
+            }
+
+          });
+
+      }
+    );
   }
+
+
+  /* =====================================================
+     IMAGE MARKUP
+  ===================================================== */
 
   async function imageMarkup(mediaId, className) {
+
     if (!mediaId) return "";
 
-    try {
-      const url = await global.KSKMedia.getImageURL(mediaId);
+    const url = await getMediaURL(mediaId);
 
-      if (!url) {
-        return `<div class="ksk-media-error">${
-          isEnglish() ? "Photo unavailable." : "फोटो उपलब्ध छैन।"
-        }</div>`;
-      }
 
-      mediaURLCache.set(String(mediaId), url);
+    if (!url) {
 
       return `
-        <div class="${className}">
-          <img
-            src="${url}"
-            alt="${isEnglish() ? "Shared photo" : "साझा गरिएको फोटो"}"
-            loading="lazy">
+        <div class="ksk-media-error">
+
+          ${isEnglish()
+            ? "Photo unavailable."
+            : "फोटो उपलब्ध छैन।"}
+
         </div>
       `;
-    } catch (error) {
-      console.error("KSK media render failed:", error);
-
-      return `<div class="ksk-media-error">${
-        isEnglish() ? "Could not load photo." : "फोटो लोड गर्न सकिएन।"
-      }</div>`;
     }
+
+
+    return `
+
+      <div class="${className}">
+
+        <img
+          src="${url}"
+          alt="${isEnglish()
+            ? "Shared photo"
+            : "साझा गरिएको फोटो"}"
+          loading="lazy">
+
+      </div>
+
+    `;
   }
 
+
+  /* =====================================================
+     POST MEDIA RENDERING
+  ===================================================== */
+
   async function renderPostMedia(postElement) {
-    if (!postElement || postElement.dataset.mediaReady === "true") {
+
+    if (
+      !postElement ||
+      postElement.dataset.mediaReady === "true" ||
+      postElement.dataset.mediaReady === "loading"
+    ) {
       return;
     }
 
+
     const postId = postElement.dataset.postId;
+
     const post = global.KSKData?.getPost?.(postId);
+
 
     if (!post?.mediaId) return;
 
+
     postElement.dataset.mediaReady = "loading";
+
 
     const markup = await imageMarkup(
       post.mediaId,
       "ksk-post-media"
     );
 
+
     if (!postElement.isConnected) return;
 
-    const footer = $(".post-actions", postElement);
+
+    const footer = $(
+      ".post-actions",
+      postElement
+    );
+
 
     if (footer) {
-      footer.insertAdjacentHTML("beforebegin", markup);
+
+      footer.insertAdjacentHTML(
+        "beforebegin",
+        markup
+      );
+
     }
+
 
     postElement.dataset.mediaReady = "true";
   }
 
+
   function renderAllPostMedia() {
-    document.querySelectorAll(".post-card[data-post-id]")
+
+    document
+      .querySelectorAll(".post-card[data-post-id]")
       .forEach(renderPostMedia);
+
   }
 
-  function queuePostRender() {
-    if (renderQueued) return;
 
-    renderQueued = true;
+  function queuePostRender() {
+
+    if (postRenderQueued) return;
+
+    postRenderQueued = true;
+
 
     requestAnimationFrame(() => {
-      renderQueued = false;
+
+      postRenderQueued = false;
+
       renderAllPostMedia();
+
     });
   }
 
+
+  /* =====================================================
+     STORY THUMBNAIL RENDERING
+  ===================================================== */
+
+  async function renderStoryThumbnail(storyElement) {
+
+    if (!storyElement) return;
+
+
+    const storyId =
+      storyElement.dataset.storyView;
+
+    if (!storyId) return;
+
+
+    if (
+      storyElement.dataset.storyMediaReady === "true" ||
+      storyElement.dataset.storyMediaReady === "loading"
+    ) {
+      return;
+    }
+
+
+    const stories =
+      global.KSKData?.getStories?.(true) || [];
+
+
+    const story = stories.find(
+      item => String(item.id) === String(storyId)
+    );
+
+
+    if (!story?.mediaId) return;
+
+
+    const avatar = $(
+      ".story-avatar",
+      storyElement
+    );
+
+
+    if (!avatar) return;
+
+
+    storyElement.dataset.storyMediaReady = "loading";
+
+
+    const url = await getMediaURL(story.mediaId);
+
+
+    if (
+      !url ||
+      !storyElement.isConnected ||
+      !avatar.isConnected
+    ) {
+
+      storyElement.dataset.storyMediaReady = "error";
+
+      return;
+    }
+
+
+    avatar.innerHTML = `
+
+      <img
+        class="ksk-story-thumbnail"
+        src="${url}"
+        alt="${isEnglish()
+          ? "Story photo"
+          : "Story फोटो"}"
+        loading="lazy">
+
+    `;
+
+
+    storyElement.dataset.storyMediaReady = "true";
+  }
+
+
+  function renderAllStoryThumbnails() {
+
+    document
+      .querySelectorAll(
+        "#storiesList [data-story-view]"
+      )
+      .forEach(renderStoryThumbnail);
+
+  }
+
+
+  function queueStoryRender() {
+
+    if (storyRenderQueued) return;
+
+    storyRenderQueued = true;
+
+
+    requestAnimationFrame(() => {
+
+      storyRenderQueued = false;
+
+      renderAllStoryThumbnails();
+
+    });
+  }
+
+
+  /* =====================================================
+     STORY VIEWER
+  ===================================================== */
+
   async function viewStoryWithMedia(id) {
-    const story = global.KSKData?.getStories?.(true)
-      ?.find(item => String(item.id) === String(id));
+
+    const stories =
+      global.KSKData?.getStories?.(true) || [];
+
+
+    const story = stories.find(
+      item => String(item.id) === String(id)
+    );
+
 
     if (!story) return;
 
+
     const media = story.mediaId
-      ? await imageMarkup(story.mediaId, "ksk-story-media")
+      ? await imageMarkup(
+          story.mediaId,
+          "ksk-story-media"
+        )
       : "";
 
+
     const content = `
+
       <div class="story-view-content">
 
-        <h3>${escapeHTML(story.author || "सदस्य")}</h3>
+        <h3>
+          ${escapeHTML(story.author || "सदस्य")}
+        </h3>
 
         ${media}
 
-        ${story.text
-          ? `<div class="post-content">${escapeHTML(story.text)}</div>`
-          : ""}
+        ${
+          story.text
+            ? `
+              <div class="post-content">
+                ${escapeHTML(story.text)}
+              </div>
+            `
+            : ""
+        }
 
       </div>
+
     `;
 
+
     openModal({
+
       title: "Story",
+
       content,
 
       footer: `
+
         <button
           class="btn btn-secondary"
           type="button"
           data-modal-close>
-          ${isEnglish() ? "Close" : "बन्द गर्नुहोस्"}
+
+          ${isEnglish()
+            ? "Close"
+            : "बन्द गर्नुहोस्"}
+
         </button>
+
       `
+
     });
   }
 
+
+  /* =====================================================
+     CLICK INTERCEPTION
+  ===================================================== */
+
   function interceptClick(event) {
+
     const target = event.target;
 
     if (!target?.closest) return;
 
-    const storyCreate = target.closest("[data-story-create]");
+
+    /* CREATE STORY */
+
+    const storyCreate = target.closest(
+      "[data-story-create]"
+    );
+
 
     if (storyCreate) {
+
       event.preventDefault();
+
       event.stopImmediatePropagation();
+
       openComposer("story");
+
       return;
     }
 
-    const storyView = target.closest("[data-story-view]");
+
+    /* VIEW STORY */
+
+    const storyView = target.closest(
+      "[data-story-view]"
+    );
+
 
     if (storyView) {
+
       event.preventDefault();
+
       event.stopImmediatePropagation();
-      viewStoryWithMedia(storyView.dataset.storyView);
+
+      viewStoryWithMedia(
+        storyView.dataset.storyView
+      );
+
       return;
     }
+
+
+    /* CREATE POST */
 
     const openComposerButton = target.closest(
       "#openComposer, #quickText, [data-page='create']"
     );
 
+
     if (openComposerButton) {
+
       event.preventDefault();
+
       event.stopImmediatePropagation();
+
       openComposer("post");
+
     }
   }
 
+
+  /* =====================================================
+     DATA CHANGE
+  ===================================================== */
+
+  function handleDataChange(event) {
+
+    const collection =
+      event.detail?.collection || "";
+
+
+    if (
+      collection.includes("posts")
+    ) {
+      queuePostRender();
+    }
+
+
+    if (
+      collection.includes("stories")
+    ) {
+      queueStoryRender();
+    }
+  }
+
+
+  /* =====================================================
+     INITIALIZE
+  ===================================================== */
+
   function initialize() {
-    if (observer) return;
+
+    if (postObserver || storyObserver) return;
+
 
     injectStyles();
+
+
+    /* CLICK EVENTS */
 
     document.addEventListener(
       "click",
@@ -619,54 +1192,121 @@
       true
     );
 
-    observer = new MutationObserver(queuePostRender);
+
+    /* POST OBSERVER */
 
     const feed = $("#feedList");
+
     const profilePosts = $(".profile-posts");
 
-    if (feed) {
-      observer.observe(feed, {
-        childList: true,
-        subtree: true
-      });
+
+    if (feed || profilePosts) {
+
+      postObserver = new MutationObserver(
+        queuePostRender
+      );
+
+
+      if (feed) {
+
+        postObserver.observe(feed, {
+          childList: true,
+          subtree: true
+        });
+
+      }
+
+
+      if (profilePosts) {
+
+        postObserver.observe(profilePosts, {
+          childList: true,
+          subtree: true
+        });
+
+      }
     }
 
-    if (profilePosts) {
-      observer.observe(profilePosts, {
+
+    /* STORY OBSERVER */
+
+    const storiesList = $("#storiesList");
+
+
+    if (storiesList) {
+
+      storyObserver = new MutationObserver(
+        queueStoryRender
+      );
+
+
+      storyObserver.observe(storiesList, {
         childList: true,
         subtree: true
       });
+
     }
+
+
+    /* DATA EVENTS */
+
+    global.addEventListener(
+      "ksk:data-change",
+      handleDataChange
+    );
+
+
+    /* INITIAL RENDER */
 
     queuePostRender();
 
-    global.addEventListener("ksk:data-change", event => {
-      const collection = event.detail?.collection || "";
+    queueStoryRender();
 
-      if (
-        collection.includes("posts") ||
-        collection.includes("stories")
-      ) {
-        queuePostRender();
-      }
-    });
 
-    console.info("KSK Media UI initialized.");
+    console.info(
+      "KSK Media UI initialized."
+    );
   }
 
+
+  /* =====================================================
+     PUBLIC API
+  ===================================================== */
+
   global.KSKMediaUI = Object.freeze({
+
     initialize,
-    openPostComposer: () => openComposer("post"),
-    openStoryCreator: () => openComposer("story"),
-    refresh: queuePostRender
+
+    openPostComposer: () =>
+      openComposer("post"),
+
+    openStoryCreator: () =>
+      openComposer("story"),
+
+    refresh: () => {
+      queuePostRender();
+      queueStoryRender();
+    }
+
   });
 
+
+  /* =====================================================
+     AUTO START
+  ===================================================== */
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialize, {
-      once: true
-    });
+
+    document.addEventListener(
+      "DOMContentLoaded",
+      initialize,
+      { once: true }
+    );
+
   } else {
+
     initialize();
+
   }
 
 })(window);
