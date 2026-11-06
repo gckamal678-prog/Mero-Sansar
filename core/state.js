@@ -1,28 +1,55 @@
+
 "use strict";
 
 /* =========================================================
    KSK — GLOBAL APPLICATION STATE
-   Single shared state for the entire application.
-   Persistent data belongs to KSKData, not this state layer.
+   Version: 2.0
+
+   RESPONSIBILITY:
+   - Current page
+   - Search query
+   - Theme state
+   - Language state
+   - UI preferences mirror
+   - Last data-change information
+
+   IMPORTANT:
+   Persistent application data belongs ONLY to KSKData.
+
+   KSKState does NOT own:
+   - Posts
+   - Stories
+   - Friends
+   - Messages
+   - Notifications
+   - Profile data
 ========================================================= */
 
 (function (global) {
+
+  if (global.KSKState) return;
+
+
+  /* =====================================================
+     CONFIGURATION
+  ===================================================== */
+
   const STORAGE_KEY = "ksk_global_state_v1";
 
-  const DEFAULT_STATE = {
-    user: null,
-    theme: "light",
-    language: "ne",
-    currentPage: "home",
-    searchQuery: "",
 
-    posts: [],
-    stories: [],
-    friends: [],
-    friendRequests: [],
-    notifications: [],
-    messages: [],
-    groups: [],
+  /* =====================================================
+     DEFAULT STATE
+  ===================================================== */
+
+  const DEFAULT_STATE = Object.freeze({
+
+    theme: "light",
+
+    language: "ne",
+
+    currentPage: "home",
+
+    searchQuery: "",
 
     settings: {
       notifications: true,
@@ -30,85 +57,141 @@
     },
 
     lastDataChange: null
-  };
+
+  });
+
 
   const listeners = new Set();
 
-  function readStorage() {
+
+  /* =====================================================
+     VALIDATION HELPERS
+  ===================================================== */
+
+  function isObject(value) {
+
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    );
+
+  }
+
+
+  function validTheme(value) {
+
+    return value === "dark"
+      ? "dark"
+      : "light";
+
+  }
+
+
+  function validLanguage(value) {
+
+    return value === "en"
+      ? "en"
+      : "ne";
+
+  }
+
+
+  function validPage(value) {
+
+    if (
+      typeof value !== "string" ||
+      !value.trim()
+    ) {
+      return "home";
+    }
+
+    return value.trim();
+
+  }
+
+
+  function validSearchQuery(value) {
+
+    return String(value ?? "")
+      .slice(0, 500);
+
+  }
+
+
+  function cloneObject(value) {
+
+    if (!isObject(value)) {
+      return {};
+    }
+
     try {
-      const raw = global.localStorage.getItem(STORAGE_KEY);
+
+      return JSON.parse(
+        JSON.stringify(value)
+      );
+
+    } catch (error) {
+
+      return {};
+
+    }
+
+  }
+
+
+  /* =====================================================
+     STORAGE
+  ===================================================== */
+
+  function readStorage() {
+
+    try {
+
+      const raw = global.localStorage.getItem(
+        STORAGE_KEY
+      );
+
       if (!raw) return {};
 
       const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : {};
+
+      return isObject(parsed)
+        ? parsed
+        : {};
+
     } catch (error) {
-      console.warn("KSKState: Unable to read saved settings.", error);
+
+      console.warn(
+        "KSKState: Unable to read saved state.",
+        error
+      );
+
       return {};
+
     }
+
   }
 
-  function validTheme(value) {
-    return value === "dark" ? "dark" : "light";
-  }
-
-  function validLanguage(value) {
-    return value === "en" ? "en" : "ne";
-  }
-
-  function validPage(value) {
-    return typeof value === "string" && value.trim()
-      ? value.trim()
-      : "home";
-  }
-
-  function copyArray(value) {
-    return Array.isArray(value)
-      ? value.map(item =>
-          item && typeof item === "object"
-            ? { ...item }
-            : item
-        )
-      : [];
-  }
-
-  const saved = readStorage();
-
-  let state = {
-    ...DEFAULT_STATE,
-    theme: validTheme(saved.theme),
-    language: validLanguage(saved.language),
-    currentPage: validPage(saved.currentPage),
-
-    settings: {
-      ...DEFAULT_STATE.settings,
-      ...(saved.settings || {})
-    }
-  };
-
-  function getState() {
-    return {
-      ...state,
-
-      posts: copyArray(state.posts),
-      stories: copyArray(state.stories),
-      friends: copyArray(state.friends),
-      friendRequests: copyArray(state.friendRequests),
-      notifications: copyArray(state.notifications),
-      messages: copyArray(state.messages),
-      groups: copyArray(state.groups),
-
-      settings: { ...state.settings }
-    };
-  }
 
   function persist() {
+
     try {
+
       const persistentState = {
+
         theme: state.theme,
+
         language: state.language,
+
         currentPage: state.currentPage,
-        settings: { ...state.settings }
+
+        settings: {
+          ...state.settings
+        }
+
       };
+
 
       global.localStorage.setItem(
         STORAGE_KEY,
@@ -116,212 +199,453 @@
       );
 
       return true;
+
     } catch (error) {
-      console.warn("KSKState: Unable to save settings.", error);
+
+      console.warn(
+        "KSKState: Unable to save state.",
+        error
+      );
+
       return false;
+
     }
+
   }
 
+
+  /* =====================================================
+     INITIAL STATE
+  ===================================================== */
+
+  const saved = readStorage();
+
+
+  let state = {
+
+    theme: validTheme(saved.theme),
+
+    language: validLanguage(saved.language),
+
+    currentPage: validPage(saved.currentPage),
+
+    searchQuery: "",
+
+    settings: {
+
+      ...DEFAULT_STATE.settings,
+
+      ...(isObject(saved.settings)
+        ? saved.settings
+        : {})
+
+    },
+
+    lastDataChange: null
+
+  };
+
+
+  /* =====================================================
+     STATE SNAPSHOT
+  ===================================================== */
+
+  function getState() {
+
+    return {
+
+      theme: state.theme,
+
+      language: state.language,
+
+      currentPage: state.currentPage,
+
+      searchQuery: state.searchQuery,
+
+      settings: {
+        ...state.settings
+      },
+
+      lastDataChange: state.lastDataChange
+        ? cloneObject(state.lastDataChange)
+        : null
+
+    };
+
+  }
+
+
+  /* =====================================================
+     NOTIFICATION
+  ===================================================== */
+
   function notify(changeName) {
+
     const snapshot = getState();
 
+
     listeners.forEach(listener => {
+
       try {
-        listener(snapshot, changeName);
+
+        listener(
+          snapshot,
+          changeName
+        );
+
       } catch (error) {
-        console.error("KSKState listener error:", error);
+
+        console.error(
+          "KSKState listener error:",
+          error
+        );
+
       }
+
     });
+
 
     global.dispatchEvent(
       new CustomEvent("ksk:state-change", {
+
         detail: {
+
           state: snapshot,
+
           change: changeName
+
         }
+
       })
     );
+
   }
 
-  function setState(updates = {}, changeName = "state-change") {
+
+  /* =====================================================
+     UPDATE STATE
+  ===================================================== */
+
+  function setState(
+    updates = {},
+    changeName = "state-change"
+  ) {
+
+    if (!isObject(updates)) {
+      return false;
+    }
+
+
+    /*
+      Only UI/application state is accepted.
+
+      Entity data such as posts, stories,
+      friends and messages must use KSKData.
+    */
+
+    const next = {};
+
+
     if (
-      !updates ||
-      typeof updates !== "object" ||
-      Array.isArray(updates)
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "theme"
+      )
+    ) {
+
+      next.theme = validTheme(
+        updates.theme
+      );
+
+    }
+
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "language"
+      )
+    ) {
+
+      next.language = validLanguage(
+        updates.language
+      );
+
+    }
+
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "currentPage"
+      )
+    ) {
+
+      next.currentPage = validPage(
+        updates.currentPage
+      );
+
+    }
+
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "searchQuery"
+      )
+    ) {
+
+      next.searchQuery = validSearchQuery(
+        updates.searchQuery
+      );
+
+    }
+
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "settings"
+      ) &&
+      isObject(updates.settings)
+    ) {
+
+      next.settings = {
+
+        ...state.settings,
+
+        ...updates.settings
+
+      };
+
+    }
+
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "lastDataChange"
+      )
+    ) {
+
+      next.lastDataChange =
+        isObject(updates.lastDataChange)
+          ? cloneObject(updates.lastDataChange)
+          : null;
+
+    }
+
+
+    if (Object.keys(next).length === 0) {
+      return false;
+    }
+
+
+    state = {
+
+      ...state,
+
+      ...next
+
+    };
+
+
+    persist();
+
+    notify(changeName);
+
+    return true;
+
+  }
+
+
+  /* =====================================================
+     SUBSCRIBE
+  ===================================================== */
+
+  function subscribe(listener) {
+
+    if (typeof listener !== "function") {
+
+      throw new TypeError(
+        "KSKState.subscribe requires a function."
+      );
+
+    }
+
+
+    listeners.add(listener);
+
+
+    return function unsubscribe() {
+
+      listeners.delete(listener);
+
+    };
+
+  }
+
+
+  /* =====================================================
+     THEME
+  ===================================================== */
+
+  function setTheme(value) {
+
+    return setState(
+
+      {
+        theme: validTheme(value)
+      },
+
+      "theme-change"
+
+    );
+
+  }
+
+
+  /* =====================================================
+     LANGUAGE
+  ===================================================== */
+
+  function setLanguage(value) {
+
+    return setState(
+
+      {
+        language: validLanguage(value)
+      },
+
+      "language-change"
+
+    );
+
+  }
+
+
+  /* =====================================================
+     NAVIGATION
+  ===================================================== */
+
+  function setCurrentPage(page) {
+
+    if (
+      typeof page !== "string" ||
+      !page.trim()
     ) {
       return false;
     }
 
-    state = {
-      ...state,
-      ...updates,
-
-      settings: {
-        ...state.settings,
-        ...(updates.settings || {})
-      }
-    };
-
-    state.theme = validTheme(state.theme);
-    state.language = validLanguage(state.language);
-    state.currentPage = validPage(state.currentPage);
-
-    if (!Array.isArray(state.posts)) state.posts = [];
-    if (!Array.isArray(state.stories)) state.stories = [];
-    if (!Array.isArray(state.friends)) state.friends = [];
-    if (!Array.isArray(state.friendRequests)) {
-      state.friendRequests = [];
-    }
-    if (!Array.isArray(state.notifications)) {
-      state.notifications = [];
-    }
-    if (!Array.isArray(state.messages)) state.messages = [];
-    if (!Array.isArray(state.groups)) state.groups = [];
-
-    persist();
-    notify(changeName);
-
-    return true;
-  }
-
-  function subscribe(listener) {
-    if (typeof listener !== "function") {
-      throw new TypeError("KSKState.subscribe requires a function.");
-    }
-
-    listeners.add(listener);
-
-    return function unsubscribe() {
-      listeners.delete(listener);
-    };
-  }
-
-  function setTheme(value) {
-    return setState(
-      { theme: validTheme(value) },
-      "theme-change"
-    );
-  }
-
-  function setLanguage(value) {
-    return setState(
-      { language: validLanguage(value) },
-      "language-change"
-    );
-  }
-
-  function setCurrentPage(page) {
-    if (typeof page !== "string" || !page.trim()) {
-      return false;
-    }
 
     return setState(
-      { currentPage: page.trim() },
+
+      {
+        currentPage: page.trim()
+      },
+
       "page-change"
+
     );
+
   }
+
+
+  /* =====================================================
+     SEARCH
+  ===================================================== */
 
   function setSearchQuery(query) {
+
     return setState(
-      { searchQuery: String(query ?? "") },
+
+      {
+        searchQuery: validSearchQuery(query)
+      },
+
       "search-change"
+
     );
+
   }
 
-  function setPosts(posts) {
-    return setState(
-      { posts: copyArray(posts) },
-      "posts-change"
-    );
-  }
 
-  function setStories(stories) {
-    return setState(
-      { stories: copyArray(stories) },
-      "stories-change"
-    );
-  }
-
-  function setFriends(friends) {
-    return setState(
-      { friends: copyArray(friends) },
-      "friends-change"
-    );
-  }
-
-  function setFriendRequests(requests) {
-    return setState(
-      { friendRequests: copyArray(requests) },
-      "friend-requests-change"
-    );
-  }
-
-  function setNotifications(notifications) {
-    return setState(
-      { notifications: copyArray(notifications) },
-      "notifications-change"
-    );
-  }
-
-  function setMessages(messages) {
-    return setState(
-      { messages: copyArray(messages) },
-      "messages-change"
-    );
-  }
-
-  function setGroups(groups) {
-    return setState(
-      { groups: copyArray(groups) },
-      "groups-change"
-    );
-  }
-
-  function setUser(user) {
-    return setState(
-      { user: user && typeof user === "object" ? { ...user } : null },
-      "user-change"
-    );
-  }
+  /* =====================================================
+     RESET
+  ===================================================== */
 
   function resetState() {
+
     state = {
-      ...DEFAULT_STATE,
-      settings: { ...DEFAULT_STATE.settings }
+
+      theme: DEFAULT_STATE.theme,
+
+      language: DEFAULT_STATE.language,
+
+      currentPage: DEFAULT_STATE.currentPage,
+
+      searchQuery: "",
+
+      settings: {
+        ...DEFAULT_STATE.settings
+      },
+
+      lastDataChange: null
+
     };
 
+
     persist();
+
     notify("state-reset");
 
     return getState();
+
   }
 
+
+  /* =====================================================
+     PUBLIC API
+  ===================================================== */
+
   const KSKState = Object.freeze({
+
     get state() {
       return getState();
     },
 
+
     getState,
+
     setState,
+
     subscribe,
 
-    setTheme,
-    setLanguage,
-    setCurrentPage,
-    setSearchQuery,
-    setUser,
 
-    setPosts,
-    setStories,
-    setFriends,
-    setFriendRequests,
-    setNotifications,
-    setMessages,
-    setGroups,
+    setTheme,
+
+    setLanguage,
+
+    setCurrentPage,
+
+    setSearchQuery,
+
 
     resetState
+
   });
 
+
+  /* =====================================================
+     REGISTER GLOBAL API
+  ===================================================== */
+
   global.KSKState = KSKState;
+
+
+  console.info(
+    "KSKState initialized successfully."
+  );
+
 
 })(window);
