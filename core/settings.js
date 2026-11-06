@@ -13,21 +13,13 @@
   const LEGACY_STORAGE_KEY = "ksk_app_settings_old";
   const SETTINGS_VERSION = 2;
 
-  /* =======================================================
-     DEFAULT SETTINGS
-  ======================================================= */
-
   const DEFAULT_SETTINGS = Object.freeze({
 
     version: SETTINGS_VERSION,
 
-    /* APPEARANCE */
-
     theme: "light",
     language: "ne",
     compactMode: false,
-
-    /* GENERAL NOTIFICATIONS */
 
     notifications: true,
 
@@ -41,8 +33,6 @@
       vibration: true
     },
 
-    /* PRIVACY */
-
     privacy: {
       profileVisibility: "everyone",
       lastSeen: "everyone",
@@ -53,15 +43,11 @@
       allowFriendRequests: true
     },
 
-    /* PROFILE PREFERENCES */
-
     profilePreferences: {
       showBio: true,
       showLocation: true,
       showPostCount: true
     },
-
-    /* CHAT SETTINGS */
 
     chat: {
       fontSize: "medium",
@@ -70,8 +56,6 @@
       linkPreviews: true
     },
 
-    /* DATA MANAGEMENT PREFERENCES */
-
     data: {
       autoDownloadImages: false,
       autoDownloadVideos: false,
@@ -79,7 +63,6 @@
     }
 
   });
-
 
   /* =======================================================
      HELPERS
@@ -90,7 +73,6 @@
   const hasOwn = (object, key) =>
     Object.prototype.hasOwnProperty.call(object, key);
 
-
   function isObject(value) {
     return (
       value !== null &&
@@ -99,11 +81,9 @@
     );
   }
 
-
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
   }
-
 
   function mergeObjects(base, incoming) {
 
@@ -137,7 +117,6 @@
     return result;
   }
 
-
   /* =======================================================
      NORMALIZATION
   ======================================================= */
@@ -146,33 +125,22 @@
 
     const source = isObject(input) ? input : {};
 
-    const merged = mergeObjects(
+    const result = mergeObjects(
       clone(DEFAULT_SETTINGS),
       source
     );
 
-    const result = merged;
-
-    /* THEME */
-
     result.theme =
       source.theme === "dark" ? "dark" : "light";
 
-
-    /* LANGUAGE */
-
     result.language =
       source.language === "en" ? "en" : "ne";
-
-
-    /* GENERAL */
 
     result.notifications =
       source.notifications !== false;
 
     result.compactMode =
       source.compactMode === true;
-
 
     /* PRIVACY */
 
@@ -203,18 +171,17 @@
     result.privacy.allowFriendRequests =
       result.privacy.allowFriendRequests !== false;
 
-
-    /* NOTIFICATIONS */
+    /* NOTIFICATIONS
+       Master switch does not erase individual preferences.
+    */
 
     Object.keys(DEFAULT_SETTINGS.notificationPreferences)
       .forEach(key => {
 
         result.notificationPreferences[key] =
-          result.notifications &&
           result.notificationPreferences[key] !== false;
 
       });
-
 
     /* PROFILE */
 
@@ -225,7 +192,6 @@
           result.profilePreferences[key] !== false;
 
       });
-
 
     /* CHAT */
 
@@ -243,7 +209,6 @@
     result.chat.linkPreviews =
       result.chat.linkPreviews !== false;
 
-
     /* DATA */
 
     Object.keys(DEFAULT_SETTINGS.data).forEach(key => {
@@ -253,12 +218,10 @@
 
     });
 
-
     result.version = SETTINGS_VERSION;
 
     return result;
   }
-
 
   /* =======================================================
      STORAGE
@@ -306,9 +269,7 @@
     }
   }
 
-
   let settings = normalizeSettings(readStorage());
-
 
   function persist() {
 
@@ -332,7 +293,6 @@
     }
   }
 
-
   /* =======================================================
      GET SETTINGS
   ======================================================= */
@@ -340,7 +300,6 @@
   function getSettings() {
     return clone(settings);
   }
-
 
   function getSetting(path) {
 
@@ -358,7 +317,6 @@
 
     }, settings);
   }
-
 
   /* =======================================================
      EVENTS
@@ -385,7 +343,6 @@
 
     });
 
-
     global.dispatchEvent(
       new CustomEvent("ksk:settings-change", {
         detail: {
@@ -396,7 +353,6 @@
     );
 
   }
-
 
   function syncGlobalState(changeName) {
 
@@ -416,7 +372,6 @@
     }, changeName);
 
   }
-
 
   /* =======================================================
      UPDATE SETTINGS
@@ -440,7 +395,6 @@
 
     return getSettings();
   }
-
 
   /* =======================================================
      UPDATE SINGLE SETTING
@@ -495,7 +449,6 @@
     return true;
   }
 
-
   /* =======================================================
      RESET SETTINGS
   ======================================================= */
@@ -512,7 +465,6 @@
 
     return getSettings();
   }
-
 
   /* =======================================================
      EXPORT SETTINGS
@@ -533,7 +485,6 @@
     }, null, 2);
 
   }
-
 
   /* =======================================================
      IMPORT SETTINGS
@@ -588,7 +539,6 @@
 
   }
 
-
   /* =======================================================
      SUBSCRIBE
   ======================================================= */
@@ -611,7 +561,6 @@
 
   }
 
-
   /* =======================================================
      INITIALIZE
   ======================================================= */
@@ -625,7 +574,6 @@
     return getSettings();
 
   }
-
 
   /* =======================================================
      PUBLIC API
@@ -654,7 +602,6 @@
     DEFAULT_SETTINGS: clone(DEFAULT_SETTINGS)
 
   });
-
 
   console.info(
     "KSK Settings Manager initialized."
