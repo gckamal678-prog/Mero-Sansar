@@ -1,12 +1,24 @@
+
 "use strict";
 
 /* =========================================================
-   KSK — GLOBAL LANGUAGE ENGINE
-   Nepali / English Translation System
-   Safe DOM Translation + Mutation Observer
+   KSK LANGUAGE ENGINE
+   Responsibility:
+   - Nepali / English translations
+   - Translate marked UI elements
+   - Translate dynamically added UI
+   - Keep user-generated content unchanged
+
+   Data ownership:
+   - KSKSettings owns saved language preference
+   - KSKLanguage owns translation only
 ========================================================= */
 
 (function (global) {
+  "use strict";
+
+  if (global.KSKLanguage) return;
+
   const dictionaries = {
     ne: {
       appName: "हाम्रो संसार",
@@ -44,7 +56,7 @@
       friendName: "साथीको नाम लेख्नुहोस्",
 
       noFriends: "अहिलेसम्म साथी छैन।",
-      connectFriends: "साथी جوड्नुहोस् र कुराकानी सुरु गर्नुहोस्।",
+      connectFriends: "साथी जोड्नुहोस् र कुराकानी सुरु गर्नुहोस्।",
       noNotifications: "अहिले नयाँ सूचना छैन।",
       noSavedPosts: "अहिलेसम्म सेभ गरिएको पोस्ट छैन।",
 
@@ -169,218 +181,173 @@
 
   let observer = null;
   let initialized = false;
-  let stateUnsubscribe = null;
+  let unsubscribeSettings = null;
+  let unsubscribeState = null;
+
+  /* =======================================================
+     LANGUAGE HELPERS
+  ======================================================= */
 
   function normalizeLanguage(language) {
     return language === "en" ? "en" : "ne";
   }
 
-  /* LANGUAGE */
-
   function getLanguage() {
-    if (global.KSKSettings) {
+    if (global.KSKSettings?.getSettings) {
       return normalizeLanguage(
         global.KSKSettings.getSettings().language
       );
     }
 
-    if (global.KSKState) {
+    if (global.KSKState?.getState) {
       return normalizeLanguage(
         global.KSKState.getState().language
       );
     }
 
-    try {
-      const saved = global.localStorage.getItem("ksk_language_v1");
-
-      if (saved === "ne" || saved === "en") {
-        return saved;
-      }
-    } catch (error) {
-      // Storage may be unavailable.
-    }
-
-    return "ne";
+    return document.documentElement.lang === "en"
+      ? "en"
+      : "ne";
   }
 
-  /* TRANSLATION */
-
   function translate(key, language = getLanguage()) {
+    if (typeof key !== "string") return "";
+
     const selected = normalizeLanguage(language);
 
     return (
-      dictionaries[selected]?.[key] ??
+      dictionaries[selected][key] ??
       dictionaries.ne[key] ??
       key
     );
   }
 
-  function findKeyForText(text) {
-    for (const key of Object.keys(dictionaries.ne)) {
-      if (
-        dictionaries.ne[key] === text ||
-        dictionaries.en[key] === text
-      ) {
-        return key;
+  /* =======================================================
+     ELEMENT TRANSLATION
+  ======================================================= */
+
+  function translateElement(element, language) {
+    if (!element || element.nodeType !== 1) return;
+
+    if (element.hasAttribute("data-i18n")) {
+      const key = element.getAttribute("data-i18n");
+
+      const value = translate(key, language);
+
+      if (element.textContent !== value) {
+        element.textContent = value;
       }
     }
 
-    return null;
-  }
+    if (element.hasAttribute("data-i18n-placeholder")) {
+      const key = element.getAttribute("data-i18n-placeholder");
 
-  /* TEXT NODE TRANSLATION */
+      const value = translate(key, language);
 
-  function translateTextNode(node, language) {
-    const original = node.nodeValue;
+      if (element.placeholder !== value) {
+        element.placeholder = value;
+      }
+    }
 
-    if (!original || !original.trim()) return;
+    if (element.hasAttribute("data-i18n-title")) {
+      const key = element.getAttribute("data-i18n-title");
 
-    const key = findKeyForText(original.trim());
+      element.setAttribute(
+        "title",
+        translate(key, language)
+      );
+    }
 
-    if (!key) return;
+    if (element.hasAttribute("data-i18n-aria-label")) {
+      const key = element.getAttribute("data-i18n-aria-label");
 
-    const translated = translate(key, language);
-
-    const leading = original.match(/^\s*/)?.[0] || "";
-    const trailing = original.match(/\s*$/)?.[0] || "";
-
-    const nextValue = leading + translated + trailing;
-
-    if (node.nodeValue !== nextValue) {
-      node.nodeValue = nextValue;
+      element.setAttribute(
+        "aria-label",
+        translate(key, language)
+      );
     }
   }
 
-  /* APPLY TRANSLATIONS */
+  /* =======================================================
+     APPLY TRANSLATIONS
+
+     Only explicitly marked interface elements are translated.
+     Posts, comments, messages and profile content are untouched.
+  ======================================================= */
 
   function applyTranslations(root = document) {
-    if (!root) return;
+    if (!root) return false;
 
     const language = getLanguage();
 
-    if (root.matches?.("[data-i18n]")) {
-      const key = root.dataset.i18n;
-      const value = translate(key, language);
-
-      if (root.textContent !== value) {
-        root.textContent = value;
-      }
-    }
-
-    if (root.matches?.("[data-i18n-placeholder]")) {
-      const key = root.dataset.i18nPlaceholder;
-      root.placeholder = translate(key, language);
+    if (root.nodeType === 1) {
+      translateElement(root, language);
     }
 
     if (root.querySelectorAll) {
-      root.querySelectorAll("[data-i18n]").forEach(element => {
-        const value = translate(element.dataset.i18n, language);
-
-        if (element.textContent !== value) {
-          element.textContent = value;
-        }
-      });
-
-      root.querySelectorAll("[data-i18n-placeholder]").forEach(element => {
-        const value = translate(
-          element.dataset.i18nPlaceholder,
-          language
-        );
-
-        if (element.placeholder !== value) {
-          element.placeholder = value;
-        }
+      root.querySelectorAll(
+        "[data-i18n], [data-i18n-placeholder], [data-i18n-title], [data-i18n-aria-label]"
+      ).forEach(element => {
+        translateElement(element, language);
       });
     }
-
-    const walker = document.createTreeWalker(
-      root,
-      NodeFilter.SHOW_TEXT,
-      {
-        acceptNode(node) {
-          const parent = node.parentElement;
-
-          if (!parent) {
-            return NodeFilter.FILTER_REJECT;
-          }
-
-          if (
-            parent.closest(
-              "script, style, textarea, input, select, option, [data-no-translate]"
-            )
-          ) {
-            return NodeFilter.FILTER_REJECT;
-          }
-
-          if (parent.closest("[data-i18n]")) {
-            return NodeFilter.FILTER_REJECT;
-          }
-
-          return NodeFilter.FILTER_ACCEPT;
-        }
-      }
-    );
-
-    const nodes = [];
-
-    while (walker.nextNode()) {
-      nodes.push(walker.currentNode);
-    }
-
-    nodes.forEach(node => {
-      translateTextNode(node, language);
-    });
 
     document.documentElement.lang = language;
+
+    return true;
   }
 
-  /* SET LANGUAGE */
+  /* =======================================================
+     SET LANGUAGE
+
+     KSKSettings is the single source of saved preference.
+  ======================================================= */
 
   function setLanguage(language) {
     const selected = normalizeLanguage(language);
 
-    if (global.KSKSettings) {
-      global.KSKSettings.updateSettings({
-        language: selected
-      });
-    } else if (global.KSKState) {
-      global.KSKState.setLanguage(selected);
-    } else {
-      try {
-        global.localStorage.setItem(
-          "ksk_language_v1",
-          selected
-        );
-      } catch (error) {
-        console.warn("KSKLanguage: Language storage unavailable.");
+    if (global.KSKSettings?.getSettings) {
+      const current = getLanguage();
+
+      if (current !== selected) {
+        global.KSKSettings.updateSettings({
+          language: selected
+        });
       }
+    } else if (global.KSKState?.setLanguage) {
+      global.KSKState.setLanguage(selected);
     }
 
     applyTranslations(document);
 
     global.dispatchEvent(
       new CustomEvent("ksk:language-change", {
-        detail: { language: selected }
+        detail: {
+          language: selected
+        }
       })
     );
 
     return selected;
   }
 
-  /* OBSERVE NEW CONTENT */
+  /* =======================================================
+     DYNAMIC UI OBSERVER
+
+     Watches newly added interface elements only.
+     Does not rewrite arbitrary text nodes.
+  ======================================================= */
 
   function observeContent() {
     if (observer || !document.body) return;
 
-    if (!("MutationObserver" in global)) return;
+    if (!global.MutationObserver) return;
 
-    observer = new MutationObserver(mutations => {
-      mutations.forEach(mutation => {
-        mutation.addedNodes.forEach(node => {
-          if (node.nodeType === Node.ELEMENT_NODE) {
+    observer = new MutationObserver(records => {
+      records.forEach(record => {
+        record.addedNodes.forEach(node => {
+          if (node.nodeType === 1) {
             applyTranslations(node);
-          } else if (node.nodeType === Node.TEXT_NODE) {
-            translateTextNode(node, getLanguage());
           }
         });
       });
@@ -392,20 +359,35 @@
     });
   }
 
-  /* INITIALIZE */
+  /* =======================================================
+     SETTINGS SYNCHRONIZATION
+  ======================================================= */
 
-  function initialize() {
-    if (initialized || !document.body) return;
+  function bindSettings() {
+    if (global.KSKSettings?.subscribeSettings) {
+      unsubscribeSettings =
+        global.KSKSettings.subscribeSettings(settings => {
+          const language = normalizeLanguage(
+            settings?.language
+          );
 
-    initialized = true;
+          if (
+            document.documentElement.lang !== language
+          ) {
+            applyTranslations(document);
+          }
+        });
 
-    applyTranslations(document);
-    observeContent();
+      return;
+    }
 
     if (global.KSKState?.subscribe) {
-      stateUnsubscribe = global.KSKState.subscribe(
+      unsubscribeState = global.KSKState.subscribe(
         (state, changeName) => {
-          if (changeName === "language-change") {
+          if (
+            changeName === "language-change" ||
+            changeName === "settings-change"
+          ) {
             applyTranslations(document);
           }
         }
@@ -413,21 +395,56 @@
     }
   }
 
+  /* =======================================================
+     INITIALIZE
+  ======================================================= */
+
+  function initialize() {
+    if (initialized || !document.body) return false;
+
+    initialized = true;
+
+    applyTranslations(document);
+    observeContent();
+    bindSettings();
+
+    global.dispatchEvent(
+      new CustomEvent("ksk:language-ready", {
+        detail: {
+          language: getLanguage()
+        }
+      })
+    );
+
+    return true;
+  }
+
+  /* =======================================================
+     DESTROY
+  ======================================================= */
+
   function destroy() {
     if (observer) {
       observer.disconnect();
       observer = null;
     }
 
-    if (typeof stateUnsubscribe === "function") {
-      stateUnsubscribe();
-      stateUnsubscribe = null;
+    if (typeof unsubscribeSettings === "function") {
+      unsubscribeSettings();
+      unsubscribeSettings = null;
+    }
+
+    if (typeof unsubscribeState === "function") {
+      unsubscribeState();
+      unsubscribeState = null;
     }
 
     initialized = false;
   }
 
-  /* PUBLIC API */
+  /* =======================================================
+     PUBLIC API
+  ======================================================= */
 
   global.KSKLanguage = Object.freeze({
     translate,
@@ -439,7 +456,9 @@
     dictionaries
   });
 
-  /* START */
+  /* =======================================================
+     START
+  ======================================================= */
 
   if (document.readyState === "loading") {
     document.addEventListener(
