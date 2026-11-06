@@ -31,17 +31,12 @@
 
 <body>
 
-  <!-- =====================================================
-       HEADER
-  ====================================================== -->
-
+  <!-- HEADER -->
   <header class="app-header">
-
     <div class="header-inner">
 
       <div class="brand">
 
-        <!-- PERMANENT NEPAL LOGO -->
         <div class="brand-logo">
           <img
             src="Nepal.jpg"
@@ -51,27 +46,19 @@
         </div>
 
         <div class="brand-text">
-
-          <h1
-            class="brand-name"
-            data-i18n="appName">
+          <h1 class="brand-name" data-i18n="appName">
             हाम्रो संसार
           </h1>
 
-          <p
-            class="brand-tagline"
-            data-i18n="tagline">
+          <p class="brand-tagline" data-i18n="tagline">
             साथी जोडौँ, कुरा गरौँ
           </p>
-
         </div>
 
       </div>
 
-
       <div class="header-actions">
 
-        <!-- Search -->
         <button
           class="icon-button"
           id="searchToggle"
@@ -81,7 +68,6 @@
           ⌕
         </button>
 
-        <!-- Notifications -->
         <button
           class="icon-button"
           id="notificationsToggle"
@@ -94,17 +80,12 @@
       </div>
 
     </div>
-
   </header>
 
 
-  <!-- =====================================================
-       MAIN APPLICATION
-  ====================================================== -->
-
+  <!-- MAIN APPLICATION -->
   <main class="app-main">
 
-    <!-- SEARCH PANEL -->
     <section
       id="searchPanel"
       class="search-panel hidden">
@@ -120,27 +101,17 @@
     </section>
 
 
-    <!-- ===================================================
-         HOME PAGE
-    ==================================================== -->
-
-    <section
-      id="homePage"
-      class="page">
+    <!-- HOME PAGE -->
+    <section id="homePage" class="page">
 
       <!-- STORIES -->
       <section class="stories-section">
 
-        <h2
-          class="section-title"
-          data-i18n="stories">
+        <h2 class="section-title" data-i18n="stories">
           स्टोरीहरू
         </h2>
 
-        <div
-          id="storiesList"
-          class="stories-row">
-        </div>
+        <div id="storiesList" class="stories-row"></div>
 
       </section>
 
@@ -150,9 +121,7 @@
 
         <div class="composer-top">
 
-          <div
-            class="avatar"
-            aria-hidden="true">
+          <div class="avatar" aria-hidden="true">
             +
           </div>
 
@@ -183,26 +152,19 @@
       <!-- NEWS FEED -->
       <section class="feed-section">
 
-        <h2
-          class="section-title"
-          data-i18n="feed">
+        <h2 class="section-title" data-i18n="feed">
           नयाँ पोस्टहरू
         </h2>
 
         <div id="feedList"></div>
 
-        <!-- EMPTY FEED -->
-        <div
-          id="emptyFeed"
-          class="empty-state hidden">
+        <div id="emptyFeed" class="empty-state hidden">
 
           <div class="empty-state-icon">
             📝
           </div>
 
-          <h3
-            class="empty-state-title"
-            data-i18n="emptyFeed">
+          <h3 class="empty-state-title" data-i18n="emptyFeed">
             अहिलेसम्म पोस्ट छैन
           </h3>
 
@@ -217,30 +179,21 @@
     </section>
 
 
-    <!-- ===================================================
-         OTHER PAGES
-    ==================================================== -->
-
-    <section
-      id="otherPage"
-      class="page hidden">
+    <!-- OTHER PAGES -->
+    <section id="otherPage" class="page hidden">
 
       <div class="card page-content-card">
 
         <div class="other-page-heading">
-
           <h2 id="otherPageTitle">
             पृष्ठ
           </h2>
-
         </div>
 
         <div id="otherPageText">
-
           <p>
             यो सुविधा क्रमशः थपिँदैछ।
           </p>
-
         </div>
 
       </div>
@@ -250,10 +203,7 @@
   </main>
 
 
-  <!-- =====================================================
-       BOTTOM NAVIGATION
-  ====================================================== -->
-
+  <!-- BOTTOM NAVIGATION -->
   <nav
     class="bottom-nav"
     id="bottomNav"
@@ -261,7 +211,6 @@
 
     <div class="bottom-nav-inner">
 
-      <!-- HOME -->
       <button
         class="nav-item active"
         type="button"
@@ -270,15 +219,11 @@
         aria-current="page">
 
         <span class="nav-icon">🏠</span>
-
-        <span data-i18n="home">
-          होम
-        </span>
+        <span data-i18n="home">होम</span>
 
       </button>
 
 
-      <!-- FRIENDS -->
       <button
         class="nav-item"
         type="button"
@@ -286,15 +231,11 @@
         aria-label="Friends">
 
         <span class="nav-icon">👥</span>
-
-        <span data-i18n="friends">
-          साथीहरू
-        </span>
+        <span data-i18n="friends">साथीहरू</span>
 
       </button>
 
 
-      <!-- CREATE POST -->
       <button
         class="nav-item nav-create"
         type="button"
@@ -302,15 +243,11 @@
         aria-label="Create Post">
 
         <span class="nav-icon">＋</span>
-
-        <span data-i18n="create">
-          पोस्ट
-        </span>
+        <span data-i18n="create">पोस्ट</span>
 
       </button>
 
 
-      <!-- MESSAGES -->
       <button
         class="nav-item"
         type="button"
@@ -318,15 +255,11 @@
         aria-label="Messages">
 
         <span class="nav-icon">💬</span>
-
-        <span data-i18n="messages">
-          सन्देश
-        </span>
+        <span data-i18n="messages">सन्देश</span>
 
       </button>
 
 
-      <!-- PROFILE -->
       <button
         class="nav-item"
         type="button"
@@ -334,10 +267,7 @@
         aria-label="Profile">
 
         <span class="nav-icon">👤</span>
-
-        <span data-i18n="profile">
-          प्रोफाइल
-        </span>
+        <span data-i18n="profile">प्रोफाइल</span>
 
       </button>
 
@@ -346,11 +276,7 @@
   </nav>
 
 
-  <!-- =====================================================
-       SETTINGS MODAL
-       Content rendered by KSKSettingsUI
-  ====================================================== -->
-
+  <!-- SETTINGS MODAL -->
   <div
     id="settingsModal"
     class="modal-backdrop hidden"
@@ -362,12 +288,9 @@
       aria-modal="true"
       aria-labelledby="settingsTitle">
 
-      <!-- Modal Header -->
       <header class="modal-header">
 
-        <h2
-          id="settingsTitle"
-          class="modal-title">
+        <h2 id="settingsTitle" class="modal-title">
           सेटिङ
         </h2>
 
@@ -381,7 +304,6 @@
 
       </header>
 
-      <!-- Dynamic Settings Content -->
       <div class="modal-body" id="settingsBody">
 
         <div class="empty-state">
@@ -395,10 +317,7 @@
   </div>
 
 
-  <!-- =====================================================
-       GLOBAL TOAST CONTAINER
-  ====================================================== -->
-
+  <!-- GLOBAL TOAST -->
   <div
     id="toastContainer"
     class="toast-container"
@@ -407,59 +326,37 @@
   </div>
 
 
-  <!-- =====================================================
-       KSK CORE
-       Dependency order
-  ====================================================== -->
-
+  <!-- KSK CORE -->
   <script src="core/state.js"></script>
-
   <script src="core/settings.js"></script>
-
   <script src="core/theme.js"></script>
-
   <script src="core/language.js"></script>
-
   <script src="core/toast.js"></script>
-
   <script src="core/utils.js"></script>
-
   <script src="core/media.js"></script>
-
   <script src="core/modal.js"></script>
-
   <script src="core/data.js"></script>
-
   <script src="core/navigation.js"></script>
-
   <script src="core/comments.js"></script>
-
   <script src="core/comments-bridge.js"></script>
 
 
-  <!-- =====================================================
-       MAIN APPLICATION
-  ====================================================== -->
-
+  <!-- MAIN APPLICATION -->
   <script src="app.js"></script>
 
 
-  <!-- =====================================================
-       SETTINGS UI
-  ====================================================== -->
+  <!-- KSK REACTIONS -->
+  <script src="core/reactions.js"></script>
 
+
+  <!-- SETTINGS UI -->
   <script src="core/settings-ui.js"></script>
 
 
-  <!-- =====================================================
-       MEDIA SYSTEM
-  ====================================================== -->
-
+  <!-- MEDIA SYSTEM -->
   <script src="core/media-ui.js"></script>
-
   <script src="core/profile-media.js"></script>
+  <script src="core/avatar-ui.js"></script>
 
-<script src="core/avatar-ui.js"></script>
-  
 </body>
 </html>
