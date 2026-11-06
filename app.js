@@ -362,6 +362,27 @@
 
     const liked = Boolean(post.liked);
     const likes = Math.max(0, Number(post.likes || 0));
+    const myReaction = post.myReaction || "";
+
+    const validReactions = ["🌹", "😘", "😢", "😠", "🤓"];
+
+    const reactionCounts = post.reactionCounts &&
+      typeof post.reactionCounts === "object"
+        ? post.reactionCounts
+        : {};
+
+    const reactionSummary = validReactions
+      .filter(emoji => Number(reactionCounts[emoji] || 0) > 0)
+      .sort((a, b) =>
+        Number(reactionCounts[b] || 0) -
+        Number(reactionCounts[a] || 0)
+      )
+      .slice(0, 5)
+      .join("");
+
+    const reactionIcon = reactionSummary ||
+      myReaction ||
+      (liked ? "❤️" : "♡");
 
     const saved = (DATA()?.getSavedPosts?.() || [])
       .some(item => String(item) === String(post.id));
@@ -421,9 +442,13 @@
             class="post-action ${liked ? "is-active" : ""}"
             type="button"
             data-post-action="like"
-            data-post-id="${id}">
+            data-post-id="${id}"
+            aria-label="${isEnglish()
+              ? "React to post"
+              : "पोस्टमा Reaction दिनुहोस्"}"
+            title="${myReaction || (liked ? "❤️" : "Reaction")}">
 
-            ${liked ? "❤️" : "♡"}
+            ${reactionIcon}
             ${likes}
 
           </button>
@@ -466,32 +491,6 @@
 
       </article>
     `;
-  }
-
-  function renderFeed() {
-    if (!els.feedList) return;
-
-    const query = searchQuery.toLowerCase();
-
-    const filtered = getPosts().filter(post => {
-      const searchable = [
-        post.author || "",
-        post.text || ""
-      ].join(" ").toLowerCase();
-
-      return searchable.includes(query);
-    });
-
-    els.feedList.innerHTML = filtered
-      .map(renderPost)
-      .join("");
-
-    els.emptyFeed?.classList.toggle(
-      "hidden",
-      filtered.length > 0
-    );
-
-    MEDIA_UI()?.refresh?.();
   }
 
   /* =======================================================
