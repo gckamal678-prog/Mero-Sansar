@@ -4,13 +4,21 @@
 /* =========================================================
    KSK — MAIN APPLICATION CONTROLLER
    Single Data Layer Architecture
-   Data: KSKData
-   State: KSKState
-   UI: KSKModal / KSKToast
-   Navigation: KSKNavigation
+
+   DATA         : KSKData
+   STATE        : KSKState
+   SETTINGS     : KSKSettings
+   SETTINGS UI  : KSKSettingsUI
+   THEME        : KSKTheme
+   LANGUAGE     : KSKLanguage
+   NAVIGATION   : KSKNavigation
+   MODAL        : KSKModal
+   TOAST        : KSKToast
 ========================================================= */
 
 (function (global) {
+  if (global.KSKApp) return;
+
   const $ = (selector, root = document) =>
     root.querySelector(selector);
 
@@ -19,6 +27,8 @@
 
   const DATA = () => global.KSKData;
   const STATE = () => global.KSKState;
+  const SETTINGS = () => global.KSKSettings;
+  const SETTINGS_UI = () => global.KSKSettingsUI;
   const MODAL = () => global.KSKModal;
   const TOAST = () => global.KSKToast;
   const LANG = () => global.KSKLanguage;
@@ -33,7 +43,7 @@
   const els = {};
 
   /* =========================================================
-     HELPERS
+     ELEMENT CACHE
   ========================================================= */
 
   function cacheElements() {
@@ -54,12 +64,8 @@
       "searchInput",
       "searchToggle",
       "notificationsToggle",
-      "settingsToggle",
       "settingsModal",
       "closeSettings",
-      "settingsThemeToggle",
-      "languageSelect",
-      "clearPosts",
       "toastContainer"
     ];
 
@@ -67,6 +73,10 @@
       els[id] = document.getElementById(id);
     });
   }
+
+  /* =========================================================
+     HELPERS
+  ========================================================= */
 
   function escapeHTML(value = "") {
     if (global.KSKUtils?.escapeHTML) {
@@ -82,21 +92,16 @@
     })[char]);
   }
 
-  function makeId(prefix = "item") {
-    return DATA()?.makeId?.(prefix) ||
-      `${prefix}_${Date.now()}`;
-  }
-
   function language() {
     return LANG()?.getLanguage?.() || "ne";
   }
 
-  function translate(key, fallback = "") {
-    return LANG()?.translate?.(key) || fallback || key;
-  }
-
   function isEnglish() {
     return language() === "en";
+  }
+
+  function translate(key, fallback = "") {
+    return LANG()?.translate?.(key) || fallback || key;
   }
 
   function toast(message, type = "info") {
@@ -108,6 +113,10 @@
     }
 
     api?.show?.(message, type);
+  }
+
+  function confirmAction(message) {
+    return global.confirm(message);
   }
 
   function formatDate(value) {
@@ -142,16 +151,14 @@
     );
   }
 
-  function confirmAction(message) {
-    return global.confirm(message);
-  }
-
   function profile() {
     return DATA()?.getProfile?.() || {
       name: "",
       bio: "",
       location: "",
-      avatar: ""
+      avatar: "",
+      avatarMediaId: "",
+      coverMediaId: ""
     };
   }
 
@@ -181,10 +188,11 @@
     if (!MODAL()?.openModal) {
       toast(
         isEnglish()
-          ? "Modal is not available."
+          ? "This feature is unavailable."
           : "यो सुविधा अहिले उपलब्ध छैन।",
         "error"
       );
+
       return null;
     }
 
@@ -212,7 +220,7 @@
   }
 
   /* =========================================================
-     SHARED PAGE LAYOUT
+     PAGE LAYOUT
   ========================================================= */
 
   function showHomeLayout() {
@@ -321,26 +329,28 @@
       </form>
     `;
 
-    const footer = `
-      <button
-        type="button"
-        class="btn btn-secondary"
-        data-modal-close>
-        ${translate("cancel", "रद्द")}
-      </button>
-
-      <button
-        type="submit"
-        form="kskStoryForm"
-        class="btn btn-primary">
-        ${isEnglish() ? "Publish Story" : "Story प्रकाशित गर्नुहोस्"}
-      </button>
-    `;
-
     const modal = openModal({
       title: isEnglish() ? "Create Story" : "नयाँ Story",
+
       content,
-      footer
+
+      footer: `
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-modal-close>
+          ${translate("cancel", "रद्द")}
+        </button>
+
+        <button
+          type="submit"
+          form="kskStoryForm"
+          class="btn btn-primary">
+          ${isEnglish()
+            ? "Publish Story"
+            : "Story प्रकाशित गर्नुहोस्"}
+        </button>
+      `
     });
 
     if (!modal) return;
@@ -394,6 +404,7 @@
 
     const content = `
       <div class="story-view-content">
+
         ${avatarHTML(story.author)}
 
         <h3>${escapeHTML(story.author || "सदस्य")}</h3>
@@ -405,12 +416,14 @@
         <div class="post-content">
           ${escapeHTML(story.text || "")}
         </div>
+
       </div>
     `;
 
     openModal({
-      title: isEnglish() ? "Story" : "Story",
+      title: "Story",
       content,
+
       footer: `
         <button
           class="btn btn-secondary"
@@ -431,6 +444,7 @@
     const author = escapeHTML(post.author || "सदस्य");
     const text = escapeHTML(post.text || "");
     const date = escapeHTML(formatDate(post.createdAt));
+
     const liked = Boolean(post.liked);
     const likes = Number(post.likes || 0);
 
@@ -462,7 +476,9 @@
             class="icon-button"
             type="button"
             data-post-menu="${id}"
-            aria-label="${isEnglish() ? "Post options" : "पोस्ट विकल्प"}">
+            aria-label="${isEnglish()
+              ? "Post options"
+              : "पोस्ट विकल्प"}">
             ⋯
           </button>
 
@@ -470,7 +486,8 @@
 
         ${text
           ? `<div class="post-content">${text}</div>`
-          : ""}
+          : ""
+        }
 
         <footer class="post-actions">
 
@@ -563,26 +580,26 @@
       </form>
     `;
 
-    const footer = `
-      <button
-        type="button"
-        class="btn btn-secondary"
-        data-modal-close>
-        ${translate("cancel", "रद्द")}
-      </button>
-
-      <button
-        type="submit"
-        form="kskPostForm"
-        class="btn btn-primary">
-        ${translate("publish", "प्रकाशित गर्नुहोस्")}
-      </button>
-    `;
-
     const modal = openModal({
       title: isEnglish() ? "Create Post" : "नयाँ पोस्ट",
+
       content,
-      footer
+
+      footer: `
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-modal-close>
+          ${translate("cancel", "रद्द")}
+        </button>
+
+        <button
+          type="submit"
+          form="kskPostForm"
+          class="btn btn-primary">
+          ${translate("publish", "प्रकाशित गर्नुहोस्")}
+        </button>
+      `
     });
 
     if (!modal) return;
@@ -645,22 +662,22 @@
 
     if (!post) return;
 
-    const content = `
-      <form id="kskEditPostForm">
-
-        <textarea
-          id="kskEditPostText"
-          class="form-textarea"
-          rows="5"
-          maxlength="10000"
-          required>${escapeHTML(post.text || "")}</textarea>
-
-      </form>
-    `;
-
     const modal = openModal({
       title: isEnglish() ? "Edit Post" : "पोस्ट सम्पादन",
-      content,
+
+      content: `
+        <form id="kskEditPostForm">
+
+          <textarea
+            id="kskEditPostText"
+            class="form-textarea"
+            rows="5"
+            maxlength="10000"
+            required>${escapeHTML(post.text || "")}</textarea>
+
+        </form>
+      `,
+
       footer: `
         <button
           type="button"
@@ -673,7 +690,9 @@
           type="submit"
           form="kskEditPostForm"
           class="btn btn-primary">
-          ${isEnglish() ? "Save Changes" : "परिवर्तन सुरक्षित गर्नुहोस्"}
+          ${isEnglish()
+            ? "Save Changes"
+            : "परिवर्तन सुरक्षित गर्नुहोस्"}
         </button>
       `
     });
@@ -718,29 +737,33 @@
 
     if (!post) return;
 
-    const content = `
-      <div class="post-menu-actions">
-
-        <button
-          class="dropdown-item"
-          type="button"
-          data-edit-post="${escapeHTML(id)}">
-          ✏️ ${isEnglish() ? "Edit post" : "पोस्ट सम्पादन"}
-        </button>
-
-        <button
-          class="dropdown-item"
-          type="button"
-          data-delete-post="${escapeHTML(id)}">
-          🗑️ ${isEnglish() ? "Delete post" : "पोस्ट मेटाउनुहोस्"}
-        </button>
-
-      </div>
-    `;
-
     openModal({
       title: isEnglish() ? "Post options" : "पोस्ट विकल्प",
-      content,
+
+      content: `
+        <div class="post-menu-actions">
+
+          <button
+            class="dropdown-item"
+            type="button"
+            data-edit-post="${escapeHTML(id)}">
+            ✏️ ${isEnglish()
+              ? "Edit post"
+              : "पोस्ट सम्पादन"}
+          </button>
+
+          <button
+            class="dropdown-item"
+            type="button"
+            data-delete-post="${escapeHTML(id)}">
+            🗑️ ${isEnglish()
+              ? "Delete post"
+              : "पोस्ट मेटाउनुहोस्"}
+          </button>
+
+        </div>
+      `,
+
       footer: `
         <button
           class="btn btn-secondary"
@@ -786,6 +809,7 @@
     if (!post) return;
 
     const liked = !post.liked;
+
     const likes = Math.max(
       0,
       Number(post.likes || 0) + (liked ? 1 : -1)
@@ -799,7 +823,7 @@
     renderFeed();
 
     if (currentPage === "profile") {
-      renderProfile();
+      refreshCurrentPage();
     }
   }
 
@@ -808,12 +832,16 @@
 
     if (result === false) {
       toast(
-        isEnglish() ? "Post removed from saved." : "सेभबाट हटाइयो।",
+        isEnglish()
+          ? "Post removed from saved."
+          : "सेभबाट हटाइयो।",
         "success"
       );
     } else {
       toast(
-        isEnglish() ? "Post saved." : "पोस्ट सेभ भयो।",
+        isEnglish()
+          ? "Post saved."
+          : "पोस्ट सेभ भयो।",
         "success"
       );
     }
@@ -835,9 +863,7 @@
         await navigator.clipboard.writeText(text);
 
         toast(
-          isEnglish()
-            ? "Post copied."
-            : "पोस्ट कपी भयो।",
+          isEnglish() ? "Post copied." : "पोस्ट कपी भयो।",
           "success"
         );
       } else {
@@ -861,19 +887,32 @@
   }
 
   function handlePostAction(action, id) {
-    if (action === "like") toggleLike(id);
+    if (action === "like") {
+      toggleLike(id);
+      return;
+    }
 
-    if (action === "save") toggleSave(id);
+    if (action === "save") {
+      toggleSave(id);
+      return;
+    }
 
-    if (action === "share") sharePost(id);
+    if (action === "share") {
+      sharePost(id);
+      return;
+    }
 
     if (action === "comment") {
-      toast(
-        isEnglish()
-          ? "Comments will be added in a later step."
-          : "टिप्पणी सुविधा अर्को चरणमा थपिनेछ।",
-        "info"
-      );
+      if (global.KSKComments?.open) {
+        global.KSKComments.open(id);
+      } else {
+        toast(
+          isEnglish()
+            ? "Comments are unavailable."
+            : "टिप्पणी सुविधा अहिले उपलब्ध छैन।",
+          "warning"
+        );
+      }
     }
   }
 
@@ -889,13 +928,12 @@
           <article class="card friend-card">
 
             <div class="flex align-center gap-3">
-              ${avatarHTML(
-                friend.name,
-                friend.avatar
-              )}
+
+              ${avatarHTML(friend.name, friend.avatar)}
 
               <div class="flex-column">
                 <strong>${escapeHTML(friend.name)}</strong>
+
                 <span class="text-muted text-small">
                   ${escapeHTML(friend.location || "")}
                 </span>
@@ -905,9 +943,12 @@
                 class="icon-button"
                 type="button"
                 data-message-friend="${escapeHTML(friend.id)}"
-                aria-label="${isEnglish() ? "Message" : "सन्देश"}">
+                aria-label="${isEnglish()
+                  ? "Message"
+                  : "सन्देश"}">
                 💬
               </button>
+
             </div>
 
           </article>
@@ -915,11 +956,13 @@
       : `
         <div class="empty-state">
           <div class="empty-state-icon">👥</div>
+
           <h3 class="empty-state-title">
             ${isEnglish()
               ? "No friends added yet"
               : "अहिलेसम्म साथी थपिएको छैन"}
           </h3>
+
           <p>
             ${isEnglish()
               ? "Add a friend by entering their name."
@@ -932,6 +975,7 @@
       <section class="page-section">
 
         <div class="flex-between">
+
           <h3 class="section-title">
             ${isEnglish() ? "My Friends" : "मेरा साथीहरू"}
           </h3>
@@ -940,8 +984,11 @@
             class="btn btn-primary btn-sm"
             type="button"
             data-add-friend-open>
-            + ${isEnglish() ? "Add Friend" : "साथी थप्नुहोस्"}
+            + ${isEnglish()
+              ? "Add Friend"
+              : "साथी थप्नुहोस्"}
           </button>
+
         </div>
 
         <div class="friends-list">
@@ -955,11 +1002,14 @@
   function openAddFriend() {
     const modal = openModal({
       title: isEnglish() ? "Add Friend" : "साथी थप्नुहोस्",
+
       content: `
         <form id="kskAddFriendForm">
 
           <label class="form-label" for="kskFriendName">
-            ${isEnglish() ? "Friend's name" : "साथीको नाम"}
+            ${isEnglish()
+              ? "Friend's name"
+              : "साथीको नाम"}
           </label>
 
           <input
@@ -973,6 +1023,7 @@
 
         </form>
       `,
+
       footer: `
         <button
           class="btn btn-secondary"
@@ -1017,7 +1068,7 @@
         }
 
         closeModal();
-        renderFriends();
+        refreshCurrentPage();
 
         toast(
           isEnglish() ? "Friend added." : "साथी थपियो।",
@@ -1041,19 +1092,24 @@
     if (!chats.length) {
       return `
         <section>
+
           <div class="empty-state">
             <div class="empty-state-icon">💬</div>
+
             <h3 class="empty-state-title">
               ${isEnglish()
                 ? "No conversations yet"
                 : "अहिलेसम्म सन्देश छैन"}
             </h3>
+
             <p>
               ${isEnglish()
                 ? "Add friends to start a conversation."
                 : "कुरा सुरु गर्न साथी थप्नुहोस्।"}
             </p>
+
           </div>
+
         </section>
       `;
     }
@@ -1077,14 +1133,21 @@
                 data-open-chat="${escapeHTML(chat.id)}">
 
                 <div class="flex align-center gap-3">
+
                   ${avatarHTML(chat.name, chat.avatar)}
 
                   <div class="flex-column">
-                    <strong>${escapeHTML(chat.name || "साथी")}</strong>
+
+                    <strong>
+                      ${escapeHTML(chat.name || "साथी")}
+                    </strong>
+
                     <span class="text-muted text-small">
                       ${escapeHTML(last?.text || "")}
                     </span>
+
                   </div>
+
                 </div>
 
               </button>
@@ -1092,6 +1155,7 @@
           }).join("")}
 
         </div>
+
       </section>
     `;
   }
@@ -1122,7 +1186,9 @@
 
           ${avatarHTML(chat.name, chat.avatar)}
 
-          <strong>${escapeHTML(chat.name || "साथी")}</strong>
+          <strong>
+            ${escapeHTML(chat.name || "साथी")}
+          </strong>
 
         </div>
 
@@ -1198,7 +1264,7 @@
     }
 
     activeChatId = chatId;
-    navigate("messages");
+    navigate("messages", { keepChat: true });
   }
 
   function sendChatMessage(event) {
@@ -1230,7 +1296,7 @@
       return;
     }
 
-    renderMessages();
+    refreshCurrentPage();
     $("#kskMessageInput")?.focus();
   }
 
@@ -1240,6 +1306,7 @@
 
   function renderProfile() {
     const user = profile();
+
     const posts = getPosts().filter(post => {
       return post.author === user.name;
     });
@@ -1259,7 +1326,9 @@
 
           <h2 class="text-center">
             ${escapeHTML(user.name || (
-              isEnglish() ? "Your Profile" : "तपाईंको प्रोफाइल"
+              isEnglish()
+                ? "Your Profile"
+                : "तपाईंको प्रोफाइल"
             ))}
           </h2>
 
@@ -1277,11 +1346,13 @@
 
           <div class="text-center">
             <span class="badge badge-primary">
-              ${posts.length} ${isEnglish() ? "Posts" : "पोस्ट"}
+              ${posts.length}
+              ${isEnglish() ? "Posts" : "पोस्ट"}
             </span>
           </div>
 
           <div class="flex-center" style="margin-top:16px">
+
             <button
               class="btn btn-primary"
               type="button"
@@ -1290,6 +1361,7 @@
                 ? "Edit Profile"
                 : "प्रोफाइल सम्पादन"}
             </button>
+
           </div>
 
         </div>
@@ -1299,6 +1371,7 @@
         </h3>
 
         <div class="profile-posts">
+
           ${posts.length
             ? posts.map(renderPost).join("")
             : `
@@ -1309,15 +1382,18 @@
               </div>
             `
           }
+
         </div>
 
         <div class="flex-center" style="margin-top:18px">
+
           <button
             class="btn btn-secondary"
             type="button"
             data-open-settings>
             ⚙️ ${isEnglish() ? "Settings" : "सेटिङ"}
           </button>
+
         </div>
 
       </section>
@@ -1328,12 +1404,15 @@
     const user = profile();
 
     const modal = openModal({
-      title: isEnglish() ? "Edit Profile" : "प्रोफाइल सम्पादन",
+      title: isEnglish()
+        ? "Edit Profile"
+        : "प्रोफाइल सम्पादन",
 
       content: `
         <form id="kskProfileForm">
 
           <div class="form-group">
+
             <label class="form-label" for="kskProfileName">
               ${isEnglish() ? "Name" : "नाम"}
             </label>
@@ -1343,9 +1422,11 @@
               class="form-input"
               maxlength="60"
               value="${escapeHTML(user.name || "")}">
+
           </div>
 
           <div class="form-group">
+
             <label class="form-label" for="kskProfileBio">
               ${isEnglish() ? "About me" : "मेरो परिचय"}
             </label>
@@ -1355,9 +1436,11 @@
               class="form-textarea"
               maxlength="240"
               rows="3">${escapeHTML(user.bio || "")}</textarea>
+
           </div>
 
           <div class="form-group">
+
             <label class="form-label" for="kskProfileLocation">
               ${isEnglish() ? "Location" : "ठेगाना"}
             </label>
@@ -1367,6 +1450,7 @@
               class="form-input"
               maxlength="100"
               value="${escapeHTML(user.location || "")}">
+
           </div>
 
         </form>
@@ -1384,7 +1468,9 @@
           class="btn btn-primary"
           type="submit"
           form="kskProfileForm">
-          ${isEnglish() ? "Save Profile" : "सुरक्षित गर्नुहोस्"}
+          ${isEnglish()
+            ? "Save Profile"
+            : "सुरक्षित गर्नुहोस्"}
         </button>
       `
     });
@@ -1397,9 +1483,14 @@
         event.preventDefault();
 
         const updated = DATA()?.saveProfile?.({
-          name: $("#kskProfileName", modal.element)?.value.trim() || "",
-          bio: $("#kskProfileBio", modal.element)?.value.trim() || "",
-          location: $("#kskProfileLocation", modal.element)?.value.trim() || ""
+          name: $("#kskProfileName", modal.element)
+            ?.value.trim() || "",
+
+          bio: $("#kskProfileBio", modal.element)
+            ?.value.trim() || "",
+
+          location: $("#kskProfileLocation", modal.element)
+            ?.value.trim() || ""
         });
 
         if (!updated) {
@@ -1413,7 +1504,7 @@
         }
 
         closeModal();
-        renderProfile();
+        refreshCurrentPage();
 
         toast(
           isEnglish()
@@ -1430,17 +1521,21 @@
   ========================================================= */
 
   function renderNotifications() {
-    const notifications = DATA()?.getNotifications?.() || [];
+    const notifications =
+      DATA()?.getNotifications?.() || [];
 
     if (!notifications.length) {
       return `
         <div class="empty-state">
+
           <div class="empty-state-icon">🔔</div>
+
           <h3 class="empty-state-title">
             ${isEnglish()
               ? "No notifications"
               : "अहिले कुनै सूचना छैन"}
           </h3>
+
         </div>
       `;
     }
@@ -1454,10 +1549,13 @@
 
         ${notifications.map(item => `
           <article class="card notification-item">
+
             <p>${escapeHTML(item.text)}</p>
+
             <small class="post-time">
               ${escapeHTML(formatDate(item.createdAt))}
             </small>
+
           </article>
         `).join("")}
 
@@ -1480,19 +1578,24 @@
       <section>
 
         <h3 class="section-title">
-          ${isEnglish() ? "Saved Posts" : "सेभ गरिएका पोस्ट"}
+          ${isEnglish()
+            ? "Saved Posts"
+            : "सेभ गरिएका पोस्ट"}
         </h3>
 
         ${posts.length
           ? posts.map(renderPost).join("")
           : `
             <div class="empty-state">
+
               <div class="empty-state-icon">🔖</div>
+
               <p>
                 ${isEnglish()
                   ? "No saved posts yet."
                   : "अहिलेसम्म पोस्ट सेभ गरिएको छैन।"}
               </p>
+
             </div>
           `
         }
@@ -1502,106 +1605,51 @@
   }
 
   /* =========================================================
-     SETTINGS
+     SETTINGS — SINGLE SETTINGS UI CONTROLLER
   ========================================================= */
 
-  function syncSettingsControls() {
-    const settings = global.KSKSettings?.getSettings?.();
-
-    if (!settings) return;
-
-    if (els.languageSelect) {
-      els.languageSelect.value = settings.language;
-    }
-
-    if (els.settingsThemeToggle) {
-      els.settingsThemeToggle.textContent =
-        settings.theme === "dark"
-          ? (isEnglish() ? "Dark Mode" : "डार्क मोड")
-          : (isEnglish() ? "Light Mode" : "लाइट मोड");
-    }
-  }
-
   function openSettings() {
-    if (els.settingsModal) {
-      els.settingsModal.classList.remove("hidden");
-      els.settingsModal.setAttribute("aria-hidden", "false");
-      syncSettingsControls();
-      return;
+    const settingsUI = SETTINGS_UI();
+
+    if (!settingsUI?.open) {
+      toast(
+        isEnglish()
+          ? "Settings are not ready. Please reload the app."
+          : "सेटिङ तयार भएको छैन। कृपया एप पुनः खोल्नुहोस्।",
+        "error"
+      );
+
+      return false;
     }
 
-    const settings = global.KSKSettings?.getSettings?.() || {};
-
-    const modal = openModal({
-      title: isEnglish() ? "Settings" : "सेटिङ",
-
-      content: `
-        <div class="settings-row">
-          <div>
-            <strong>${isEnglish() ? "Theme" : "Theme"}</strong>
-            <p class="settings-description">
-              ${isEnglish() ? "Light or Dark mode" : "लाइट वा डार्क मोड"}
-            </p>
-          </div>
-
-          <button
-            class="btn btn-secondary"
-            type="button"
-            data-toggle-theme>
-            ${settings.theme === "dark" ? "Dark" : "Light"}
-          </button>
-        </div>
-
-        <div class="settings-row">
-          <label for="kskSettingsLanguage">
-            ${isEnglish() ? "Language" : "भाषा"}
-          </label>
-
-          <select
-            id="kskSettingsLanguage"
-            class="form-input settings-select">
-            <option value="ne">नेपाली</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-      `
-    });
-
-    if (!modal) return;
-
-    const select = $("#kskSettingsLanguage", modal.element);
-
-    if (select) {
-      select.value = language();
-
-      select.addEventListener("change", () => {
-        LANG()?.setLanguage?.(select.value);
-        syncSettingsControls();
-      });
-    }
-
-    $("[data-toggle-theme]", modal.element)?.addEventListener(
-      "click",
-      toggleTheme
-    );
+    return settingsUI.open();
   }
 
   function closeSettings() {
+    if (SETTINGS_UI()?.close) {
+      SETTINGS_UI().close();
+      return;
+    }
+
     els.settingsModal?.classList.add("hidden");
     els.settingsModal?.setAttribute("aria-hidden", "true");
   }
 
-  function toggleTheme() {
-    const next = THEME()?.toggleTheme?.();
+  function applySettingsTheme() {
+    const settings = SETTINGS()?.getSettings?.();
 
-    syncSettingsControls();
+    if (!settings?.theme) return;
 
-    toast(
-      next === "dark"
-        ? (isEnglish() ? "Dark theme enabled." : "डार्क Theme सक्रिय भयो।")
-        : (isEnglish() ? "Light theme enabled." : "लाइट Theme सक्रिय भयो।"),
-      "success"
-    );
+    const selected = settings.theme === "dark"
+      ? "dark"
+      : "light";
+
+    const current =
+      document.documentElement.dataset.theme || "light";
+
+    if (current !== selected) {
+      THEME()?.applyTheme?.(selected, false);
+    }
   }
 
   function changeLanguage(value) {
@@ -1609,7 +1657,6 @@
 
     LANG()?.setLanguage?.(selected);
 
-    syncSettingsControls();
     refreshCurrentPage();
 
     toast(
@@ -1620,46 +1667,30 @@
     );
   }
 
-  function clearLocalPosts() {
-    if (!confirmAction(
-      isEnglish()
-        ? "Delete all posts?"
-        : "सबै पोस्ट मेटाउने हो?"
-    )) return;
-
-    const posts = getPosts();
-
-    posts.forEach(post => {
-      DATA()?.deletePost?.(post.id);
-    });
-
-    closeSettings();
-    renderFeed();
-
-    toast(
-      isEnglish()
-        ? "Posts deleted."
-        : "पोस्टहरू मेटाइयो।",
-      "success"
-    );
-  }
-
   /* =========================================================
      NAVIGATION
   ========================================================= */
 
   function navigate(page, options = {}) {
-    if (!NAV()?.isValidPage?.(page)) return;
+    if (!NAV()?.isValidPage?.(page)) {
+      toast(
+        isEnglish()
+          ? "This page is unavailable."
+          : "यो पृष्ठ उपलब्ध छैन।",
+        "warning"
+      );
+
+      return false;
+    }
 
     if (page === "create") {
       openPostComposer();
-      return;
+      return true;
     }
 
     if (page === "settings") {
-      navigate("profile");
       openSettings();
-      return;
+      return true;
     }
 
     currentPage = page;
@@ -1672,6 +1703,8 @@
 
     refreshNavigation(page);
     refreshCurrentPage();
+
+    return true;
   }
 
   function refreshCurrentPage() {
@@ -1716,7 +1749,21 @@
 
     const selected = pages[currentPage];
 
-    if (!selected) return;
+    if (!selected) {
+      setPageTitle(
+        isEnglish() ? "Page unavailable" : "पृष्ठ उपलब्ध छैन"
+      );
+
+      setPageContent(`
+        <div class="empty-state">
+          ${isEnglish()
+            ? "This page is not available."
+            : "यो पृष्ठ उपलब्ध छैन।"}
+        </div>
+      `);
+
+      return;
+    }
 
     setPageTitle(selected.title);
     setPageContent(selected.html());
@@ -1757,7 +1804,7 @@
   }
 
   /* =========================================================
-     EVENT DELEGATION
+     GLOBAL CLICK EVENTS
   ========================================================= */
 
   function bindGlobalClickEvents() {
@@ -1801,8 +1848,10 @@
 
       if (editPostButton) {
         const id = editPostButton.dataset.editPost;
+
         closeModal();
         editPost(id);
+
         return;
       }
 
@@ -1850,8 +1899,11 @@
     });
   }
 
+  /* =========================================================
+     EVENT BINDING
+  ========================================================= */
+
   function bindEvents() {
-    // Navigation controller is the only owner of data-page clicks.
     NAV()?.initializeNavigation?.(document);
 
     global.addEventListener("ksk:navigate", event => {
@@ -1862,14 +1914,32 @@
       }
     });
 
-    global.addEventListener("ksk:open-composer", openPostComposer);
+    global.addEventListener(
+      "ksk:open-composer",
+      openPostComposer
+    );
 
     global.addEventListener("ksk:language-change", () => {
-      syncSettingsControls();
       refreshCurrentPage();
+      renderStories();
     });
 
-    global.addEventListener("ksk:theme-change", syncSettingsControls);
+    global.addEventListener("ksk:theme-change", () => {
+      // Theme engine owns the visual theme.
+    });
+
+    global.addEventListener("ksk:settings-change", event => {
+      const changedSettings = event.detail?.settings;
+
+      if (changedSettings?.theme) {
+        applySettingsTheme();
+      }
+
+      document.body.classList.toggle(
+        "ksk-compact-mode",
+        Boolean(changedSettings?.compactMode)
+      );
+    });
 
     global.addEventListener("ksk:data-change", event => {
       const collection = event.detail?.collection || "";
@@ -1898,12 +1968,11 @@
       openPostComposer
     );
 
-    // Upload controls are intentionally inactive in this version.
     els.quickPhoto?.addEventListener("click", () => {
       toast(
         isEnglish()
-          ? "Photo sharing will be added later."
-          : "फोटो सुविधा अर्को चरणमा थपिनेछ।",
+          ? "Use the post composer to add a photo."
+          : "फोटो थप्न पोस्ट Composer प्रयोग गर्नुहोस्।",
         "info"
       );
     });
@@ -1911,13 +1980,16 @@
     els.quickVideo?.addEventListener("click", () => {
       toast(
         isEnglish()
-          ? "Video sharing will be added later."
-          : "भिडियो सुविधा अर्को चरणमा थपिनेछ।",
+          ? "Video sharing is not available yet."
+          : "भिडियो सुविधा अहिले उपलब्ध छैन।",
         "info"
       );
     });
 
-    els.searchToggle?.addEventListener("click", toggleSearch);
+    els.searchToggle?.addEventListener(
+      "click",
+      toggleSearch
+    );
 
     els.searchInput?.addEventListener("input", event => {
       search(event.target.value);
@@ -1928,28 +2000,16 @@
       navigate("notifications");
     });
 
-    els.settingsToggle?.addEventListener("click", openSettings);
-    els.closeSettings?.addEventListener("click", closeSettings);
+    els.closeSettings?.addEventListener(
+      "click",
+      closeSettings
+    );
 
     els.settingsModal?.addEventListener("click", event => {
       if (event.target === els.settingsModal) {
         closeSettings();
       }
     });
-
-    els.settingsThemeToggle?.addEventListener(
-      "click",
-      toggleTheme
-    );
-
-    els.languageSelect?.addEventListener("change", event => {
-      changeLanguage(event.target.value);
-    });
-
-    els.clearPosts?.addEventListener(
-      "click",
-      clearLocalPosts
-    );
 
     document.addEventListener("submit", event => {
       if (event.target.id === "kskMessageForm") {
@@ -1971,18 +2031,32 @@
 
     cacheElements();
 
+    // Initialize shared systems.
     DATA()?.initialize?.();
-    global.KSKSettings?.initialize?.();
+    SETTINGS()?.initialize?.();
     THEME()?.initializeTheme?.();
     LANG()?.initialize?.();
+    SETTINGS_UI()?.initialize?.();
 
-    currentPage = STATE()?.getState?.()?.currentPage || "home";
+    // Restore settings theme and compact mode.
+    applySettingsTheme();
 
-    if (currentPage === "create" || currentPage === "settings") {
+    const savedSettings = SETTINGS()?.getSettings?.();
+
+    document.body.classList.toggle(
+      "ksk-compact-mode",
+      Boolean(savedSettings?.compactMode)
+    );
+
+    currentPage =
+      STATE()?.getState?.()?.currentPage || "home";
+
+    if (
+      currentPage === "create" ||
+      currentPage === "settings"
+    ) {
       currentPage = "home";
     }
-
-    syncSettingsControls();
 
     bindEvents();
 
@@ -2002,15 +2076,21 @@
   global.KSKApp = Object.freeze({
 
     initialize,
+
     navigate,
+
     refreshCurrentPage,
 
     openPostComposer,
+
     openStoryCreator,
+
     openSettings,
+
     closeSettings,
 
     renderFeed,
+
     renderStories,
 
     getCurrentPage() {
@@ -2018,8 +2098,11 @@
     },
 
     getPosts,
+
     getStories,
+
     getFriends,
+
     getChats,
 
     getProfile: profile,
@@ -2032,6 +2115,10 @@
     }
 
   });
+
+  /* =========================================================
+     START APPLICATION
+  ========================================================= */
 
   if (document.readyState === "loading") {
     document.addEventListener(
