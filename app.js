@@ -494,6 +494,45 @@
   }
 
   /* =======================================================
+     FEED RENDERING
+     Responsibility:
+     - Read posts from KSKData
+     - Filter posts using search query
+     - Render posts using renderPost()
+     - Refresh media rendering
+  ======================================================= */
+
+  function renderFeed() {
+
+    if (!els.feedList) return;
+
+    const query = searchQuery.toLowerCase();
+
+    const filtered = getPosts().filter(post => {
+
+      const searchable = [
+        post.author || "",
+        post.text || ""
+      ].join(" ").toLowerCase();
+
+      return searchable.includes(query);
+
+    });
+
+    els.feedList.innerHTML = filtered
+      .map(renderPost)
+      .join("");
+
+    els.emptyFeed?.classList.toggle(
+      "hidden",
+      filtered.length > 0
+    );
+
+    MEDIA_UI()?.refresh?.();
+
+  }
+
+  /* =======================================================
      POST COMPOSER
      KSKMediaUI owns the photo/text composer.
      Fallback is used only if the module is unavailable.
@@ -1788,7 +1827,7 @@
     toast(
       selected === "en"
         ? "Language updated."
-        : "भाषा परिवर्तन भयो।",
+        : "भाषा परिवर्तन भयो.",
       "success"
     );
   }
