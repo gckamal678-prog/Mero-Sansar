@@ -1,8 +1,9 @@
-
 "use strict";
+
 /*
  * KSK COMMENTS MODULE
  * Facebook-style Comments, Replies and Mentions
+ *
  * Dependencies:
  * core/data.js
  * core/modal.js
@@ -20,6 +21,10 @@
   let activeModal = null;
   let replyTarget = null;
   let editTarget = null;
+  let deletingComment = false;
+
+  // Prevent duplicate event listeners on the same modal body.
+  const boundBodies = new WeakSet();
 
   /* =========================================
      HELPERS
@@ -68,7 +73,6 @@
 
   function currentUser() {
     const user = profile();
-
     const name = text(user.name || "सदस्य", 60);
 
     return {
@@ -174,7 +178,6 @@
 
   function renderMentionText(value) {
     const safe = escapeHTML(value || "");
-
     const availableFriends = friends();
 
     if (!availableFriends.length) {
@@ -209,7 +212,6 @@
 
   function renderMentionSuggestions(query) {
     const list = friends();
-
     const search = text(query, 60).toLowerCase();
 
     const matches = list.filter(friend =>
@@ -250,8 +252,10 @@
 
   function renderComment(comment, allComments, depth = 0) {
     const id = escapeHTML(comment.id);
+
     const children = allComments.filter(
-      item => String(item.parentId || "") === String(comment.id)
+      item =>
+        String(item.parentId || "") === String(comment.id)
     );
 
     const user = currentUser();
@@ -502,7 +506,10 @@
       </div>
     `;
 
-    bindModalEvents();
+    // IMPORTANT:
+    // Do not bind listeners here.
+    // The modal body is the same DOM element after every render.
+    // Binding here repeatedly causes duplicate listeners and UI lag.
   }
 
   /* =========================================
@@ -555,7 +562,8 @@
     const start = before.length - match[0].length;
     const prefix = before.slice(0, start);
 
-    const insertion = `${match[0].startsWith(" ") ? " " : ""}@${name} `;
+    const insertion =
+      `${match[0].startsWith(" ") ? " " : ""}@${name} `;
 
     input.value = prefix + insertion + after;
 
@@ -612,7 +620,10 @@
 
     if (!allowed) {
       toast(
-        t("आफ्नो टिप्पणी मात्र सम्पादन गर्न सकिन्छ।", "You can only edit your own comment."),
+        t(
+          "आफ्नो टिप्पणी मात्र सम्पादन गर्न सकिन्छ।",
+          "You can only edit your own comment."
+        ),
         "warning"
       );
       return;
@@ -659,7 +670,10 @@
 
       if (!result) {
         toast(
-          t("टिप्पणी परिवर्तन गर्न सकिएन।", "Could not update comment."),
+          t(
+            "टिप्पणी परिवर्तन गर्न सकिएन।",
+            "Could not update comment."
+          ),
           "error"
         );
         return;
@@ -677,7 +691,6 @@
     }
 
     const user = currentUser();
-
     const mentions = getMentionedFriends(value);
 
     const result = data()?.addComment?.(
@@ -700,7 +713,10 @@
 
     if (!result) {
       toast(
-        t("टिप्पणी प्रकाशित गर्न सकिएन।", "Could not publish comment."),
+        t(
+          "टिप्पणी प्रकाशित गर्न सकिएन।",
+          "Could not publish comment."
+        ),
         "error"
       );
       return;
@@ -728,6 +744,9 @@
   }
 
   function removeComment(commentId) {
+    // Prevent accidental repeated deletion.
+    if (deletingComment) return;
+
     const confirmed = global.confirm(
       t(
         "यो टिप्पणी र यसका सबै जवाफ मेटाउने हो?",
@@ -737,37 +756,61 @@
 
     if (!confirmed) return;
 
-    const result = data()?.deleteComment?.(
-      activePostId,
-      commentId
-    );
+    deletingComment = true;
 
-    if (!result) {
+    try {
+      const result = data()?.deleteComment?.(
+        activePostId,
+        commentId
+      );
+
+      if (!result) {
+        toast(
+          t(
+            "टिप्पणी मेटाउन सकिएन।",
+            "Could not delete comment."
+          ),
+          "error"
+        );
+        return;
+      }
+
+      if (String(replyTarget) === String(commentId)) {
+        replyTarget = null;
+      }
+
+      if (String(editTarget) === String(commentId)) {
+        editTarget = null;
+      }
+
       toast(
-        t("टिप्पणी मेटाउन सकिएन।", "Could not delete comment."),
+        t("टिप्पणी मेटाइयो।", "Comment deleted."),
+        "success"
+      );
+
+      // Refresh only the comment modal content.
+      // Do not recreate the modal or attach new listeners.
+      renderModal();
+
+    } catch (error) {
+      console.error("KSK comment delete failed:", error);
+
+      toast(
+        t(
+          "टिप्पणी मेटाउँदा समस्या आयो।",
+          "An error occurred while deleting the comment."
+        ),
         "error"
       );
-      return;
+
+    } finally {
+      deletingComment = false;
     }
-
-    if (String(replyTarget) === String(commentId)) {
-      replyTarget = null;
-    }
-
-    if (String(editTarget) === String(commentId)) {
-      editTarget = null;
-    }
-
-    toast(
-      t("टिप्पणी मेटाइयो।", "Comment deleted."),
-      "success"
-    );
-
-    renderModal();
   }
 
   /* =========================================
      MODAL EVENT BINDING
+     Bind exactly once per modal body.
   ========================================= */
 
   function bindModalEvents() {
@@ -775,7 +818,9 @@
       "[data-modal-body]"
     );
 
-    if (!body) return;
+    if (!body || boundBodies.has(body)) return;
+
+    boundBodies.add(body);
 
     body.addEventListener("submit", event => {
       if (event.target.matches("[data-comment-form]")) {
@@ -792,7 +837,7 @@
     body.addEventListener("click", event => {
       const target = event.target.closest("button");
 
-      if (!target) return;
+      if (!target || !body.contains(target)) return;
 
       if (target.hasAttribute("data-mention-id")) {
         insertMention(
@@ -857,7 +902,10 @@
 
     if (!global.KSKModal?.openModal) {
       toast(
-        t("Modal सुविधा उपलब्ध छैन।", "Modal is unavailable."),
+        t(
+          "Modal सुविधा उपलब्ध छैन।",
+          "Modal is unavailable."
+        ),
         "error"
       );
       return false;
@@ -866,6 +914,7 @@
     activePostId = String(postId);
     replyTarget = null;
     editTarget = null;
+    deletingComment = false;
 
     activeModal = global.KSKModal.openModal({
       title: t("टिप्पणीहरू", "Comments"),
@@ -873,15 +922,26 @@
       closeButtonLabel: t("बन्द गर्नुहोस्", "Close")
     });
 
-    if (!activeModal) return false;
+    if (!activeModal) {
+      activePostId = null;
+      return false;
+    }
 
     renderModal();
+
+    // Bind once after the modal body exists.
+    bindModalEvents();
 
     return true;
   }
 
   function refresh() {
     if (!activePostId || !activeModal) return false;
+
+    if (!activeModal.element?.isConnected) {
+      close();
+      return false;
+    }
 
     renderModal();
 
@@ -897,6 +957,7 @@
     activePostId = null;
     replyTarget = null;
     editTarget = null;
+    deletingComment = false;
   }
 
   global.KSKComments = Object.freeze({
