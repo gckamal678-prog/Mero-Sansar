@@ -4,7 +4,7 @@
 /* =========================================================
    KSK REACTIONS
    Responsibility:
-   - Post reaction picker
+   - Facebook-style post reaction picker
    - Select, change and remove reactions
    - Persist reactions through KSKData
 
@@ -58,7 +58,6 @@
     picker.className = "ksk-reaction-picker";
     picker.setAttribute("role", "group");
     picker.setAttribute("aria-label", "पोस्ट Reaction छान्नुहोस्");
-
     picker.dataset.postId = postId;
 
     picker.innerHTML = REACTIONS.map(item => `
@@ -83,7 +82,6 @@
 
   function positionPicker(button, picker) {
     const rect = button.getBoundingClientRect();
-
     const width = picker.offsetWidth || 250;
 
     const left = Math.max(
@@ -132,12 +130,17 @@
     if (!valid) return false;
 
     const current = post.myReaction || "";
+
     const counts = {
       ...(post.reactionCounts || {})
     };
 
-    let likes = Math.max(0, Number(post.likes || 0));
+    let likes = Math.max(
+      0,
+      Number(post.likes || 0)
+    );
 
+    // Same reaction selected again: remove it.
     if (current === emoji) {
       counts[emoji] = Math.max(
         0,
@@ -146,35 +149,37 @@
 
       likes = Math.max(0, likes - 1);
 
-      const success = global.KSKData.updatePost(postId, {
-        myReaction: "",
-        reactionCounts: counts,
-        liked: false,
-        likes
-      });
-
-      return Boolean(success);
+      return Boolean(
+        global.KSKData.updatePost(postId, {
+          myReaction: "",
+          reactionCounts: counts,
+          liked: false,
+          likes
+        })
+      );
     }
 
-    if (!current) {
-      likes += 1;
-    } else {
+    // New reaction or changing an existing reaction.
+    if (current) {
       counts[current] = Math.max(
         0,
         Number(counts[current] || 0) - 1
       );
+    } else if (!post.liked) {
+      // Do not increase likes again for legacy liked posts.
+      likes += 1;
     }
 
     counts[emoji] = Number(counts[emoji] || 0) + 1;
 
-    const success = global.KSKData.updatePost(postId, {
-      myReaction: emoji,
-      reactionCounts: counts,
-      liked: true,
-      likes
-    });
-
-    return Boolean(success);
+    return Boolean(
+      global.KSKData.updatePost(postId, {
+        myReaction: emoji,
+        reactionCounts: counts,
+        liked: true,
+        likes
+      })
+    );
   }
 
   function refreshFeed() {
@@ -286,6 +291,7 @@
     destroy,
     closePicker,
     selectReaction,
+
     getReactions() {
       return REACTIONS.slice();
     }
