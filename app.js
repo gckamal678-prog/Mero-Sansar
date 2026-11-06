@@ -356,7 +356,19 @@
 
   function renderPost(post) {
     const id = escapeHTML(post.id);
-    const author = escapeHTML(post.author || "सदस्य");
+    const currentUser = profile();
+    const savedAuthor = String(post.author || "").trim();
+
+    const isPlaceholderAuthor = [
+      "तपाईं",
+      "you"
+    ].includes(savedAuthor.toLowerCase());
+
+    const author = escapeHTML(
+      isPlaceholderAuthor && currentUser.name
+        ? currentUser.name
+        : savedAuthor || "सदस्य"
+    );
     const text = escapeHTML(post.text || "");
     const date = escapeHTML(formatDate(post.createdAt));
 
@@ -1827,7 +1839,7 @@
     toast(
       selected === "en"
         ? "Language updated."
-        : "भाषा परिवर्तन भयो.",
+        : "भाषा परिवर्तन भयो।",
       "success"
     );
   }
