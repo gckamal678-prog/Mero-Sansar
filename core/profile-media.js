@@ -881,8 +881,6 @@
 
   async function saveProfilePhoto(file, type) {
 
-    if (busy) return;
-
     busy = true;
 
     let savedId = "";
