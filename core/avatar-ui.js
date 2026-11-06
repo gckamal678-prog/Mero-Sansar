@@ -1,6 +1,5 @@
 
 "use strict";
-
 /*
  * =========================================================
  * KSK AVATAR UI — POST & COMMENT PROFILE PHOTOS
