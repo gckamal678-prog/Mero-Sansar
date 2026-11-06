@@ -1,15 +1,19 @@
+
 "use strict";
 
 /*
  * KSK PROFILE MEDIA UI
- * Avatar + Cover Photo
+ * Avatar + Cover Photo + Crop + Preview
  *
- * Architecture:
- * - Profile Data: KSKData
- * - Image Storage: KSKMedia
- * - Modal: KSKModal
- * - Notifications: KSKToast
- * - Navigation: KSKNavigation
+ * RESPONSIBILITY:
+ * - Profile Avatar and Cover Photo
+ * - Direct Gallery opening
+ * - Image crop, zoom and positioning
+ * - Profile information editing
+ * - Profile media display
+ *
+ * DEPENDENCIES:
+ * KSKData, KSKMedia, KSKModal, KSKToast
  */
 
 (function (global) {
@@ -23,6 +27,7 @@
 
   let initialized = false;
   let busy = false;
+  let activeCropURL = "";
 
   const objectURLs = new Map();
 
@@ -32,9 +37,12 @@
   ===================================================== */
 
   function isEnglish() {
-    return (
-      global.KSKLanguage?.getLanguage?.() === "en"
-    );
+    return global.KSKLanguage?.getLanguage?.() === "en";
+  }
+
+
+  function t(nepali, english) {
+    return isEnglish() ? english : nepali;
   }
 
 
@@ -52,15 +60,13 @@
   ===================================================== */
 
   function toast(message, type = "info") {
-
     const api = global.KSKToast;
 
     if (api?.[type]) {
       api[type](message);
-      return;
+    } else {
+      api?.show?.(message, type);
     }
-
-    api?.show?.(message, type);
   }
 
 
@@ -72,9 +78,7 @@
 
     if (!global.KSKModal?.openModal) {
       toast(
-        isEnglish()
-          ? "This feature is unavailable."
-          : "यो सुविधा अहिले उपलब्ध छैन।",
+        t("यो सुविधा अहिले उपलब्ध छैन।", "This feature is unavailable."),
         "error"
       );
 
@@ -91,8 +95,22 @@
 
 
   /* =====================================================
-     MEDIA ID
+     HELPERS
   ===================================================== */
+
+  function escapeHTML(value) {
+    return String(value ?? "").replace(
+      /[&<>"']/g,
+      char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[char]
+    );
+  }
+
 
   function getMediaId(value) {
 
@@ -109,9 +127,21 @@
   }
 
 
-  /* =====================================================
-     IMAGE URL
-  ===================================================== */
+  function getImageSource(value) {
+
+    const id = getMediaId(value);
+
+    if (id) return getImageURL(id);
+
+    const source = String(value || "");
+
+    if (/^(https?:\/\/|data:image\/)/i.test(source)) {
+      return Promise.resolve(source);
+    }
+
+    return Promise.resolve("");
+  }
+
 
   async function getImageURL(id) {
 
@@ -123,8 +153,7 @@
 
     try {
 
-      const url =
-        await global.KSKMedia?.getImageURL?.(id);
+      const url = await global.KSKMedia?.getImageURL?.(id);
 
       if (url) {
         objectURLs.set(id, url);
@@ -134,32 +163,10 @@
 
     } catch (error) {
 
-      console.error(
-        "KSK Profile Media: Image loading failed.",
-        error
-      );
+      console.error("KSK Profile Media: Image loading failed.", error);
 
       return "";
     }
-  }
-
-
-  /* =====================================================
-     HTML ESCAPE
-  ===================================================== */
-
-  function escapeHTML(value) {
-
-    return String(value ?? "").replace(
-      /[&<>"']/g,
-      char => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#039;"
-      })[char]
-    );
   }
 
 
@@ -183,12 +190,9 @@
         overflow:hidden;
         position:relative;
         border-radius:16px;
-        background:linear-gradient(
-          135deg,
-          #243b55,
-          #141e30
-        );
+        background:linear-gradient(135deg,#243b55,#141e30);
         margin-bottom:-42px;
+        cursor:pointer;
       }
 
       .ksk-profile-cover img {
@@ -216,6 +220,7 @@
         padding:5px;
         border-radius:50%;
         background:var(--card-bg,#fff);
+        cursor:pointer;
       }
 
       .profile-card .profile-avatar .avatar {
@@ -229,35 +234,57 @@
         display:block;
       }
 
-      .ksk-profile-media-fields {
-        display:grid;
-        gap:14px;
-        margin-top:16px;
+      .ksk-profile-cover,
+      .profile-card .profile-avatar {
+        transition:filter .2s ease, transform .2s ease;
       }
 
-      .ksk-profile-upload {
+      .ksk-profile-cover:hover,
+      .profile-card .profile-avatar:hover {
+        filter:brightness(.92);
+      }
+
+      .ksk-profile-photo-hint {
+        position:absolute;
+        right:10px;
+        bottom:10px;
+        z-index:3;
+        width:34px;
+        height:34px;
         display:flex;
-        flex-direction:column;
-        gap:8px;
-        padding:12px;
-        border:1px solid var(--border-color,#ddd);
-        border-radius:12px;
+        align-items:center;
+        justify-content:center;
+        border-radius:50%;
+        color:#fff;
+        background:rgba(0,0,0,.65);
+        font-size:16px;
+        pointer-events:none;
       }
 
-      .ksk-profile-upload input {
-        width:100%;
+      .ksk-profile-avatar-hint {
+        position:absolute;
+        right:4px;
+        bottom:4px;
+        width:30px;
+        height:30px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:50%;
+        color:#fff;
+        background:#2563eb;
+        border:2px solid var(--card-bg,#fff);
+        font-size:13px;
+        pointer-events:none;
       }
 
-      .ksk-profile-preview {
-        width:100%;
-        max-height:150px;
-        object-fit:cover;
-        border-radius:10px;
-        display:none;
-      }
-
-      .ksk-profile-preview.has-image {
-        display:block;
+      .ksk-profile-upload-input {
+        position:fixed !important;
+        width:1px !important;
+        height:1px !important;
+        opacity:0 !important;
+        pointer-events:none !important;
+        left:-9999px !important;
       }
 
       .ksk-nav-avatar {
@@ -266,6 +293,83 @@
         border-radius:50%;
         object-fit:cover;
         display:block;
+      }
+
+      /* CROP EDITOR */
+
+      .ksk-crop-layout {
+        display:grid;
+        gap:16px;
+      }
+
+      .ksk-crop-stage {
+        width:100%;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        overflow:hidden;
+        border-radius:14px;
+        padding:12px;
+        background:#111827;
+      }
+
+      .ksk-crop-stage canvas {
+        display:block;
+        max-width:100%;
+        max-height:42vh;
+        object-fit:contain;
+        background:#111827;
+      }
+
+      .ksk-crop-controls {
+        display:grid;
+        gap:12px;
+      }
+
+      .ksk-crop-control {
+        display:grid;
+        gap:6px;
+      }
+
+      .ksk-crop-control label {
+        font-size:13px;
+        font-weight:600;
+        color:var(--color-text);
+      }
+
+      .ksk-crop-control input {
+        width:100%;
+        accent-color:var(--color-primary,#2563eb);
+      }
+
+      .ksk-crop-note {
+        font-size:12px;
+        color:var(--color-text-secondary);
+        line-height:1.6;
+      }
+
+      .ksk-profile-editor {
+        display:grid;
+        gap:14px;
+      }
+
+      .ksk-profile-editor .form-group {
+        display:grid;
+        gap:7px;
+      }
+
+      .ksk-profile-editor .form-label {
+        font-weight:600;
+      }
+
+      @media(max-width:480px) {
+        .ksk-profile-cover {
+          height:150px;
+        }
+
+        .ksk-crop-stage canvas {
+          max-height:36vh;
+        }
       }
 
     `;
@@ -288,11 +392,13 @@
 
     const user = profile();
 
-    const id = getMediaId(
-      user.avatarMediaId || user.avatar
-    );
+    const source = user.avatarMediaId || user.avatar || "";
 
-    if (!id) {
+    const url = await getImageSource(source);
+
+    if (!button.isConnected) return;
+
+    if (!url) {
 
       if (button.querySelector("img")) {
         button.textContent = "👤";
@@ -301,11 +407,6 @@
       return;
     }
 
-    const url = await getImageURL(id);
-
-    if (!url || !button.isConnected) return;
-
-    // एउटै URL को Image भए पुनः DOM नबदल्ने
     const currentImage = $("img", button);
 
     if (currentImage?.src === url) return;
@@ -328,9 +429,7 @@
 
   async function updateProfileDisplay() {
 
-    const card = $(
-      ".profile-section .profile-card"
-    );
+    const card = $(".profile-section .profile-card");
 
     if (!card) {
       await updateFooterAvatar();
@@ -339,23 +438,24 @@
 
     const user = profile();
 
+
     /* COVER CONTAINER */
 
-    let cover = $(
-      ".ksk-profile-cover",
-      card
-    );
+    let cover = $(".ksk-profile-cover", card);
 
     if (!cover) {
 
       cover = document.createElement("div");
 
       cover.className = "ksk-profile-cover";
-
-      const avatar = $(
-        ".profile-avatar",
-        card
+      cover.setAttribute("role", "button");
+      cover.setAttribute("tabindex", "0");
+      cover.setAttribute(
+        "aria-label",
+        t("Cover फोटो परिवर्तन गर्नुहोस्", "Change cover photo")
       );
+
+      const avatar = $(".profile-avatar", card);
 
       if (avatar) {
         card.insertBefore(cover, avatar);
@@ -367,74 +467,89 @@
 
     /* COVER IMAGE */
 
-    const coverId = getMediaId(
-      user.coverMediaId || user.cover
-    );
+    const coverSource = user.coverMediaId || user.cover || "";
+    const coverURL = await getImageSource(coverSource);
 
-    if (coverId) {
+    if (!cover.isConnected) return;
 
-      const url = await getImageURL(coverId);
+    if (coverURL) {
 
-      if (url && cover.isConnected) {
+      const currentImage = $("img", cover);
 
-        const currentImage = $("img", cover);
+      if (currentImage?.src !== coverURL) {
 
-        if (currentImage?.src !== url) {
+        cover.innerHTML = "";
 
-          cover.innerHTML = "";
+        const img = document.createElement("img");
 
-          const img = document.createElement("img");
+        img.src = coverURL;
+        img.alt = "Cover Photo";
 
-          img.src = url;
-          img.alt = "Cover Photo";
-
-          cover.appendChild(img);
-        }
+        cover.appendChild(img);
       }
 
-    } else {
+    } else if (!$(".ksk-profile-cover-empty", cover)) {
 
-      if (!$(".ksk-profile-cover-empty", cover)) {
+      cover.innerHTML = `
+        <div class="ksk-profile-cover-empty">🌄</div>
+      `;
+    }
 
-        cover.innerHTML = `
-          <div class="ksk-profile-cover-empty">
-            🌄
-          </div>
-        `;
-      }
+    if (!$(".ksk-profile-photo-hint", cover)) {
+      const hint = document.createElement("span");
+
+      hint.className = "ksk-profile-photo-hint";
+      hint.textContent = "📷";
+
+      cover.appendChild(hint);
     }
 
 
-    /* AVATAR IMAGE */
+    /* AVATAR */
 
-    const avatarId = getMediaId(
-      user.avatarMediaId || user.avatar
-    );
+    const avatarBox = $(".profile-avatar", card);
+    const avatarInner = $(".profile-avatar .avatar", card);
 
-    const avatarBox = $(
-      ".profile-avatar .avatar",
-      card
-    );
+    const avatarSource = user.avatarMediaId || user.avatar || "";
+    const avatarURL = await getImageSource(avatarSource);
 
-    if (avatarBox && avatarId) {
+    if (!card.isConnected) return;
 
-      const url = await getImageURL(avatarId);
+    if (avatarInner && avatarURL) {
 
-      if (url && avatarBox.isConnected) {
+      const currentImage = $("img", avatarInner);
 
-        const currentImage = $("img", avatarBox);
+      if (currentImage?.src !== avatarURL) {
 
-        if (currentImage?.src !== url) {
+        avatarInner.innerHTML = "";
 
-          avatarBox.innerHTML = "";
+        const img = document.createElement("img");
 
-          const img = document.createElement("img");
+        img.src = avatarURL;
+        img.alt = "Profile Avatar";
 
-          img.src = url;
-          img.alt = "Profile Avatar";
+        avatarInner.appendChild(img);
+      }
+    }
 
-          avatarBox.appendChild(img);
-        }
+    if (avatarBox) {
+
+      avatarBox.setAttribute("role", "button");
+      avatarBox.setAttribute("tabindex", "0");
+
+      avatarBox.setAttribute(
+        "aria-label",
+        t("प्रोफाइल फोटो परिवर्तन गर्नुहोस्", "Change profile photo")
+      );
+
+      if (!$(".ksk-profile-avatar-hint", avatarBox)) {
+
+        const hint = document.createElement("span");
+
+        hint.className = "ksk-profile-avatar-hint";
+        hint.textContent = "📷";
+
+        avatarBox.appendChild(hint);
       }
     }
 
@@ -443,43 +558,34 @@
 
 
   /* =====================================================
-     IMAGE PREVIEW
+     HIDDEN GALLERY INPUT
   ===================================================== */
 
-  function bindPreview(
-    modal,
-    inputId,
-    previewId
-  ) {
+  function openGallery(type) {
 
-    const input = $(
-      `#${inputId}`,
-      modal.element
-    );
+    if (busy) return;
 
-    const image = $(
-      `#${previewId}`,
-      modal.element
-    );
+    const input = document.createElement("input");
 
-    if (!input || !image) return;
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp";
+    input.className = "ksk-profile-upload-input";
+    input.setAttribute("aria-label", "Choose photo");
 
     input.addEventListener("change", () => {
 
       const file = input.files?.[0];
 
+      input.remove();
+
       if (!file) return;
 
-      if (!file.type.startsWith("image/")) {
+      if (!String(file.type).startsWith("image/")) {
 
         toast(
-          isEnglish()
-            ? "Please select an image."
-            : "कृपया फोटो छान्नुहोस्।",
+          t("कृपया फोटो फाइल छान्नुहोस्।", "Please select an image."),
           "warning"
         );
-
-        input.value = "";
 
         return;
       }
@@ -487,35 +593,371 @@
       if (file.size > 12 * 1024 * 1024) {
 
         toast(
-          isEnglish()
-            ? "Image must be smaller than 12 MB."
-            : "फोटो १२ MB भन्दा सानो हुनुपर्छ।",
+          t("फोटो १२ MB भन्दा सानो हुनुपर्छ।", "Image must be smaller than 12 MB."),
           "warning"
         );
-
-        input.value = "";
 
         return;
       }
 
-      const oldURL = image.dataset.previewURL;
+      openCropEditor(file, type);
+    }, { once: true });
 
-      if (oldURL) {
-        URL.revokeObjectURL(oldURL);
-      }
+    document.body.appendChild(input);
+
+    // Direct user interaction opens the device gallery.
+    input.click();
+  }
+
+
+  /* =====================================================
+     IMAGE CROP ENGINE
+  ===================================================== */
+
+  function loadImage(file) {
+
+    return new Promise((resolve, reject) => {
 
       const url = URL.createObjectURL(file);
 
-      image.src = url;
-      image.dataset.previewURL = url;
+      const image = new Image();
 
-      image.classList.add("has-image");
+      image.onload = () => resolve({ image, url });
+
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("फोटो खोल्न सकिएन।"));
+      };
+
+      image.src = url;
+    });
+  }
+
+
+  function openCropEditor(file, type) {
+
+    const isAvatar = type === "avatar";
+
+    const aspect = isAvatar ? 1 : 3;
+
+    const outputWidth = isAvatar ? 900 : 1500;
+    const outputHeight = Math.round(outputWidth / aspect);
+
+    const title = isAvatar
+      ? t("प्रोफाइल फोटो मिलाउनुहोस्", "Crop Profile Photo")
+      : t("Cover फोटो मिलाउनुहोस्", "Crop Cover Photo");
+
+    const modal = openModal({
+
+      title,
+
+      content: `
+
+        <div class="ksk-crop-layout">
+
+          <div class="ksk-crop-stage">
+            <canvas id="kskCropCanvas"></canvas>
+          </div>
+
+          <div class="ksk-crop-controls">
+
+            <div class="ksk-crop-control">
+              <label for="kskCropZoom">
+                ${t("Zoom", "Zoom")}
+              </label>
+              <input
+                id="kskCropZoom"
+                type="range"
+                min="1"
+                max="3"
+                step="0.01"
+                value="1">
+            </div>
+
+            <div class="ksk-crop-control">
+              <label for="kskCropX">
+                ${t("दायाँ / बायाँ", "Horizontal position")}
+              </label>
+              <input
+                id="kskCropX"
+                type="range"
+                min="-100"
+                max="100"
+                value="0">
+            </div>
+
+            <div class="ksk-crop-control">
+              <label for="kskCropY">
+                ${t("माथि / तल", "Vertical position")}
+              </label>
+              <input
+                id="kskCropY"
+                type="range"
+                min="-100"
+                max="100"
+                value="0">
+            </div>
+
+          </div>
+
+          <p class="ksk-crop-note">
+            ${t(
+              "फोटोको सही भाग मिलाउन Zoom र Position स्लाइडर चलाउनुहोस्।",
+              "Adjust zoom and position to select the best part of your photo."
+            )}
+          </p>
+
+        </div>
+
+      `,
+
+      footer: `
+
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-modal-close>
+          ${t("रद्द", "Cancel")}
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-primary"
+          id="kskCropSave">
+          ${t("फोटो सुरक्षित गर्नुहोस्", "Save Photo")}
+        </button>
+
+      `
+    });
+
+    if (!modal) return;
+
+    const canvas = $("#kskCropCanvas", modal.element);
+    const context = canvas?.getContext("2d");
+
+    const zoomInput = $("#kskCropZoom", modal.element);
+    const xInput = $("#kskCropX", modal.element);
+    const yInput = $("#kskCropY", modal.element);
+    const saveButton = $("#kskCropSave", modal.element);
+
+    if (!canvas || !context) {
+      closeModal();
+      toast(t("फोटो तयार गर्न सकिएन।", "Could not prepare image."), "error");
+      return;
+    }
+
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
+
+    loadImage(file).then(({ image, url }) => {
+
+      activeCropURL = url;
+
+      if (!modal.element.isConnected) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      function drawCrop() {
+
+        const imageWidth = image.naturalWidth;
+        const imageHeight = image.naturalHeight;
+
+        const baseWidth = Math.min(
+          imageWidth,
+          imageHeight * aspect
+        );
+
+        const baseHeight = baseWidth / aspect;
+
+        const zoom = Number(zoomInput.value) || 1;
+
+        const cropWidth = baseWidth / zoom;
+        const cropHeight = baseHeight / zoom;
+
+        const maxX = Math.max(0, imageWidth - cropWidth);
+        const maxY = Math.max(0, imageHeight - cropHeight);
+
+        const xPosition = Number(xInput.value) / 100;
+        const yPosition = Number(yInput.value) / 100;
+
+        const sourceX =
+          maxX / 2 + (maxX / 2) * xPosition;
+
+        const sourceY =
+          maxY / 2 + (maxY / 2) * yPosition;
+
+        context.clearRect(0, 0, outputWidth, outputHeight);
+
+        context.drawImage(
+          image,
+          sourceX,
+          sourceY,
+          cropWidth,
+          cropHeight,
+          0,
+          0,
+          outputWidth,
+          outputHeight
+        );
+      }
+
+      drawCrop();
+
+      [zoomInput, xInput, yInput].forEach(input => {
+        input.addEventListener("input", drawCrop);
+      });
+
+      saveButton?.addEventListener("click", async () => {
+
+        if (busy) return;
+
+        busy = true;
+
+        saveButton.disabled = true;
+
+        try {
+
+          const blob = await new Promise((resolve, reject) => {
+
+            canvas.toBlob(
+              result => {
+                if (result) resolve(result);
+                else reject(new Error("फोटो Crop गर्न सकिएन।"));
+              },
+              "image/jpeg",
+              0.9
+            );
+          });
+
+          const croppedFile = new File(
+            [blob],
+            isAvatar ? "profile-avatar.jpg" : "profile-cover.jpg",
+            { type: "image/jpeg" }
+          );
+
+          closeModal();
+
+          await saveProfilePhoto(croppedFile, type);
+
+        } catch (error) {
+
+          console.error("KSK Crop failed:", error);
+
+          toast(
+            error.message || t("फोटो तयार गर्न सकिएन।", "Could not prepare photo."),
+            "error"
+          );
+
+        } finally {
+
+          busy = false;
+
+          if (activeCropURL) {
+            URL.revokeObjectURL(activeCropURL);
+            activeCropURL = "";
+          }
+        }
+
+      });
+
+    }).catch(error => {
+
+      console.error("KSK Crop image loading failed:", error);
+
+      closeModal();
+
+      toast(
+        t("फोटो खोल्न सकिएन।", "Could not open image."),
+        "error"
+      );
     });
   }
 
 
   /* =====================================================
-     PROFILE EDITOR
+     SAVE AVATAR / COVER
+  ===================================================== */
+
+  async function saveProfilePhoto(file, type) {
+
+    if (busy) return;
+
+    busy = true;
+
+    let savedId = "";
+
+    try {
+
+      const saved = await global.KSKMedia?.saveImage?.(
+        file,
+        { name: type === "avatar" ? "profile-avatar.jpg" : "profile-cover.jpg" }
+      );
+
+      if (!saved?.id) {
+        throw new Error("फोटो सुरक्षित गर्न सकिएन।");
+      }
+
+      savedId = saved.id;
+
+      const current = profile();
+
+      const payload = type === "avatar"
+        ? {
+            avatar: savedId,
+            avatarMediaId: savedId
+          }
+        : {
+            cover: savedId,
+            coverMediaId: savedId
+          };
+
+      const result = global.KSKData?.saveProfile?.(payload);
+
+      if (!result) {
+        throw new Error("प्रोफाइल अपडेट गर्न सकिएन।");
+      }
+
+      await updateProfileDisplay();
+
+      global.KSKApp?.refreshCurrentPage?.();
+
+      await updateProfileDisplay();
+
+      toast(
+        type === "avatar"
+          ? t("प्रोफाइल फोटो परिवर्तन भयो।", "Profile photo updated.")
+          : t("Cover फोटो परिवर्तन भयो।", "Cover photo updated."),
+        "success"
+      );
+
+    } catch (error) {
+
+      console.error("KSK Profile Photo Save Failed:", error);
+
+      if (savedId) {
+        try {
+          await global.KSKMedia?.deleteImage?.(savedId);
+          objectURLs.delete(savedId);
+        } catch (cleanupError) {
+          console.warn("KSK media cleanup failed:", cleanupError);
+        }
+      }
+
+      toast(
+        error.message ||
+        t("फोटो सुरक्षित गर्न सकिएन।", "Could not save photo."),
+        "error"
+      );
+
+    } finally {
+      busy = false;
+    }
+  }
+
+
+  /* =====================================================
+     PROFILE INFORMATION EDITOR
   ===================================================== */
 
   function openEditor() {
@@ -526,22 +968,16 @@
 
     const modal = openModal({
 
-      title: isEnglish()
-        ? "Edit Profile"
-        : "प्रोफाइल सम्पादन",
+      title: t("प्रोफाइल सम्पादन", "Edit Profile"),
 
       content: `
 
-        <form id="kskProfileMediaForm">
+        <form id="kskProfileMediaForm" class="ksk-profile-editor">
 
           <div class="form-group">
 
-            <label
-              class="form-label"
-              for="kskPMName">
-
-              ${isEnglish() ? "Name" : "नाम"}
-
+            <label class="form-label" for="kskPMName">
+              ${t("नाम", "Name")}
             </label>
 
             <input
@@ -552,15 +988,10 @@
 
           </div>
 
-
           <div class="form-group">
 
-            <label
-              class="form-label"
-              for="kskPMBio">
-
-              ${isEnglish() ? "About me" : "मेरो परिचय"}
-
+            <label class="form-label" for="kskPMBio">
+              ${t("मेरो परिचय", "About me")}
             </label>
 
             <textarea
@@ -571,15 +1002,10 @@
 
           </div>
 
-
           <div class="form-group">
 
-            <label
-              class="form-label"
-              for="kskPMLocation">
-
-              ${isEnglish() ? "Location" : "ठेगाना"}
-
+            <label class="form-label" for="kskPMLocation">
+              ${t("ठेगाना", "Location")}
             </label>
 
             <input
@@ -590,51 +1016,12 @@
 
           </div>
 
-
-          <div class="ksk-profile-media-fields">
-
-            <div class="ksk-profile-upload">
-
-              <strong>
-                ${isEnglish()
-                  ? "Profile Avatar"
-                  : "प्रोफाइल फोटो"}
-              </strong>
-
-              <input
-                id="kskPMAvatar"
-                type="file"
-                accept="image/jpeg,image/png,image/webp">
-
-              <img
-                id="kskPMAvatarPreview"
-                class="ksk-profile-preview"
-                alt="Avatar preview">
-
-            </div>
-
-
-            <div class="ksk-profile-upload">
-
-              <strong>
-                ${isEnglish()
-                  ? "Cover Photo"
-                  : "Cover फोटो"}
-              </strong>
-
-              <input
-                id="kskPMCover"
-                type="file"
-                accept="image/jpeg,image/png,image/webp">
-
-              <img
-                id="kskPMCoverPreview"
-                class="ksk-profile-preview"
-                alt="Cover preview">
-
-            </div>
-
-          </div>
+          <p class="ksk-crop-note">
+            ${t(
+              "Avatar वा Cover परिवर्तन गर्न प्रोफाइल पेजमा फोटोमा सिधै ट्याप गर्नुहोस्।",
+              "Tap your Avatar or Cover Photo directly on your profile page to change it."
+            )}
+          </p>
 
         </form>
 
@@ -646,22 +1033,15 @@
           class="btn btn-secondary"
           type="button"
           data-modal-close>
-
-          ${isEnglish() ? "Cancel" : "रद्द"}
-
+          ${t("रद्द", "Cancel")}
         </button>
-
 
         <button
           class="btn btn-primary"
           type="submit"
           form="kskProfileMediaForm"
           id="kskPMSave">
-
-          ${isEnglish()
-            ? "Save Profile"
-            : "सुरक्षित गर्नुहोस्"}
-
+          ${t("सुरक्षित गर्नुहोस्", "Save Profile")}
         </button>
 
       `
@@ -669,217 +1049,65 @@
 
     if (!modal) return;
 
+    const form = $("#kskProfileMediaForm", modal.element);
 
-    /* PREVIEWS */
+    form?.addEventListener("submit", async event => {
 
-    bindPreview(
-      modal,
-      "kskPMAvatar",
-      "kskPMAvatarPreview"
-    );
+      event.preventDefault();
 
-    bindPreview(
-      modal,
-      "kskPMCover",
-      "kskPMCoverPreview"
-    );
+      if (busy) return;
 
+      busy = true;
 
-    /* FORM */
+      const saveButton = $("#kskPMSave", modal.element);
 
-    const form = $(
-      "#kskProfileMediaForm",
-      modal.element
-    );
+      if (saveButton) saveButton.disabled = true;
 
-    form?.addEventListener(
-      "submit",
-      async event => {
+      try {
 
-        event.preventDefault();
+        const result = global.KSKData?.saveProfile?.({
 
-        if (busy) return;
+          name: $("#kskPMName", modal.element)?.value.trim() || "",
 
-        busy = true;
+          bio: $("#kskPMBio", modal.element)?.value.trim() || "",
 
-        const saveButton = $(
-          "#kskPMSave",
-          modal.element
+          location: $("#kskPMLocation", modal.element)?.value.trim() || ""
+
+        });
+
+        if (!result) {
+          throw new Error("Profile save failed.");
+        }
+
+        closeModal();
+
+        global.KSKApp?.refreshCurrentPage?.();
+
+        await updateProfileDisplay();
+
+        toast(
+          t("प्रोफाइल सफलतापूर्वक अपडेट भयो।", "Profile updated successfully."),
+          "success"
         );
 
-        if (saveButton) {
-          saveButton.disabled = true;
-        }
+      } catch (error) {
 
-        let avatarId =
-          user.avatarMediaId || user.avatar || "";
+        console.error("KSK Profile Save Failed:", error);
 
-        let coverId =
-          user.coverMediaId || user.cover || "";
+        toast(
+          t("प्रोफाइल सुरक्षित भएन। फेरि प्रयास गर्नुहोस्।", "Profile could not be saved."),
+          "error"
+        );
 
-        const savedMedia = [];
-
-        try {
-
-          const avatarFile = $(
-            "#kskPMAvatar",
-            modal.element
-          )?.files?.[0];
-
-          const coverFile = $(
-            "#kskPMCover",
-            modal.element
-          )?.files?.[0];
-
-
-          /* SAVE AVATAR */
-
-          if (avatarFile) {
-
-            const saved =
-              await global.KSKMedia.saveImage(
-                avatarFile
-              );
-
-            if (!saved?.id) {
-              throw new Error(
-                "Avatar upload failed"
-              );
-            }
-
-            avatarId = saved.id;
-
-            savedMedia.push(saved.id);
-          }
-
-
-          /* SAVE COVER */
-
-          if (coverFile) {
-
-            const saved =
-              await global.KSKMedia.saveImage(
-                coverFile
-              );
-
-            if (!saved?.id) {
-              throw new Error(
-                "Cover upload failed"
-              );
-            }
-
-            coverId = saved.id;
-
-            savedMedia.push(saved.id);
-          }
-
-
-          /* SAVE PROFILE */
-
-          const result =
-            global.KSKData?.saveProfile?.({
-
-              name: $(
-                "#kskPMName",
-                modal.element
-              )?.value.trim() || "",
-
-              bio: $(
-                "#kskPMBio",
-                modal.element
-              )?.value.trim() || "",
-
-              location: $(
-                "#kskPMLocation",
-                modal.element
-              )?.value.trim() || "",
-
-              avatar: avatarId,
-              avatarMediaId: avatarId,
-
-              cover: coverId,
-              coverMediaId: coverId
-
-            });
-
-
-          if (!result) {
-            throw new Error(
-              "Profile save failed"
-            );
-          }
-
-
-          /* CLOSE AND REFRESH */
-
-          closeModal();
-
-          global.KSKApp?.refreshCurrentPage?.();
-
-          await updateProfileDisplay();
-
-
-          toast(
-            isEnglish()
-              ? "Profile updated successfully."
-              : "प्रोफाइल सफलतापूर्वक अपडेट भयो।",
-            "success"
-          );
-
-
-        } catch (error) {
-
-          console.error(
-            "KSK profile media save failed:",
-            error
-          );
-
-
-          /* CLEANUP NEW MEDIA */
-
-          for (const id of savedMedia) {
-
-            try {
-
-              await global.KSKMedia?.deleteImage?.(
-                id
-              );
-
-              objectURLs.delete(id);
-
-            } catch (cleanupError) {
-
-              console.warn(
-                "KSK Media cleanup failed:",
-                cleanupError
-              );
-            }
-          }
-
-
-          toast(
-            isEnglish()
-              ? "Profile could not be saved. Please try again."
-              : "प्रोफाइल सुरक्षित भएन। फेरि प्रयास गर्नुहोस्।",
-            "error"
-          );
-
-
-        } finally {
-
-          busy = false;
-
-          if (saveButton?.isConnected) {
-            saveButton.disabled = false;
-          }
-        }
+      } finally {
+        busy = false;
       }
-    );
+    });
   }
 
 
   /* =====================================================
-     EDIT BUTTON INTERCEPTION
+     CLICK INTERCEPTION
   ===================================================== */
 
   function handleClick(event) {
@@ -888,17 +1116,91 @@
 
     if (!target?.closest) return;
 
-    const editButton = target.closest(
-      "[data-edit-profile]"
+
+    /* AVATAR GALLERY */
+
+    const avatar = target.closest(
+      ".profile-section .profile-card .profile-avatar"
     );
 
-    if (!editButton) return;
+    if (avatar) {
 
-    event.preventDefault();
+      event.preventDefault();
+      event.stopImmediatePropagation();
 
-    event.stopImmediatePropagation();
+      openGallery("avatar");
 
-    openEditor();
+      return;
+    }
+
+
+    /* COVER GALLERY */
+
+    const cover = target.closest(
+      ".profile-section .profile-card .ksk-profile-cover"
+    );
+
+    if (cover) {
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      openGallery("cover");
+
+      return;
+    }
+
+
+    /* EDIT PROFILE */
+
+    const editButton = target.closest("[data-edit-profile]");
+
+    if (editButton) {
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      openEditor();
+    }
+  }
+
+
+  /* =====================================================
+     KEYBOARD ACCESSIBILITY
+  ===================================================== */
+
+  function handleKeydown(event) {
+
+    if (
+      event.key !== "Enter" &&
+      event.key !== " "
+    ) {
+      return;
+    }
+
+    const target = event.target;
+
+    if (!target?.matches) return;
+
+    if (target.matches(".ksk-profile-cover")) {
+
+      event.preventDefault();
+
+      openGallery("cover");
+
+      return;
+    }
+
+    if (
+      target.matches(
+        ".profile-section .profile-card .profile-avatar"
+      )
+    ) {
+
+      event.preventDefault();
+
+      openGallery("avatar");
+    }
   }
 
 
@@ -913,8 +1215,6 @@
 
   /* =====================================================
      INITIALIZE
-     No MutationObserver.
-     Only required application events.
   ===================================================== */
 
   function initialize() {
@@ -925,49 +1225,36 @@
 
     injectStyles();
 
-
-    /* PROFILE EDIT CLICK */
-
     document.addEventListener(
       "click",
       handleClick,
       true
     );
 
-
-    /* NAVIGATION EVENT */
+    document.addEventListener(
+      "keydown",
+      handleKeydown,
+      true
+    );
 
     global.addEventListener(
       "ksk:navigate",
-      () => {
-        updateProfileDisplay();
-      }
+      updateProfileDisplay
     );
-
-
-    /* PROFILE DATA EVENT */
 
     global.addEventListener(
       "ksk:data-change",
       event => {
 
-        if (
-          event.detail?.collection === "profile"
-        ) {
+        if (event.detail?.collection === "profile") {
           updateProfileDisplay();
         }
       }
     );
 
-
-    /* INITIAL DISPLAY */
-
     updateProfileDisplay();
 
-
-    console.info(
-      "KSK Profile Media UI initialized."
-    );
+    console.info("KSK Profile Media UI initialized.");
   }
 
 
@@ -981,7 +1268,9 @@
 
     refresh,
 
-    openEditor
+    openEditor,
+
+    openGallery
 
   });
 
