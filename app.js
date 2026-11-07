@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -31,12 +32,6 @@
      SELECTORS AND SHARED MODULES
   ======================================================= */
 
-  const $ = (selector, root = document) =>
-    root.querySelector(selector);
-
-  const $$ = (selector, root = document) =>
-    [...root.querySelectorAll(selector)];
-
   const DATA = () => global.KSKData;
   const SETTINGS = () => global.KSKSettings;
   const SETTINGS_UI = () => global.KSKSettingsUI;
@@ -60,16 +55,6 @@
 
   function cacheElements() {
     const ids = [
-      "homePage",
-      "otherPage",
-      "otherPageTitle",
-      "otherPageText",
-      "bottomNav",
-      "storiesList",
-      "feedList",
-      "emptyFeed",
-      "openComposer",
-      "quickText",
       "quickPhoto",
       "quickVideo",
       "searchPanel",
@@ -133,10 +118,6 @@
     return api.show(message, type, duration);
   }
 
-  function confirmAction(message) {
-    return global.confirm(message);
-  }
-
   /* =======================================================
      DATE AND PROFILE HELPERS
   ======================================================= */
@@ -161,22 +142,6 @@
     );
   }
 
-  function formatTime(value) {
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "";
-    }
-
-    return date.toLocaleTimeString(
-      isEnglish() ? "en-US" : "ne-NP",
-      {
-        hour: "2-digit",
-        minute: "2-digit"
-      }
-    );
-  }
-
   function profile() {
     return DATA()?.getProfile?.() || {
       id: "",
@@ -188,11 +153,6 @@
       avatarMediaId: "",
       coverMediaId: ""
     };
-  }
-
-  function displayName() {
-    return profile().name ||
-      (isEnglish() ? "You" : "तपाईं");
   }
 
   function initial(value) {
@@ -245,10 +205,6 @@
     return MODAL().openModal(options);
   }
 
-  function closeModal() {
-    MODAL()?.closeModal?.();
-  }
-
   /* =======================================================
      DATA ACCESS
   ======================================================= */
@@ -280,10 +236,6 @@
 
   function renderStories() {
     return global.KSKHomePage?.renderStories?.() || false;
-  }
-
-  function renderPost(post) {
-    return global.KSKHomePage?.renderPost?.(post) || "";
   }
 
   function renderFeed() {
@@ -433,25 +385,6 @@
      FRIENDS
   ======================================================= */
 
-  function renderFriends() {
-    const friendsPage = global.KSKFriendsPage;
-
-    if (!friendsPage?.render) {
-      return `
-        <div class="empty-state">
-          ${isEnglish()
-            ? "Friends page is unavailable. Please reload the app."
-            : "साथीहरूको पृष्ठ उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
-        </div>
-      `;
-    }
-
-    return friendsPage.render({
-      friends: getFriends(),
-      isEnglish: isEnglish()
-    });
-  }
-
   function openAddFriend() {
     const page = global.KSKFriendsPage;
 
@@ -467,97 +400,6 @@
     );
 
     return false;
-  }
-
-  /* =======================================================
-     MESSAGES
-  ======================================================= */
-
-  function renderMessages() {
-    const page = global.KSKMessagesPage;
-
-    if (typeof page?.render === "function") {
-      return page.render();
-    }
-
-    return `
-      <div class="empty-state">
-        ${isEnglish()
-          ? "Messages are unavailable. Please reload the app."
-          : "सन्देश सुविधा उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
-      </div>
-    `;
-  }
-
-  /* =======================================================
-     NOTIFICATIONS
-  ======================================================= */
-
-  function renderNotifications() {
-    const page = global.KSKNotificationsPage;
-
-    if (typeof page?.render === "function") {
-      return page.render();
-    }
-
-    return `
-      <div class="empty-state">
-        ${isEnglish()
-          ? "Notifications are unavailable. Please reload the app."
-          : "सूचना सुविधा अहिले उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
-      </div>
-    `;
-  }
-
-  /* =======================================================
-     SAVED POSTS
-  ======================================================= */
-
-  function renderSaved() {
-    const page = global.KSKSavedPage;
-
-    if (typeof page?.render === "function") {
-      return page.render({
-        isEnglish: isEnglish(),
-        renderPost: renderPost
-      });
-    }
-
-    const ids = DATA()?.getSavedPosts?.() || [];
-
-    const posts = ids
-      .map(id => DATA()?.getPost?.(id))
-      .filter(Boolean);
-
-    return `
-      <section>
-
-        <h3 class="section-title">
-          ${isEnglish()
-            ? "Saved Posts"
-            : "सेभ गरिएका पोस्ट"}
-        </h3>
-
-        ${
-          posts.length
-            ? posts.map(renderPost).join("")
-            : `
-              <div class="empty-state">
-
-                <div class="empty-state-icon">🔖</div>
-
-                <p>
-                  ${isEnglish()
-                    ? "No saved posts yet."
-                    : "अहिलेसम्म पोस्ट सेभ गरिएको छैन।"}
-                </p>
-
-              </div>
-            `
-        }
-
-      </section>
-    `;
   }
 
   /* =======================================================
