@@ -37,11 +37,6 @@
     })[character]);
   }
 
-  function initial(value) {
-    return String(value || "").trim().charAt(0) ||
-      (isEnglish() ? "U" : "स");
-  }
-
   function getPosts() {
     const posts = global.KSKData?.getPosts?.();
     return Array.isArray(posts) ? posts : [];
@@ -68,6 +63,58 @@
         timeStyle: "short"
       }
     );
+  }
+
+  /*
+   * STORY TEXT PREVIEW STYLES
+   */
+
+  function ensureStoryPreviewStyles() {
+    if ($("#kskStoryPreviewStyles")) return;
+
+    const style = document.createElement("style");
+
+    style.id = "kskStoryPreviewStyles";
+
+    style.textContent = `
+      .story-avatar .story-text-preview {
+        display: -webkit-box;
+        width: 100%;
+        max-height: 100%;
+        padding: 3px;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow-wrap: anywhere;
+        text-align: center;
+        font-size: 9px;
+        line-height: 1.2;
+        font-weight: 700;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  /*
+   * CREATE SHORT STORY TEXT
+   */
+
+  function getStoryPreview(text) {
+    const cleanText = String(text || "")
+      .trim()
+      .replace(/\s+/g, " ");
+
+    if (!cleanText) return "";
+
+    const characters = Array.from(cleanText);
+    const limit = 32;
+
+    if (characters.length <= limit) {
+      return cleanText;
+    }
+
+    return characters.slice(0, limit).join("") + "…";
   }
 
   /*
@@ -102,12 +149,26 @@
 
   /*
    * STORIES RENDERING
+   *
+   * Photo story:
+   *   Show photo thumbnail.
+   *
+   * Text-only story:
+   *   Show a short text preview.
+   *
+   * Photo + text:
+   *   Show photo thumbnail only.
+   *
+   * Empty story:
+   *   Do not render.
    */
 
   function renderStories() {
     const storiesList = $("#storiesList");
 
     if (!storiesList) return false;
+
+    ensureStoryPreviewStyles();
 
     const stories = getStories();
 
@@ -131,24 +192,60 @@
       </button>
     `;
 
-    const storyItems = stories.map(story => `
-      <button
-        class="story-card"
-        type="button"
-        data-story-view="${escapeHTML(story.id)}">
+    const storyItems = stories
+      .filter(story => {
+        if (!story || typeof story !== "object") {
+          return false;
+        }
 
-        <span class="story-avatar">
-          ${escapeHTML(initial(story.author))}
-        </span>
+        const hasPhoto = Boolean(story.mediaId);
+        const hasText = Boolean(
+          String(story.text || "").trim()
+        );
 
-        <span class="story-name">
-          ${escapeHTML(story.author || "सदस्य")}
-        </span>
+        return hasPhoto || hasText;
+      })
+      .map(story => {
+        const hasPhoto = Boolean(story.mediaId);
 
-      </button>
-    `).join("");
+        const preview = hasPhoto
+          ? ""
+          : getStoryPreview(story.text);
+
+        return `
+          <button
+            class="story-card"
+            type="button"
+            data-story-view="${escapeHTML(story.id)}"
+            aria-label="${escapeHTML(story.author || "सदस्य")}">
+
+            <span class="story-avatar">
+              ${
+                hasPhoto
+                  ? ""
+                  : `
+                    <span class="story-text-preview">
+                      ${escapeHTML(preview)}
+                    </span>
+                  `
+              }
+            </span>
+
+            <span class="story-name">
+              ${escapeHTML(story.author || "सदस्य")}
+            </span>
+
+          </button>
+        `;
+      })
+      .join("");
 
     storiesList.innerHTML = addStory + storyItems;
+
+    /*
+     * Media UI loads the actual photo thumbnails.
+     * Text-only stories keep their text preview.
+     */
 
     global.KSKMediaUI?.refresh?.();
 
