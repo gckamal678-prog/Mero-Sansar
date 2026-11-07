@@ -347,157 +347,38 @@
     MEDIA_UI()?.refresh?.();
   }
 
-  /*  POST RENDERING  */
+  /* =======================================================
+     POST RENDERING
+     Responsibility:
+     KSKPostCard owns all Post Card HTML rendering.
+     app.js only connects the component to the application.
+  ======================================================= */
 
   function renderPost(post) {
-    const id = escapeHTML(post.id);
-    const currentUser = profile();
-    const savedAuthor = String(post.author || "").trim();
+    if (!post || typeof post !== "object") {
+      return "";
+    }
 
-    const isPlaceholderAuthor = [
-      "तपाईं",
-      "you"
-    ].includes(savedAuthor.toLowerCase());
+    const postCard = global.KSKPostCard;
 
-    const author = escapeHTML(
-      isPlaceholderAuthor && currentUser.name
-        ? currentUser.name
-        : savedAuthor || "सदस्य"
-    );
-    const text = escapeHTML(post.text || "");
-    const date = escapeHTML(formatDate(post.createdAt));
+    if (typeof postCard?.render !== "function") {
+      console.error(
+        "KSKPostCard is unavailable. Check index.html script order."
+      );
 
-    const liked = Boolean(post.liked);
-    const likes = Math.max(0, Number(post.likes || 0));
-    const myReaction = post.myReaction || "";
+      return `
+        <div class="empty-state">
+          ${isEnglish()
+            ? "Post display is temporarily unavailable."
+            : "पोस्ट देखाउने सुविधा अहिले उपलब्ध छैन।"}
+        </div>
+      `;
+    }
 
-    const validReactions = ["🌹", "😘", "😢", "😠", "🤓"];
-
-    const reactionCounts = post.reactionCounts &&
-      typeof post.reactionCounts === "object"
-        ? post.reactionCounts
-        : {};
-
-    const reactionSummary = validReactions
-      .filter(emoji => Number(reactionCounts[emoji] || 0) > 0)
-      .sort((a, b) =>
-        Number(reactionCounts[b] || 0) -
-        Number(reactionCounts[a] || 0)
-      )
-      .slice(0, 5)
-      .join("");
-
-    const reactionIcon = reactionSummary ||
-      myReaction ||
-      (liked ? "❤️" : "♡");
-
-    const saved = (DATA()?.getSavedPosts?.() || [])
-      .some(item => String(item) === String(post.id));
-
-    const commentCount = Array.isArray(post.comments)
-      ? post.comments.length
-      : 0;
-
-    return `
-      <article
-        class="post-card"
-        data-post-id="${id}">
-
-        <header class="post-header">
-
-          ${avatarHTML(
-            post.author,
-            post.authorAvatar || "",
-            ""
-          )}
-
-          <div class="post-author">
-
-            <p class="post-author-name">
-              ${author}
-            </p>
-
-            <p class="post-time">
-              ${date}
-            </p>
-
-          </div>
-
-          <button
-            class="icon-button"
-            type="button"
-            data-post-menu="${id}"
-            aria-label="${isEnglish()
-              ? "Post options"
-              : "पोस्ट विकल्प"}">
-
-            ⋯
-
-          </button>
-
-        </header>
-
-        ${
-          text
-            ? `<div class="post-content">${text}</div>`
-            : ""
-        }
-
-        <footer class="post-actions">
-
-          <button
-            class="post-action ${liked ? "is-active" : ""}"
-            type="button"
-            data-post-action="like"
-            data-post-id="${id}"
-            aria-label="${isEnglish()
-              ? "React to post"
-              : "पोस्टमा Reaction दिनुहोस्"}"
-            title="${myReaction || (liked ? "❤️" : "Reaction")}">
-
-            ${reactionIcon}
-            ${likes}
-
-          </button>
-
-          <button
-            class="post-action"
-            type="button"
-            data-post-action="comment"
-            data-post-id="${id}">
-
-            💬
-            ${isEnglish() ? "Comment" : "टिप्पणी"}
-            ${commentCount ? `(${commentCount})` : ""}
-
-          </button>
-
-          <button
-            class="post-action"
-            type="button"
-            data-post-action="save"
-            data-post-id="${id}">
-
-            ${saved ? "🔖" : "☆"}
-            ${isEnglish() ? "Save" : "सेभ"}
-
-          </button>
-
-          <button
-            class="post-action"
-            type="button"
-            data-post-action="share"
-            data-post-id="${id}">
-
-            ↗
-            ${isEnglish() ? "Share" : "साझा"}
-
-          </button>
-
-        </footer>
-
-      </article>
-    `;
+    return postCard.render(post, {
+      isEnglish: isEnglish(),
+      formatDate: formatDate
+    });
   }
 
   /* =======================================================
@@ -1461,7 +1342,7 @@
     toast(
       selected === "en"
         ? "Language updated."
-        : "भाषा परिवर्तन भयो।",
+        : "भाषा परिवर्तन भयो.",
       "success"
     );
   }
