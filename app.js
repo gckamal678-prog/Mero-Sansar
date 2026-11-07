@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -79,8 +80,7 @@
       "searchToggle",
       "notificationsToggle",
       "settingsModal",
-      "closeSettings",
-      "toastContainer"
+      "closeSettings"
     ];
 
     ids.forEach(id => {
@@ -118,15 +118,24 @@
     return LANG()?.translate?.(key) || fallback || key;
   }
 
-  function toast(message, type = "info") {
+  /*
+   * Toast UI, animation, timing and removal are owned
+   * entirely by core/toast.js.
+   * app.js only calls the public Toast API.
+   */
+
+  function toast(message, type = "info", duration) {
     const api = TOAST();
 
-    if (api?.[type]) {
-      api[type](message);
-      return;
+    if (typeof api?.show !== "function") {
+      console.error(
+        "KSKToast is unavailable. Check index.html script order."
+      );
+
+      return null;
     }
 
-    api?.show?.(message, type);
+    return api.show(message, type, duration);
   }
 
   function confirmAction(message) {
@@ -271,8 +280,10 @@
     NAV()?.refreshNavigation?.();
   }
 
-  /*   STORIES — RENDERING ONLY
-     Creation and viewing belong to KSKMediaUI. */
+  /* =======================================================
+     STORIES — RENDERING ONLY
+     Creation and viewing belong to KSKMediaUI.
+  ======================================================= */
 
   function renderStories() {
     if (!els.storiesList) return;
@@ -323,9 +334,7 @@
 
   /* =======================================================
      POST RENDERING
-     Responsibility:
      KSKPostCard owns all Post Card HTML rendering.
-     app.js only connects the component to the application.
   ======================================================= */
 
   function renderPost(post) {
@@ -357,28 +366,20 @@
 
   /* =======================================================
      FEED RENDERING
-     Responsibility:
-     - Read posts from KSKData
-     - Filter posts using search query
-     - Render posts using renderPost()
-     - Refresh media rendering
   ======================================================= */
 
   function renderFeed() {
-
     if (!els.feedList) return;
 
     const query = searchQuery.toLowerCase();
 
     const filtered = getPosts().filter(post => {
-
       const searchable = [
         post.author || "",
         post.text || ""
       ].join(" ").toLowerCase();
 
       return searchable.includes(query);
-
     });
 
     els.feedList.innerHTML = filtered
@@ -391,7 +392,6 @@
     );
 
     MEDIA_UI()?.refresh?.();
-
   }
 
   /* =======================================================
@@ -581,10 +581,10 @@
         renderStories();
 
         toast(
-            isEnglish()
-              ? "Story published."
-              : "Story प्रकाशित भयो।",
-            "success"
+          isEnglish()
+            ? "Story published."
+            : "Story प्रकाशित भयो।",
+          "success"
         );
       }
     );
@@ -706,7 +706,6 @@
   ======================================================= */
 
   function sharePost(id) {
-
     const share = global.KSKShare;
 
     if (share?.sharePost) {
@@ -1067,7 +1066,7 @@
       }
 
       if (target.closest("[data-edit-profile]")) {
-        openProfileEditor();
+        PROFILE_MEDIA()?.openEditor?.();
         return;
       }
 
@@ -1275,6 +1274,13 @@
     cacheElements();
 
     /*
+     * Initialize Toast first.
+     * Toast UI and behavior belong to core/toast.js.
+     */
+
+    TOAST()?.initialize?.();
+
+    /*
      * Initialize shared systems.
      */
 
@@ -1283,6 +1289,7 @@
     THEME()?.initializeTheme?.();
     LANG()?.initialize?.();
     SETTINGS_UI()?.initialize?.();
+
     KSKPostActions()?.initialize?.({
       isEnglish,
       translate,
