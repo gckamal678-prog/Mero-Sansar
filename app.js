@@ -51,7 +51,6 @@
   const COMMENTS = () => global.KSKComments;
 
   let currentPage = "home";
-  let activeChatId = null;
   let searchQuery = "";
   let initialized = false;
 
@@ -1189,236 +1188,24 @@
   }
 
   /* =======================================================
-     MESSAGES — CHAT LIST
+     MESSAGES
+     KSKMessagesPage owns conversation rendering and actions.
   ======================================================= */
 
   function renderMessages() {
     const page = global.KSKMessagesPage;
 
     if (typeof page?.render === "function") {
-      return page.render({
-        activeChatId: activeChatId
-      });
-    }
-
-    const chats = getChats();
-
-    if (activeChatId) {
-      return renderChat(activeChatId);
-    }
-
-    if (!chats.length) {
-      return `
-        <section>
-          <div class="empty-state">
-            <div class="empty-state-icon">💬</div>
-            <h3 class="empty-state-title">
-              ${isEnglish()
-                ? "No conversations yet"
-                : "अहिलेसम्म सन्देश छैन"}
-            </h3>
-            <p>
-              ${isEnglish()
-                ? "Add friends to start a conversation."
-                : "कुरा सुरु गर्न साथी थप्नुहोस्।"}
-            </p>
-          </div>
-        </section>
-      `;
-    }
-
-    const messageItem = global.KSKMessageItem;
-
-    if (!messageItem?.render) {
-      return `
-        <div class="empty-state">
-          ${isEnglish()
-            ? "Messages are unavailable. Please reload the app."
-            : "सन्देश सुविधा उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
-        </div>
-      `;
+      return page.render();
     }
 
     return `
-      <section>
-        <h3 class="section-title">
-          ${isEnglish() ? "Messages" : "सन्देशहरू"}
-        </h3>
-        <div class="chat-list">
-          ${chats.map(chat =>
-            messageItem.render(chat, {
-              isEnglish: isEnglish()
-            })
-          ).join("")}
-        </div>
-      </section>
+      <div class="empty-state">
+        ${isEnglish()
+          ? "Messages are unavailable. Please reload the app."
+          : "सन्देश सुविधा उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
+      </div>
     `;
-  }
-
-  /* =======================================================
-     CHAT VIEW
-  ======================================================= */
-
-  function renderChat(chatId) {
-    const chat = getChats().find(
-      item => String(item.id) === String(chatId)
-    );
-
-    if (!chat) {
-      activeChatId = null;
-      return renderMessages();
-    }
-
-    const messages = chat.messages || [];
-
-    return `
-      <section class="chat-view">
-
-        <div class="chat-heading flex align-center gap-3">
-
-          <button
-            class="btn btn-secondary btn-sm"
-            type="button"
-            data-back-messages>
-            ←
-          </button>
-
-          ${avatarHTML(
-            chat.name,
-            chat.avatar
-          )}
-
-          <strong>
-            ${escapeHTML(chat.name || "साथी")}
-          </strong>
-
-        </div>
-
-        <div class="chat-messages">
-
-          ${
-            messages.length
-              ? messages.map(message => `
-                  <div class="chat-message ${
-                    message.fromMe
-                      ? "chat-message-mine"
-                      : ""
-                  }">
-
-                    <p>
-                      ${escapeHTML(message.text || "")}
-                    </p>
-
-                    <small class="post-time">
-                      ${escapeHTML(formatTime(
-                        message.time || message.createdAt
-                      ))}
-                    </small>
-
-                  </div>
-                `).join("")
-              : `
-                  <div class="empty-state">
-                    ${isEnglish()
-                      ? "Start the conversation."
-                      : "कुराकानी सुरु गर्नुहोस्।"}
-                  </div>
-                `
-          }
-
-        </div>
-
-        <form
-          id="kskMessageForm"
-          class="chat-form">
-
-          <input
-            id="kskMessageInput"
-            class="form-input"
-            maxlength="2000"
-            placeholder="${isEnglish()
-              ? "Write a message..."
-              : "सन्देश लेख्नुहोस्..."}"
-            required>
-
-          <button
-            class="btn btn-primary"
-            type="submit">
-
-            ${isEnglish()
-              ? "Send"
-              : "पठाउनुहोस्"}
-
-          </button>
-
-        </form>
-
-      </section>
-    `;
-  }
-
-  /* =======================================================
-     OPEN FRIEND CHAT
-  ======================================================= */
-
-  function openFriendChat(friendId) {
-    const friend = getFriends().find(
-      item => String(item.id) === String(friendId)
-    );
-
-    if (!friend) return;
-
-    const chatId = DATA()?.createChat?.(friend);
-
-    if (!chatId) {
-      toast(
-        isEnglish()
-          ? "Could not open conversation."
-          : "कुराकानी खोल्न सकिएन।",
-        "error"
-      );
-      return;
-    }
-
-    activeChatId = chatId;
-    navigate("messages", { keepChat: true });
-  }
-
-  /* =======================================================
-     SEND MESSAGE
-  ======================================================= */
-
-  function sendChatMessage(event) {
-    event.preventDefault();
-
-    if (!activeChatId) return;
-
-    const input = $("#kskMessageInput");
-    const text = input?.value.trim();
-
-    if (!text) return;
-
-    const result = DATA()?.sendMessage?.(
-      activeChatId,
-      text,
-      {
-        sender: displayName(),
-        fromMe: true
-      }
-    );
-
-    if (!result) {
-      toast(
-        isEnglish()
-          ? "Message could not be sent."
-          : "सन्देश पठाउन सकिएन।",
-        "error"
-      );
-      return;
-    }
-
-    refreshCurrentPage();
-    $("#kskMessageInput")?.focus();
   }
 
   /* =======================================================
@@ -1855,12 +1642,6 @@
 
     currentPage = page;
 
-    const options = event.detail?.options || {};
-
-    if (page !== "messages" || !options.keepChat) {
-      activeChatId = null;
-    }
-
     refreshNavigation();
     refreshCurrentPage();
   }
@@ -1947,10 +1728,6 @@
     setPageContent(selected.render());
 
     if (currentPage === "friends") {
-      global.KSKUserCard?.refresh?.();
-    }
-
-    if (currentPage === "messages" && !activeChatId) {
       global.KSKUserCard?.refresh?.();
     }
 
@@ -2074,32 +1851,6 @@
 
       if (target.closest("[data-add-friend-open]")) {
         openAddFriend();
-        return;
-      }
-
-      const messageFriend = target.closest(
-        "[data-message-friend]"
-      );
-
-      if (messageFriend) {
-        openFriendChat(
-          messageFriend.dataset.messageFriend
-        );
-
-        return;
-      }
-
-      const openChat = target.closest("[data-open-chat]");
-
-      if (openChat) {
-        activeChatId = openChat.dataset.openChat;
-        refreshCurrentPage();
-        return;
-      }
-
-      if (target.closest("[data-back-messages]")) {
-        activeChatId = null;
-        refreshCurrentPage();
         return;
       }
 
@@ -2299,15 +2050,6 @@
       event => {
         if (event.target === els.settingsModal) {
           closeSettings();
-        }
-      }
-    );
-
-    document.addEventListener(
-      "submit",
-      event => {
-        if (event.target.id === "kskMessageForm") {
-          sendChatMessage(event);
         }
       }
     );
