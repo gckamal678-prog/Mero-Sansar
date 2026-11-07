@@ -1,25 +1,13 @@
+
 "use strict";
 
 /*
- * =========================================================
  * KSK — PROFILE PAGE MODULE
- *
- * RESPONSIBILITY:
+ * Responsibility:
  * - Render profile information
- * - Render profile post list
- * - Provide profile edit and settings action hooks
- *
- * DATA SOURCE:
- * - KSKData
- *
- * MEDIA AND EDITING:
- * - KSKProfileMediaUI
- *
- * IMPORTANT:
- * - Does not edit or save profile data directly.
- * - Does not manage avatar or cover uploads.
- * - Does not manage application navigation.
- * =========================================================
+ * - Render profile posts
+ * - Provide profile actions
+ * - Provide access to saved posts
  */
 
 (function (global) {
@@ -27,13 +15,9 @@
 
   if (global.KSKProfilePage) return;
 
-  /* =======================================================
-     HELPERS
-  ======================================================= */
-
   function escapeHTML(value) {
     if (global.KSKUtils?.escapeHTML) {
-      return global.KSKUtils.escapeHTML(value);
+      return global.KSKUtils.escapeHTML(String(value ?? ""));
     }
 
     return String(value ?? "").replace(/[&<>"']/g, char => ({
@@ -63,10 +47,6 @@
       (isEnglish() ? "Your Profile" : "तपाईंको प्रोफाइल")
     );
   }
-
-  /* =======================================================
-     PROFILE AVATAR
-  ======================================================= */
 
   function renderAvatar(user) {
     if (global.KSKUserCard?.renderAvatar) {
@@ -98,10 +78,6 @@
     `;
   }
 
-  /* =======================================================
-     FILTER PROFILE POSTS
-  ======================================================= */
-
   function getProfilePosts(user, posts) {
     const userId = String(user.id || "");
     const userName = String(user.name || "").trim();
@@ -123,10 +99,6 @@
       );
     });
   }
-
-  /* =======================================================
-     POST RENDERING
-  ======================================================= */
 
   function renderPostList(posts, options = {}) {
     if (!posts.length) {
@@ -175,10 +147,6 @@
     `).join("");
   }
 
-  /* =======================================================
-     MAIN PROFILE RENDER
-  ======================================================= */
-
   function render(options = {}) {
     const user = options.user || getProfile();
 
@@ -187,7 +155,6 @@
       : getPosts();
 
     const posts = getProfilePosts(user, allPosts);
-
     const postCount = posts.length;
 
     return `
@@ -216,12 +183,10 @@
           ` : ""}
 
           <div class="text-center">
-
             <span class="badge badge-primary">
               ${postCount}
               ${isEnglish() ? "Posts" : "पोस्ट"}
             </span>
-
           </div>
 
           <div
@@ -254,6 +219,25 @@
 
           </div>
 
+          <div
+            class="flex-center"
+            style="margin-top:12px;">
+
+            <button
+              class="btn btn-secondary"
+              type="button"
+              data-page="saved"
+              style="width:100%;">
+
+              🔖
+              ${isEnglish()
+                ? "Saved Posts"
+                : "सेभ गरिएका पोस्ट"}
+
+            </button>
+
+          </div>
+
         </div>
 
         <h3
@@ -267,25 +251,16 @@
         </h3>
 
         <div class="profile-posts">
-
           ${renderPostList(posts, options)}
-
         </div>
 
       </section>
     `;
   }
 
-  /* =======================================================
-     PUBLIC API
-  ======================================================= */
-
   global.KSKProfilePage = Object.freeze({
-
     render,
-
     getProfilePosts
-
   });
 
 })(window);
