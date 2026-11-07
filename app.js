@@ -1193,6 +1193,14 @@
   ======================================================= */
 
   function renderMessages() {
+    const page = global.KSKMessagesPage;
+
+    if (typeof page?.render === "function") {
+      return page.render({
+        activeChatId: activeChatId
+      });
+    }
+
     const chats = getChats();
 
     if (activeChatId) {
@@ -1203,21 +1211,17 @@
       return `
         <section>
           <div class="empty-state">
-
             <div class="empty-state-icon">💬</div>
-
             <h3 class="empty-state-title">
               ${isEnglish()
                 ? "No conversations yet"
                 : "अहिलेसम्म सन्देश छैन"}
             </h3>
-
             <p>
               ${isEnglish()
                 ? "Add friends to start a conversation."
                 : "कुरा सुरु गर्न साथी थप्नुहोस्।"}
             </p>
-
           </div>
         </section>
       `;
@@ -1237,23 +1241,16 @@
 
     return `
       <section>
-
         <h3 class="section-title">
-          ${isEnglish()
-            ? "Messages"
-            : "सन्देशहरू"}
+          ${isEnglish() ? "Messages" : "सन्देशहरू"}
         </h3>
-
         <div class="chat-list">
-
           ${chats.map(chat =>
             messageItem.render(chat, {
               isEnglish: isEnglish()
             })
           ).join("")}
-
         </div>
-
       </section>
     `;
   }
@@ -1431,6 +1428,34 @@
 
   function renderProfile() {
     const user = profile();
+    const page = global.KSKProfilePage;
+
+    if (
+      typeof page?.render === "function" &&
+      String(user.name || "").trim()
+    ) {
+      const userId = String(user.id || "");
+
+      const posts = getPosts().filter(post => {
+        if (
+          userId &&
+          post.authorId &&
+          String(post.authorId) === userId
+        ) {
+          return true;
+        }
+
+        const author = String(post.author || "").trim();
+
+        return author === String(user.name).trim();
+      });
+
+      return page.render({
+        user: user,
+        posts: posts,
+        renderPost: renderPost
+      });
+    }
 
     const userName = String(user.name || "").trim();
     const userId = String(user.id || "");
@@ -1587,6 +1612,14 @@
   ======================================================= */
 
   function renderNotifications() {
+    const page = global.KSKNotificationsPage;
+
+    if (typeof page?.render === "function") {
+      return page.render({
+        notifications: DATA()?.getNotifications?.() || []
+      });
+    }
+
     const notifications =
       DATA()?.getNotifications?.() || [];
 
@@ -1638,6 +1671,15 @@
   ======================================================= */
 
   function renderSaved() {
+    const page = global.KSKSavedPage;
+
+    if (typeof page?.render === "function") {
+      return page.render({
+        isEnglish: isEnglish(),
+        renderPost: renderPost
+      });
+    }
+
     const ids = DATA()?.getSavedPosts?.() || [];
 
     const posts = ids
@@ -1680,6 +1722,12 @@
   ======================================================= */
 
   function openSettings() {
+    const settingsPage = global.KSKSettingsPage;
+
+    if (typeof settingsPage?.open === "function") {
+      return settingsPage.open();
+    }
+
     const settingsUI = SETTINGS_UI();
 
     if (!settingsUI?.open) {
