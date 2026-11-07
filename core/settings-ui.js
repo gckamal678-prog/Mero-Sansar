@@ -1,15 +1,24 @@
+File path: "Mero-Sansar/core/settings-ui.js"
 
 "use strict";
 
 /* =========================================================
-   KSK — WHATSAPP STYLE SETTINGS UI
-   UI Controller: KSKSettingsUI
-   Data Source: KSKSettings
-   Theme: KSKTheme
-   Language: KSKLanguage
+   KSK SETTINGS UI
+   Responsibility:
+   - Settings interface
+   - Settings navigation
+   - Settings actions
+   - Import / Export / Reset
+
+   Data owner: KSKSettings
+   Theme owner: KSKTheme
+   Language owner: KSKLanguage
 ========================================================= */
 
 (function (global) {
+
+  if (global.KSKSettingsUI) return;
+
   const $ = (selector, root = document) =>
     root.querySelector(selector);
 
@@ -34,6 +43,56 @@
     about: ["एपको बारेमा", "About"]
   };
 
+  const defaults = {
+    theme: "light",
+    language: "ne",
+    compactMode: false,
+    notifications: true,
+
+    notificationPreferences: {
+      messages: true,
+      friends: true,
+      comments: true,
+      likes: true,
+      stories: true,
+      sound: true,
+      vibration: true
+    },
+
+    privacy: {
+      profileVisibility: "everyone",
+      lastSeen: "everyone",
+      onlineStatus: "everyone",
+      readReceipts: true,
+      showProfilePhoto: "everyone",
+      showAbout: "everyone",
+      allowFriendRequests: true
+    },
+
+    profilePreferences: {
+      showBio: true,
+      showLocation: true,
+      showPostCount: true
+    },
+
+    chat: {
+      fontSize: "medium",
+      enterToSend: false,
+      wallpaper: "default",
+      linkPreviews: true
+    },
+
+    data: {
+      autoDownloadImages: false,
+      autoDownloadVideos: false,
+      saveMediaToDevice: false
+    }
+  };
+
+  /* =======================================================
+     COMMON HELPERS
+  ======================================================= */
+
   function isEnglish() {
     return LANG()?.getLanguage?.() === "en";
   }
@@ -53,24 +112,67 @@
   }
 
   function getSettings() {
-    return SETTINGS()?.getSettings?.() || {};
+    const saved = SETTINGS()?.getSettings?.() || {};
+
+    return {
+      ...defaults,
+      ...saved,
+
+      privacy: {
+        ...defaults.privacy,
+        ...(saved.privacy || {})
+      },
+
+      notificationPreferences: {
+        ...defaults.notificationPreferences,
+        ...(saved.notificationPreferences || {})
+      },
+
+      profilePreferences: {
+        ...defaults.profilePreferences,
+        ...(saved.profilePreferences || {})
+      },
+
+      chat: {
+        ...defaults.chat,
+        ...(saved.chat || {})
+      },
+
+      data: {
+        ...defaults.data,
+        ...(saved.data || {})
+      }
+    };
   }
 
-  function update(path, value) {
-    const result = SETTINGS()?.updateSetting?.(path, value);
-
-    if (result) {
-      render();
-      global.dispatchEvent(new CustomEvent("ksk:settings-ui-updated", {
-        detail: { path, value }
-      }));
+  function saveSetting(path, value) {
+    if (!SETTINGS()?.updateSetting) {
+      return false;
     }
 
-    return result;
+    return SETTINGS().updateSetting(path, value);
   }
 
+  function notify(type, message) {
+    const toast = global.KSKToast;
+
+    if (type === "success") {
+      toast?.success?.(message);
+    } else {
+      toast?.error?.(message);
+    }
+  }
+
+  /* =======================================================
+     HTML BUILDERS
+  ======================================================= */
+
   function icon(symbol) {
-    return `<span class="ksk-setting-icon" aria-hidden="true">${symbol}</span>`;
+    return `
+      <span class="ksk-setting-icon" aria-hidden="true">
+        ${symbol}
+      </span>
+    `;
   }
 
   function row(title, description, symbol, section) {
@@ -82,12 +184,15 @@
 
         ${icon(symbol)}
 
-        <span class="ksk-setting-row-copy">
+        <span class="ksk-setting-row-copy ksk-settings-row-copy">
           <strong>${title}</strong>
           <small>${description}</small>
         </span>
 
-        <span class="ksk-setting-chevron" aria-hidden="true">›</span>
+        <span class="ksk-setting-chevron" aria-hidden="true">
+          ›
+        </span>
+
       </button>
     `;
   }
@@ -95,7 +200,8 @@
   function toggleRow(title, description, path, checked) {
     return `
       <div class="ksk-setting-option">
-        <span class="ksk-setting-row-copy">
+
+        <span class="ksk-setting-row-copy ksk-settings-row-copy">
           <strong>${title}</strong>
           <small>${description}</small>
         </span>
@@ -105,8 +211,10 @@
             type="checkbox"
             data-settings-toggle="${path}"
             ${checked ? "checked" : ""}>
+
           <span class="ksk-switch-track"></span>
         </label>
+
       </div>
     `;
   }
@@ -114,7 +222,8 @@
   function selectRow(title, description, path, value, options) {
     return `
       <label class="ksk-setting-option ksk-setting-select-option">
-        <span class="ksk-setting-row-copy">
+
+        <span class="ksk-setting-row-copy ksk-settings-row-copy">
           <strong>${title}</strong>
           <small>${description}</small>
         </span>
@@ -132,6 +241,7 @@
           `).join("")}
 
         </select>
+
       </label>
     `;
   }
@@ -142,8 +252,10 @@
         type="button"
         class="ksk-settings-back"
         data-settings-back>
+
         ‹
         <span>${t("सेटिङ", "Settings")}</span>
+
       </button>
     `;
   }
@@ -151,40 +263,65 @@
   function sectionHeader(title, description = "") {
     return `
       <div class="ksk-settings-section-heading">
+
         <h3>${title}</h3>
-        ${description ? `<p>${description}</p>` : ""}
+
+        ${description
+          ? `<p>${description}</p>`
+          : ""}
+
+      </div>
+    `;
+  }
+
+  function card(content) {
+    return `
+      <div class="ksk-settings-card">
+        ${content}
       </div>
     `;
   }
 
   /* =======================================================
-     MAIN SETTINGS MENU
+     MAIN MENU
   ======================================================= */
 
   function renderMain() {
-    const settings = getSettings();
+    const s = getSettings();
 
-    const appearance = settings.theme === "dark"
+    const appearance = s.theme === "dark"
       ? t("डार्क मोड", "Dark mode")
       : t("लाइट मोड", "Light mode");
 
-    const language = settings.language === "en"
+    const language = s.language === "en"
       ? "English"
       : "नेपाली";
 
     return `
+
       <div class="ksk-settings-profile-shortcut">
-        <div class="ksk-settings-avatar">👤</div>
+
+        <div class="ksk-settings-avatar">
+          👤
+        </div>
+
         <div>
           <strong>${t("तपाईंको प्रोफाइल", "Your profile")}</strong>
-          <small>${t("प्रोफाइल विवरण व्यवस्थापन गर्नुहोस्", "Manage your profile details")}</small>
+          <small>
+            ${t(
+              "प्रोफाइल विवरण व्यवस्थापन गर्नुहोस्",
+              "Manage your profile details"
+            )}
+          </small>
         </div>
+
         <button
           type="button"
           data-settings-section="profile"
           aria-label="${t("प्रोफाइल", "Profile")}">
           ›
         </button>
+
       </div>
 
       <div class="ksk-settings-menu">
@@ -268,28 +405,29 @@
   ======================================================= */
 
   function renderAccount() {
+    const s = getSettings();
+
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("खाता", "Account"),
         t("तपाईंको खाता सम्बन्धी विकल्पहरू", "Manage account-related preferences")
       )}
 
-      <div class="ksk-settings-card">
-
-        ${toggleRow(
+      ${card(
+        toggleRow(
           t("साथी अनुरोध स्वीकार गर्ने", "Allow friend requests"),
           t("अन्य सदस्यले साथी अनुरोध पठाउन सक्नेछन्", "Allow other members to send friend requests"),
           "privacy.allowFriendRequests",
-          getSettings().privacy.allowFriendRequests
-        )}
-
-      </div>
+          s.privacy.allowFriendRequests
+        )
+      )}
 
       <div class="ksk-settings-info">
         ${t(
-          "खाता लगइन, पासवर्ड परिवर्तन र खाता मेटाउने सुविधा सुरक्षित Authentication प्रणाली जोडिएपछि उपलब्ध हुनेछ।",
-          "Login, password changes and account deletion require a secure authentication system."
+          "लगइन, पासवर्ड परिवर्तन र खाता व्यवस्थापन सुरक्षित Authentication प्रणाली जोडिएपछि उपलब्ध हुनेछ।",
+          "Login, password changes and account management require secure authentication."
         )}
       </div>
     `;
@@ -310,12 +448,13 @@
 
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("गोपनीयता", "Privacy"),
         t("तपाईंको जानकारी कसले हेर्न सक्छ छान्नुहोस्", "Choose who can see your information")
       )}
 
-      <div class="ksk-settings-card">
+      ${card(`
 
         ${selectRow(
           t("प्रोफाइल दृश्यता", "Profile visibility"),
@@ -358,7 +497,7 @@
         )}
 
         ${toggleRow(
-          t("Read Receipts", "Read receipts"),
+          "Read Receipts",
           t("सन्देश पढिएको जानकारी देखाउने", "Show when messages have been read"),
           "privacy.readReceipts",
           p.readReceipts
@@ -371,11 +510,11 @@
           p.allowFriendRequests
         )}
 
-      </div>
+      `)}
 
       <div class="ksk-settings-info">
         ${t(
-          "यी गोपनीयता विकल्पहरू अहिले यस डिभाइसमा सुरक्षित हुन्छन्। सबै सदस्यमा लागू गर्न Server-side access control आवश्यक हुन्छ।",
+          "यी विकल्पहरू यस डिभाइसमा सुरक्षित हुन्छन्। सबै सदस्यमा लागू गर्न Server-side access control आवश्यक हुन्छ।",
           "These preferences are stored on this device. Server-side access control is required to enforce them for all members."
         )}
       </div>
@@ -392,12 +531,13 @@
 
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("सूचनाहरू", "Notifications"),
         t("कुन प्रकारका सूचना प्राप्त गर्ने छान्नुहोस्", "Choose which notifications you receive")
       )}
 
-      <div class="ksk-settings-card">
+      ${card(`
 
         ${toggleRow(
           t("सबै सूचनाहरू", "All notifications"),
@@ -430,7 +570,7 @@
         )}
 
         ${toggleRow(
-          t("Likes", "Likes"),
+          "Likes",
           t("पोस्टमा Like आउँदा", "When someone likes your post"),
           "notificationPreferences.likes",
           n.likes
@@ -453,18 +593,18 @@
         )}
 
         ${toggleRow(
-          t("Vibration", "Vibration"),
+          "Vibration",
           t("सूचना आउँदा कम्पन गराउने", "Vibrate for notifications"),
           "notificationPreferences.vibration",
           n.vibration
         )}
 
-      </div>
+      `)}
 
       <div class="ksk-settings-info">
         ${t(
-          "सूचनाका प्राथमिकताहरू सुरक्षित हुन्छन्। वास्तविक Push Notification का लागि सेवा र Device permission आवश्यक हुन्छ।",
-          "Notification preferences are saved. Real push notifications require a notification service and device permission."
+          "यी प्राथमिकताहरू सुरक्षित हुन्छन्। वास्तविक Push Notification का लागि सेवा र Device permission आवश्यक हुन्छ।",
+          "These preferences are saved. Real push notifications require a notification service and device permission."
         )}
       </div>
     `;
@@ -479,15 +619,16 @@
 
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("रूपरङ", "Appearance"),
         t("एपको दृश्य शैली परिवर्तन गर्नुहोस्", "Customize the app appearance")
       )}
 
-      <div class="ksk-settings-card">
+      ${card(`
 
         ${selectRow(
-          t("Theme", "Theme"),
+          "Theme",
           t("लाइट वा डार्क मोड छान्नुहोस्", "Choose light or dark mode"),
           "theme",
           s.theme,
@@ -498,13 +639,13 @@
         )}
 
         ${toggleRow(
-          t("Compact Mode", "Compact mode"),
+          "Compact Mode",
           t("कम ठाउँमा बढी सामग्री देखाउने", "Show more content in less space"),
           "compactMode",
           s.compactMode
         )}
 
-      </div>
+      `)}
     `;
   }
 
@@ -517,39 +658,40 @@
 
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("प्रोफाइल", "Profile"),
         t("प्रोफाइलमा देखिने विवरण छान्नुहोस्", "Choose what appears on your profile")
       )}
 
-      <div class="ksk-settings-card">
+      ${card(`
 
         ${toggleRow(
-          t("Bio देखाउने", "Show bio"),
+          "Bio",
           t("प्रोफाइलमा आफ्नो परिचय देखाउने", "Display your biography"),
           "profilePreferences.showBio",
           p.showBio
         )}
 
         ${toggleRow(
-          t("Location देखाउने", "Show location"),
+          "Location",
           t("प्रोफाइलमा स्थान देखाउने", "Display your location"),
           "profilePreferences.showLocation",
           p.showLocation
         )}
 
         ${toggleRow(
-          t("Post Count देखाउने", "Show post count"),
+          "Post Count",
           t("प्रोफाइलमा पोस्ट संख्या देखाउने", "Display your post count"),
           "profilePreferences.showPostCount",
           p.showPostCount
         )}
 
-      </div>
+      `)}
 
       <div class="ksk-settings-info">
         ${t(
-          "यी विकल्पहरू सुरक्षित भएका छन्। सार्वजनिक प्रोफाइलमा लागू गर्न Profile UI सँग जोड्नुपर्नेछ।",
+          "यी विकल्पहरू सुरक्षित हुन्छन्। सार्वजनिक प्रोफाइलमा लागू गर्न Profile UI सँग जोड्नुपर्नेछ।",
           "These preferences are saved. The public profile display must also be connected to these options."
         )}
       </div>
@@ -565,15 +707,16 @@
 
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("च्याट", "Chats"),
         t("सन्देश लेख्ने र च्याटको शैली व्यवस्थापन गर्नुहोस्", "Manage chat appearance and typing preferences")
       )}
 
-      <div class="ksk-settings-card">
+      ${card(`
 
         ${selectRow(
-          t("Font Size", "Font size"),
+          "Font Size",
           t("सन्देशको अक्षर आकार", "Message text size"),
           "chat.fontSize",
           c.fontSize,
@@ -592,25 +735,25 @@
         )}
 
         ${toggleRow(
-          t("Link Preview", "Link previews"),
+          "Link Preview",
           t("लिङ्कको Preview देखाउने", "Show previews for shared links"),
           "chat.linkPreviews",
           c.linkPreviews
         )}
 
         ${selectRow(
-          t("Chat Wallpaper", "Chat wallpaper"),
+          "Chat Wallpaper",
           t("च्याटको पृष्ठभूमि", "Chat background"),
           "chat.wallpaper",
           c.wallpaper,
           [
-            { value: "default", label: t("Default", "Default") },
-            { value: "light", label: t("Light", "Light") },
-            { value: "dark", label: t("Dark", "Dark") }
+            { value: "default", label: "Default" },
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" }
           ]
         )}
 
-      </div>
+      `)}
     `;
   }
 
@@ -623,12 +766,13 @@
 
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("डेटा र स्टोरेज", "Data and Storage"),
         t("मिडिया र डेटा प्रयोगको प्राथमिकता", "Manage media and data preferences")
       )}
 
-      <div class="ksk-settings-card">
+      ${card(`
 
         ${toggleRow(
           t("फोटो Auto Download", "Auto-download photos"),
@@ -651,23 +795,27 @@
           d.saveMediaToDevice
         )}
 
-      </div>
+      `)}
 
-      <div class="ksk-settings-card ksk-settings-storage-actions">
+      ${card(`
 
-        <button type="button" data-settings-action="export">
-          📤 ${t("सेटिङ Export गर्नुहोस्", "Export settings")}
-        </button>
+        <div class="ksk-settings-storage-actions">
 
-        <button type="button" data-settings-action="import">
-          📥 ${t("सेटिङ Import गर्नुहोस्", "Import settings")}
-        </button>
+          <button type="button" data-settings-action="export">
+            📤 ${t("सेटिङ Export गर्नुहोस्", "Export settings")}
+          </button>
 
-        <button type="button" data-settings-action="reset">
-          ↺ ${t("सेटिङ Reset गर्नुहोस्", "Reset settings")}
-        </button>
+          <button type="button" data-settings-action="import">
+            📥 ${t("सेटिङ Import गर्नुहोस्", "Import settings")}
+          </button>
 
-      </div>
+          <button type="button" data-settings-action="reset">
+            ↺ ${t("सेटिङ Reset गर्नुहोस्", "Reset settings")}
+          </button>
+
+        </div>
+
+      `)}
 
       <input
         type="file"
@@ -693,14 +841,14 @@
 
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("भाषा", "Language"),
         t("एप प्रयोग गर्ने भाषा छान्नुहोस्", "Choose your app language")
       )}
 
-      <div class="ksk-settings-card">
-
-        ${selectRow(
+      ${card(
+        selectRow(
           t("एपको भाषा", "App language"),
           t("नेपाली वा अंग्रेजी", "Nepali or English"),
           "language",
@@ -709,9 +857,8 @@
             { value: "ne", label: "नेपाली" },
             { value: "en", label: "English" }
           ]
-        )}
-
-      </div>
+        )
+      )}
     `;
   }
 
@@ -722,27 +869,20 @@
   function renderHelp() {
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("सहयोग", "Help"),
         t("हाम्रो संसार प्रयोग गर्दा सहयोग", "Help using Hamro Sansar")
       )}
 
-      <div class="ksk-settings-card">
-
+      ${card(`
         <div class="ksk-settings-info">
           ${t(
             "सुझाव वा समस्या भए एपको व्यवस्थापन टोलीलाई जानकारी दिनुहोस्।",
-            "Contact the app team if you have a suggestion or problem."
+            "Contact the app management team if you have a suggestion or problem."
           )}
         </div>
-
-        <a
-          class="ksk-settings-link"
-          href="mailto:support@merosansar.com">
-          ✉️ ${t("सहयोगलाई इमेल गर्नुहोस्", "Email support")}
-        </a>
-
-      </div>
+      `)}
     `;
   }
 
@@ -753,16 +893,29 @@
   function renderAbout() {
     return `
       ${backButton()}
+
       ${sectionHeader(
         t("हाम्रो संसार", "Hamro Sansar"),
         t("साथी जोडौँ, कुरा गरौँ", "Connect with friends")
       )}
 
       <div class="ksk-settings-about">
-        <div class="ksk-settings-about-logo">🌏</div>
+
+        <div class="ksk-settings-about-logo">
+          🌏
+        </div>
+
         <h3>हाम्रो संसार</h3>
-        <p>${t("साथी जोडौँ, कुरा गरौँ।", "Connect with friends and talk.")}</p>
+
+        <p>
+          ${t(
+            "साथी जोडौँ, कुरा गरौँ।",
+            "Connect with friends and talk."
+          )}
+        </p>
+
         <small>KSK Social App</small>
+
       </div>
     `;
   }
@@ -771,26 +924,27 @@
      SECTION ROUTER
   ======================================================= */
 
-  function getSectionContent() {
-    const renderers = {
-      main: renderMain,
-      account: renderAccount,
-      privacy: renderPrivacy,
-      notifications: renderNotifications,
-      appearance: renderAppearance,
-      profile: renderProfile,
-      chats: renderChats,
-      data: renderData,
-      language: renderLanguage,
-      help: renderHelp,
-      about: renderAbout
-    };
+  const renderers = {
+    main: renderMain,
+    account: renderAccount,
+    privacy: renderPrivacy,
+    notifications: renderNotifications,
+    appearance: renderAppearance,
+    profile: renderProfile,
+    chats: renderChats,
+    data: renderData,
+    language: renderLanguage,
+    help: renderHelp,
+    about: renderAbout
+  };
 
-    return (renderers[activeSection] || renderMain)();
+  function getSectionContent() {
+    const renderer = renderers[activeSection] || renderMain;
+    return renderer();
   }
 
   /* =======================================================
-     RENDER SETTINGS MODAL
+     RENDER
   ======================================================= */
 
   function render() {
@@ -798,7 +952,8 @@
 
     if (!modal) return false;
 
-    const body = $(".modal-body", modal);
+    const body = $("#settingsBody", modal) ||
+      $(".modal-body", modal);
 
     if (!body) return false;
 
@@ -817,6 +972,10 @@
     return true;
   }
 
+  /* =======================================================
+     OPEN / CLOSE
+  ======================================================= */
+
   function open() {
     const modal = $("#settingsModal");
 
@@ -827,28 +986,35 @@
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
 
-    render();
-
-    return true;
+    return render();
   }
 
   function close() {
     const modal = $("#settingsModal");
 
-    if (!modal) return;
+    if (!modal) return false;
 
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
+    modal.classList.remove("ksk-settings-active");
+
+    return true;
   }
 
   /* =======================================================
-     SETTINGS ACTIONS
+     EXPORT SETTINGS
   ======================================================= */
 
   function exportSettings() {
     const data = SETTINGS()?.exportSettings?.();
 
-    if (!data) return;
+    if (!data) {
+      notify(
+        "error",
+        t("सेटिङ Export गर्न सकिएन।", "Could not export settings.")
+      );
+      return false;
+    }
 
     const blob = new Blob([data], {
       type: "application/json"
@@ -859,13 +1025,24 @@
 
     link.href = url;
     link.download = "ksk-settings-backup.json";
-    link.click();
 
-    URL.revokeObjectURL(url);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    global.setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
+
+    return true;
   }
 
+  /* =======================================================
+     IMPORT SETTINGS
+  ======================================================= */
+
   function importSettingsFile(file) {
-    if (!file) return;
+    if (!file) return false;
 
     const reader = new FileReader();
 
@@ -877,24 +1054,40 @@
       if (success) {
         activeSection = "data";
         render();
-        global.KSKToast?.success?.(
-          t("सेटिङ सफलतापूर्वक Import भयो।", "Settings imported successfully.")
+
+        notify(
+          "success",
+          t(
+            "सेटिङ सफलतापूर्वक Import भयो।",
+            "Settings imported successfully."
+          )
         );
       } else {
-        global.KSKToast?.error?.(
-          t("यो Backup फाइल मान्य छैन।", "This backup file is invalid.")
+        notify(
+          "error",
+          t(
+            "यो Backup फाइल मान्य छैन।",
+            "This backup file is invalid."
+          )
         );
       }
     };
 
     reader.onerror = () => {
-      global.KSKToast?.error?.(
+      notify(
+        "error",
         t("फाइल पढ्न सकिएन।", "Could not read the file.")
       );
     };
 
     reader.readAsText(file);
+
+    return true;
   }
+
+  /* =======================================================
+     RESET SETTINGS
+  ======================================================= */
 
   function resetSettings() {
     const confirmed = global.confirm(
@@ -904,20 +1097,31 @@
       )
     );
 
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
-    SETTINGS()?.resetSettings?.();
+    const result = SETTINGS()?.resetSettings?.();
+
+    if (!result) {
+      notify(
+        "error",
+        t("सेटिङ Reset गर्न सकिएन।", "Could not reset settings.")
+      );
+      return false;
+    }
 
     activeSection = "main";
     render();
 
-    global.KSKToast?.success?.(
+    notify(
+      "success",
       t("सेटिङ Reset भयो।", "Settings reset successfully.")
     );
+
+    return true;
   }
 
   /* =======================================================
-     EVENT HANDLERS
+     CHANGE HANDLERS
   ======================================================= */
 
   function handleClick(event) {
@@ -926,7 +1130,11 @@
     );
 
     if (sectionButton) {
-      activeSection = sectionButton.dataset.settingsSection;
+      const section = sectionButton.dataset.settingsSection;
+
+      if (!renderers[section]) return;
+
+      activeSection = section;
       render();
       return;
     }
@@ -937,53 +1145,68 @@
       return;
     }
 
-    const action = event.target.closest("[data-settings-action]");
+    const action = event.target.closest(
+      "[data-settings-action]"
+    );
 
-    if (action) {
-      const type = action.dataset.settingsAction;
+    if (!action) return;
 
-      if (type === "export") {
-        exportSettings();
-      }
+    const type = action.dataset.settingsAction;
 
-      if (type === "import") {
-        $("#kskSettingsImportFile")?.click();
-      }
+    if (type === "export") {
+      exportSettings();
+    }
 
-      if (type === "reset") {
-        resetSettings();
-      }
+    if (type === "import") {
+      $("#kskSettingsImportFile")?.click();
+    }
+
+    if (type === "reset") {
+      resetSettings();
     }
   }
 
   function handleChange(event) {
-    const toggle = event.target.closest("[data-settings-toggle]");
+    const toggle = event.target.closest(
+      "[data-settings-toggle]"
+    );
 
     if (toggle) {
-      update(toggle.dataset.settingsToggle, toggle.checked);
+      saveSetting(
+        toggle.dataset.settingsToggle,
+        toggle.checked
+      );
       return;
     }
 
-    const select = event.target.closest("[data-settings-select]");
+    const select = event.target.closest(
+      "[data-settings-select]"
+    );
 
     if (!select) return;
 
     const path = select.dataset.settingsSelect;
     const value = select.value;
 
+    /* Language module owns language changes and persistence. */
+    if (path === "language") {
+      LANG()?.setLanguage?.(value);
+      return;
+    }
+
+    /* Theme module applies the visual theme.
+       KSKSettings remains the saved data owner. */
     if (path === "theme") {
       THEME()?.setTheme?.(value);
     }
 
-    if (path === "language") {
-      LANG()?.setLanguage?.(value);
-    }
-
-    update(path, value);
+    saveSetting(path, value);
   }
 
   function handleFileChange(event) {
-    if (event.target.id !== "kskSettingsImportFile") return;
+    if (event.target.id !== "kskSettingsImportFile") {
+      return;
+    }
 
     importSettingsFile(event.target.files?.[0]);
 
@@ -991,33 +1214,55 @@
   }
 
   /* =======================================================
+     SETTINGS CHANGE EVENTS
+  ======================================================= */
+
+  function handleSettingsChange() {
+    const modal = $("#settingsModal");
+
+    if (modal && !modal.classList.contains("hidden")) {
+      render();
+    }
+  }
+
+  function handleLanguageChange() {
+    const modal = $("#settingsModal");
+
+    if (modal && !modal.classList.contains("hidden")) {
+      render();
+    }
+  }
+
+  /* =======================================================
      INITIALIZE
   ======================================================= */
 
   function initialize() {
-    if (initialized) return;
-
-    initialized = true;
+    if (initialized) return true;
 
     const modal = $("#settingsModal");
 
-    if (!modal) return;
+    if (!modal) {
+      return false;
+    }
+
+    initialized = true;
 
     modal.addEventListener("click", handleClick);
     modal.addEventListener("change", handleChange);
     modal.addEventListener("change", handleFileChange);
 
-    global.addEventListener("ksk:settings-change", () => {
-      if (!modal.classList.contains("hidden")) {
-        render();
-      }
-    });
+    global.addEventListener(
+      "ksk:settings-change",
+      handleSettingsChange
+    );
 
-    global.addEventListener("ksk:language-change", () => {
-      if (!modal.classList.contains("hidden")) {
-        render();
-      }
-    });
+    global.addEventListener(
+      "ksk:language-change",
+      handleLanguageChange
+    );
+
+    return true;
   }
 
   /* =======================================================
@@ -1025,17 +1270,24 @@
   ======================================================= */
 
   global.KSKSettingsUI = Object.freeze({
+
     initialize,
     open,
     close,
     render,
-    getActiveSection: () => activeSection
+
+    getActiveSection() {
+      return activeSection;
+    }
+
   });
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialize, {
-      once: true
-    });
+    document.addEventListener(
+      "DOMContentLoaded",
+      initialize,
+      { once: true }
+    );
   } else {
     initialize();
   }
