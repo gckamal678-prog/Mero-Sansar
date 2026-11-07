@@ -1,3 +1,4 @@
+फाइल: "core/reactions.js"
 
 "use strict";
 
@@ -7,11 +8,7 @@
    - Facebook-style post reaction picker
    - Select, change and remove reactions
    - Persist reactions through KSKData
-
-   Does NOT:
-   - Own post data
-   - Own the feed renderer
-   - Manage comments
+   - Shared like emoji animation for posts and comments
 ========================================================= */
 
 (function (global) {
@@ -28,6 +25,9 @@
   ];
 
   let activePicker = null;
+  let activeTriggerButton = null;
+
+  const ANIMATION_STYLE_ID = "ksk-like-animation-style";
 
   function escapeHTML(value) {
     return String(value ?? "").replace(/[&<>"']/g, char => ({
@@ -43,11 +43,106 @@
     return global.KSKData?.getPost?.(id) || null;
   }
 
-  function closePicker() {
-    if (!activePicker) return;
+  /* =========================================
+     LIKE EMOJI ANIMATION
+  ========================================= */
 
-    activePicker.remove();
+  function installAnimationStyles() {
+    if (document.getElementById(ANIMATION_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = ANIMATION_STYLE_ID;
+
+    style.textContent = `
+      @keyframes ksk-like-float {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -20%) scale(0.35) rotate(-15deg);
+        }
+
+        20% {
+          opacity: 1;
+          transform: translate(-50%, -65%) scale(1.3) rotate(8deg);
+        }
+
+        45% {
+          opacity: 1;
+          transform: translate(-50%, -100%) scale(1) rotate(-5deg);
+        }
+
+        100% {
+          opacity: 0;
+          transform: translate(-50%, -190%) scale(0.7) rotate(12deg);
+        }
+      }
+
+      .ksk-like-animation {
+        position: fixed;
+        z-index: 999999;
+        pointer-events: none;
+        font-size: 38px;
+        line-height: 1;
+        animation: ksk-like-float 850ms ease-out forwards;
+        filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.2));
+        will-change: transform, opacity;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ksk-like-animation {
+          animation-duration: 1ms;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function showLikeAnimationAt(rect, emoji = "❤️") {
+    if (!rect || !document.body) return false;
+
+    installAnimationStyles();
+
+    const animation = document.createElement("span");
+
+    animation.className = "ksk-like-animation";
+    animation.textContent = emoji;
+    animation.setAttribute("aria-hidden", "true");
+
+    animation.style.left = `${rect.left + rect.width / 2}px`;
+    animation.style.top = `${rect.top + rect.height / 2}px`;
+
+    document.body.appendChild(animation);
+
+    global.setTimeout(() => {
+      animation.remove();
+    }, 950);
+
+    return true;
+  }
+
+  function showLikeAnimation(button, emoji = "❤️") {
+    if (!button?.getBoundingClientRect) return false;
+
+    return showLikeAnimationAt(
+      button.getBoundingClientRect(),
+      emoji
+    );
+  }
+
+  /* =========================================
+     PICKER
+  ========================================= */
+
+  function closePicker() {
+    if (activePicker) {
+      activePicker.remove();
+    }
+
     activePicker = null;
+    activeTriggerButton = null;
   }
 
   function renderPicker(postId, currentReaction = "") {
@@ -115,8 +210,14 @@
       post.myReaction || ""
     );
 
+    activeTriggerButton = button;
+
     positionPicker(button, picker);
   }
+
+  /* =========================================
+     SAVE REACTION
+  ========================================= */
 
   function selectReaction(postId, emoji) {
     const post = getPost(postId);
@@ -159,14 +260,13 @@
       );
     }
 
-    // New reaction or changing an existing reaction.
+    // Changing an existing reaction.
     if (current) {
       counts[current] = Math.max(
         0,
         Number(counts[current] || 0) - 1
       );
     } else if (!post.liked) {
-      // Do not increase likes again for legacy liked posts.
       likes += 1;
     }
 
@@ -185,6 +285,10 @@
   function refreshFeed() {
     global.KSKApp?.refreshCurrentPage?.();
   }
+
+  /* =========================================
+     EVENTS
+  ========================================= */
 
   function onDocumentClick(event) {
     const target = event.target;
@@ -214,11 +318,26 @@
       const postId = activePicker.dataset.postId;
       const emoji = option.dataset.kskReaction;
 
+      const triggerButton = activeTriggerButton;
+      const post = getPost(postId);
+
+      const previousReaction = post?.myReaction || "";
+
+      const animationRect =
+        triggerButton?.getBoundingClientRect?.() || null;
+
       const success = selectReaction(postId, emoji);
 
       closePicker();
 
-      if (success) refreshFeed();
+      if (success) {
+        // Do not animate when the user removes a reaction.
+        if (previousReaction !== emoji && animationRect) {
+          showLikeAnimationAt(animationRect, emoji);
+        }
+
+        refreshFeed();
+      }
 
       return;
     }
@@ -233,6 +352,10 @@
       closePicker();
     }
   }
+
+  /* =========================================
+     INITIALIZATION
+  ========================================= */
 
   function initialize() {
     document.addEventListener(
@@ -286,11 +409,18 @@
     closePicker();
   }
 
+  /* =========================================
+     PUBLIC API
+  ========================================= */
+
   global.KSKReactions = Object.freeze({
     initialize,
     destroy,
     closePicker,
     selectReaction,
+
+    // Shared animation API for comments and other UI.
+    showLikeAnimation,
 
     getReactions() {
       return REACTIONS.slice();
