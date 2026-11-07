@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -20,10 +19,12 @@
     saved: "ksk_saved_v1",
     notifications: "ksk_notifications_v1",
     chats: "ksk_feature_chats",
-    featureFriends: "ksk_feature_friends",
-    featureProfile: "ksk_feature_profile",
-    featureNotifications: "ksk_feature_notifications",
-    featureSaved: "ksk_feature_savedPosts"
+
+    featureFriends: "hs_feature_friends",
+    featureChats: "hs_feature_chats",
+    featureProfile: "hs_feature_profile",
+    featureNotifications: "hs_feature_notifications",
+    featureSaved: "hs_feature_savedPosts"
   });
 
   const DEFAULT_PROFILE = Object.freeze({
@@ -183,6 +184,10 @@
       {
         target: STORAGE.friends,
         sources: [STORAGE.featureFriends]
+      },
+      {
+        target: STORAGE.chats,
+        sources: [STORAGE.featureChats]
       },
       {
         target: STORAGE.profile,
