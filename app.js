@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -382,65 +381,6 @@
   }
 
   /* =======================================================
-     POST LIKE
-  ======================================================= */
-
-  function toggleLike(id) {
-    const post = DATA()?.getPost?.(id);
-
-    if (!post) return;
-
-    const liked = !Boolean(post.liked);
-
-    const likes = Math.max(
-      0,
-      Number(post.likes || 0) + (liked ? 1 : -1)
-    );
-
-    const success = DATA()?.updatePost?.(id, {
-      liked,
-      likes
-    });
-
-    if (success) {
-      refreshCurrentPage();
-    }
-  }
-
-  /* =======================================================
-     SAVE POST
-  ======================================================= */
-
-  function toggleSave(id) {
-    const result = DATA()?.toggleSavedPost?.(id);
-
-    if (result === false) {
-      toast(
-        isEnglish()
-          ? "Post removed from saved."
-          : "सेभबाट हटाइयो।",
-        "success"
-      );
-    } else if (result) {
-      toast(
-        isEnglish()
-          ? "Post saved."
-          : "पोस्ट सेभ भयो।",
-        "success"
-      );
-    } else {
-      toast(
-        isEnglish()
-          ? "Could not save post."
-          : "पोस्ट सेभ गर्न सकिएन।",
-        "error"
-      );
-    }
-
-    refreshCurrentPage();
-  }
-
-  /* =======================================================
      SHARE POST
      KSKShare owns all sharing functionality.
   ======================================================= */
@@ -463,19 +403,13 @@
 
   /* =======================================================
      POST ACTION ROUTER
+     Like / Reaction : core/reactions.js
+     Save / Unsave   : core/post-actions.js
+     Comment         : KSKComments
+     Share           : KSKShare
   ======================================================= */
 
   function handlePostAction(action, id) {
-    if (action === "like") {
-      toggleLike(id);
-      return;
-    }
-
-    if (action === "save") {
-      toggleSave(id);
-      return;
-    }
-
     if (action === "share") {
       sharePost(id);
       return;
@@ -488,7 +422,7 @@
         toast(
           isEnglish()
             ? "Comments are unavailable."
-            : "टिप्पणी सुविधा अहिले उपलब्ध छैन।",
+            : "टिप्पणी सुविधा उपलब्ध छैन।",
           "warning"
         );
       }
@@ -730,10 +664,23 @@
       );
 
       if (postAction) {
-        handlePostAction(
-          postAction.dataset.postAction,
-          postAction.dataset.postId
-        );
+        const action = postAction.dataset.postAction;
+
+        /*
+         * Like / Reaction is intercepted in capture phase
+         * by core/reactions.js.
+         *
+         * Save / Unsave is intercepted in capture phase
+         * by core/post-actions.js.
+         *
+         * The app controller handles only Comment and Share.
+         */
+        if (action === "comment" || action === "share") {
+          handlePostAction(
+            action,
+            postAction.dataset.postId
+          );
+        }
 
         return;
       }
