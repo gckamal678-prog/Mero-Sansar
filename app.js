@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -6,11 +7,11 @@
  * Single Data Layer Architecture
  *
  * DATA          : KSKData
- * STATE         : KSKState
  * SETTINGS      : KSKSettings / KSKSettingsUI
  * THEME         : KSKTheme
  * LANGUAGE      : KSKLanguage
  * NAVIGATION    : KSKNavigation
+ * HOME          : KSKHomePage
  * MEDIA         : KSKMediaUI
  * PROFILE MEDIA : KSKProfileMediaUI
  * COMMENTS      : KSKComments
@@ -38,7 +39,6 @@
     [...root.querySelectorAll(selector)];
 
   const DATA = () => global.KSKData;
-  const STATE = () => global.KSKState;
   const SETTINGS = () => global.KSKSettings;
   const SETTINGS_UI = () => global.KSKSettingsUI;
   const THEME = () => global.KSKTheme;
@@ -51,7 +51,6 @@
   const COMMENTS = () => global.KSKComments;
   const KSKPostActions = () => global.KSKPostActions;
 
-  let searchQuery = "";
   let initialized = false;
 
   const els = {};
@@ -105,11 +104,6 @@
     })[char]);
   }
 
-  /*
-   * Language Core owns language selection and translation.
-   * app.js only reads its public API.
-   */
-
   function language() {
     return LANG()?.getLanguage?.() || "ne";
   }
@@ -122,11 +116,9 @@
     return LANG()?.translate?.(key) || fallback || key;
   }
 
-  /*
-   * Toast UI, animation, timing and removal are owned
-   * entirely by core/toast.js.
-   * app.js only calls the public Toast API.
-   */
+  /* =======================================================
+     TOAST
+  ======================================================= */
 
   function toast(message, type = "info", duration) {
     const api = TOAST();
@@ -145,6 +137,10 @@
   function confirmAction(message) {
     return global.confirm(message);
   }
+
+  /* =======================================================
+     DATE AND PROFILE HELPERS
+  ======================================================= */
 
   function formatDate(value) {
     if (global.KSKUtils?.formatDateTime) {
@@ -205,11 +201,6 @@
       (isEnglish() ? "U" : "स");
   }
 
-  /*
-   * Friend avatars may contain only an initial letter.
-   * Never treat that letter as an image URL.
-   */
-
   function isImageSource(value) {
     if (typeof value !== "string") return false;
 
@@ -236,6 +227,10 @@
     `;
   }
 
+  /* =======================================================
+     MODAL
+  ======================================================= */
+
   function openModal(options) {
     if (!MODAL()?.openModal) {
       toast(
@@ -259,14 +254,6 @@
      DATA ACCESS
   ======================================================= */
 
-  function getPosts() {
-    return DATA()?.getPosts?.() || [];
-  }
-
-  function getStories() {
-    return DATA()?.getStories?.() || [];
-  }
-
   function getFriends() {
     return DATA()?.getFriends?.() || [];
   }
@@ -275,127 +262,33 @@
     return DATA()?.getChats?.() || [];
   }
 
-  /*
-   * Navigation active state belongs to KSKNavigation.
-   * app.js does not update active classes independently.
-   */
+  /* =======================================================
+     NAVIGATION
+  ======================================================= */
 
   function refreshNavigation() {
     NAV()?.refreshNavigation?.();
   }
 
+  function refreshCurrentPage() {
+    NAV()?.refreshCurrentPage?.();
+  }
+
   /* =======================================================
-     STORIES — RENDERING ONLY
-     Creation and viewing belong to KSKMediaUI.
+     HOME PAGE DELEGATES
+     Home UI belongs to pages/home.js.
   ======================================================= */
 
   function renderStories() {
-    if (!els.storiesList) return;
-
-    const stories = getStories();
-
-    const addLabel = isEnglish()
-      ? "Add Story"
-      : "स्टोरी थप्नुहोस्";
-
-    const addStory = `
-      <button
-        class="story-card"
-        type="button"
-        data-story-create
-        aria-label="${escapeHTML(addLabel)}">
-
-        <span class="story-avatar">＋</span>
-
-        <span class="story-name">
-          ${escapeHTML(addLabel)}
-        </span>
-
-      </button>
-    `;
-
-    const storyItems = stories.map(story => `
-      <button
-        class="story-card"
-        type="button"
-        data-story-view="${escapeHTML(story.id)}">
-
-        <span class="story-avatar">
-          ${escapeHTML(initial(story.author))}
-        </span>
-
-        <span class="story-name">
-          ${escapeHTML(story.author || "सदस्य")}
-        </span>
-
-      </button>
-    `).join("");
-
-    els.storiesList.innerHTML = addStory + storyItems;
-
-    MEDIA_UI()?.refresh?.();
+    return global.KSKHomePage?.renderStories?.() || false;
   }
-
-  /* =======================================================
-     POST RENDERING
-     KSKPostCard owns all Post Card HTML rendering.
-  ======================================================= */
 
   function renderPost(post) {
-    if (!post || typeof post !== "object") {
-      return "";
-    }
-
-    const postCard = global.KSKPostCard;
-
-    if (typeof postCard?.render !== "function") {
-      console.error(
-        "KSKPostCard is unavailable. Check index.html script order."
-      );
-
-      return `
-        <div class="empty-state">
-          ${isEnglish()
-            ? "Post display is temporarily unavailable."
-            : "पोस्ट देखाउने सुविधा अहिले उपलब्ध छैन।"}
-        </div>
-      `;
-    }
-
-    return postCard.render(post, {
-      isEnglish: isEnglish(),
-      formatDate: formatDate
-    });
+    return global.KSKHomePage?.renderPost?.(post) || "";
   }
 
-  /* =======================================================
-     FEED RENDERING
-  ======================================================= */
-
   function renderFeed() {
-    if (!els.feedList) return;
-
-    const query = searchQuery.toLowerCase();
-
-    const filtered = getPosts().filter(post => {
-      const searchable = [
-        post.author || "",
-        post.text || ""
-      ].join(" ").toLowerCase();
-
-      return searchable.includes(query);
-    });
-
-    els.feedList.innerHTML = filtered
-      .map(renderPost)
-      .join("");
-
-    els.emptyFeed?.classList.toggle(
-      "hidden",
-      filtered.length > 0
-    );
-
-    MEDIA_UI()?.refresh?.();
+    return global.KSKHomePage?.renderFeed?.() || false;
   }
 
   /* =======================================================
@@ -782,11 +675,6 @@
     });
   }
 
-  /* =======================================================
-     FRIENDS
-     KSKFriendsPage owns friend creation and rendering.
-  ======================================================= */
-
   function openAddFriend() {
     const page = global.KSKFriendsPage;
 
@@ -806,7 +694,6 @@
 
   /* =======================================================
      MESSAGES
-     KSKMessagesPage owns conversation rendering and actions.
   ======================================================= */
 
   function renderMessages() {
@@ -827,7 +714,6 @@
 
   /* =======================================================
      NOTIFICATIONS
-     KSKNotificationsPage owns notification rendering.
   ======================================================= */
 
   function renderNotifications() {
@@ -841,7 +727,7 @@
       <div class="empty-state">
         ${isEnglish()
           ? "Notifications are unavailable. Please reload the app."
-          : "सूचना सुविधा उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
+          : "सूचना सुविधा अहिले उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
       </div>
     `;
   }
@@ -898,7 +784,7 @@
   }
 
   /* =======================================================
-     SETTINGS — SINGLE SETTINGS UI
+     SETTINGS
   ======================================================= */
 
   function openSettings() {
@@ -939,16 +825,8 @@
   }
 
   /* =======================================================
-     PAGE REFRESH
-     Navigation and page rendering belong to KSKNavigation.
-  ======================================================= */
-
-  function refreshCurrentPage() {
-    NAV()?.refreshCurrentPage?.();
-  }
-
-  /* =======================================================
      SEARCH
+     Search filtering belongs to KSKHomePage.
   ======================================================= */
 
   function toggleSearch() {
@@ -961,7 +839,7 @@
       return;
     }
 
-    searchQuery = "";
+    global.KSKHomePage?.clearSearch?.();
 
     if (els.searchInput) {
       els.searchInput.value = "";
@@ -971,15 +849,13 @@
   }
 
   function search(value) {
-    searchQuery = String(value || "").trim();
-
-    STATE()?.setSearchQuery?.(searchQuery);
+    global.KSKHomePage?.setSearchQuery?.(value);
 
     if (NAV()?.getCurrentPage?.() !== "home") {
       NAV()?.navigate?.("home");
-    } else {
-      renderFeed();
     }
+
+    renderFeed();
   }
 
   /* =======================================================
@@ -1074,24 +950,17 @@
       return;
     }
 
-    /*
-     * Data Layer is the source of truth.
-     * Refresh the currently visible page.
-     */
-
     refreshCurrentPage();
 
-    /*
-     * Stories can change while another page is visible.
-     */
+    const changed = String(collection).toLowerCase();
 
-    if (String(collection).toLowerCase().includes("stories")) {
-      renderStories();
+    if (changed.includes("posts")) {
+      renderFeed();
     }
 
-    /*
-     * Feature modules manage their own media rendering.
-     */
+    if (changed.includes("stories")) {
+      renderStories();
+    }
 
     MEDIA_UI()?.refresh?.();
     PROFILE_MEDIA()?.refresh?.();
@@ -1102,33 +971,19 @@
   ======================================================= */
 
   function bindEvents() {
-    /*
-     * Navigation module handles data-page clicks.
-     */
-
     NAV()?.initializeNavigation?.(document);
-
-    /*
-     * Composer event is routed to the media feature.
-     */
 
     global.addEventListener(
       "ksk:open-composer",
       openPostComposer
     );
 
-    /*
-     * Language Core changes the language and dispatches
-     * ksk:language-change.
-     *
-     * App Controller only refreshes visible app content.
-     */
-
     global.addEventListener(
       "ksk:language-change",
       () => {
         refreshCurrentPage();
         renderStories();
+        renderFeed();
       }
     );
 
@@ -1241,16 +1096,7 @@
 
     cacheElements();
 
-    /*
-     * Initialize Toast first.
-     * Toast UI and behavior belong to core/toast.js.
-     */
-
     TOAST()?.initialize?.();
-
-    /*
-     * Initialize shared systems.
-     */
 
     DATA()?.initialize?.();
     SETTINGS()?.initialize?.();
@@ -1265,27 +1111,13 @@
       refreshCurrentPage
     });
 
-    /*
-     * Bind application events after shared systems
-     * have been initialized.
-     */
-
     bindEvents();
-
-    /*
-     * Initial page render.
-     */
 
     renderStories();
     renderFeed();
 
     refreshNavigation();
     refreshCurrentPage();
-
-    /*
-     * Feature modules initialize themselves.
-     * Their own initialization guards prevent duplicates.
-     */
 
     MEDIA_UI()?.initialize?.();
     PROFILE_MEDIA()?.initialize?.();
@@ -1321,9 +1153,13 @@
       return NAV()?.getCurrentPage?.() || "home";
     },
 
-    getPosts,
+    getPosts() {
+      return global.KSKHomePage?.getPosts?.() || [];
+    },
 
-    getStories,
+    getStories() {
+      return global.KSKHomePage?.getStories?.() || [];
+    },
 
     getFriends,
 
