@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -7,6 +8,7 @@
  * Dependencies:
  * core/data.js
  * core/modal.js
+ * core/reactions.js
  *
  * Public API:
  * KSKComments.open(postId)
@@ -252,6 +254,7 @@
 
   function renderComment(comment, allComments, depth = 0) {
     const id = escapeHTML(comment.id);
+    const postId = escapeHTML(activePostId);
 
     const children = allComments.filter(
       item =>
@@ -274,6 +277,10 @@
            @${escapeHTML(comment.replyTo)}
          </span>`
       : "";
+
+    const currentReaction = REACTION_EMOJI(
+      comment.myReaction
+    );
 
     return `
       <article
@@ -326,6 +333,18 @@
 
               <button
                 type="button"
+                class="ksk-comment-action ksk-comment-reaction-button"
+                data-comment-reaction
+                data-post-id="${postId}"
+                data-comment-id="${id}"
+                aria-label="${t("टिप्पणीमा Reaction दिनुहोस्", "React to comment")}"
+                title="${t("Reaction छान्नुहोस्", "Choose reaction")}"
+              >
+                ${currentReaction || "☺️"}
+              </button>
+
+              <button
+                type="button"
                 class="ksk-comment-action"
                 data-comment-reply="${id}"
               >
@@ -366,6 +385,18 @@
 
       </article>
     `;
+  }
+
+  function REACTION_EMOJI(value) {
+    const allowed = [
+      "🌹",
+      "😘",
+      "😢",
+      "😠",
+      "🤓"
+    ];
+
+    return allowed.includes(value) ? value : "";
   }
 
   function renderCommentList() {
@@ -506,7 +537,6 @@
       </div>
     `;
 
-    // IMPORTANT:
     // Do not bind listeners here.
     // The modal body is the same DOM element after every render.
     // Binding here repeatedly causes duplicate listeners and UI lag.
@@ -735,7 +765,6 @@
   function likeComment(commentId, button) {
     const comment = getComment(commentId);
 
-    // पहिले Like नभएको अवस्थामा मात्र animation देखाउने।
     const shouldAnimate = Boolean(
       comment && !comment.liked
     );
@@ -747,7 +776,6 @@
 
     if (!result) return;
 
-    // साझा KSK reaction animation प्रयोग गर्ने।
     if (shouldAnimate) {
       global.KSKReactions?.showLikeAnimation?.(
         button,
@@ -759,7 +787,6 @@
   }
 
   function removeComment(commentId) {
-    // Prevent accidental repeated deletion.
     if (deletingComment) return;
 
     const confirmed = global.confirm(
@@ -803,8 +830,6 @@
         "success"
       );
 
-      // Refresh only the comment modal content.
-      // Do not recreate the modal or attach new listeners.
       renderModal();
 
     } catch (error) {
@@ -945,7 +970,6 @@
 
     renderModal();
 
-    // Bind once after the modal body exists.
     bindModalEvents();
 
     return true;
