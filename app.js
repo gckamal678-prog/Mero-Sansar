@@ -292,201 +292,44 @@
   }
 
   /* =======================================================
-     POST COMPOSER
-     KSKMediaUI owns the photo/text composer.
-     Fallback is used only if the module is unavailable.
+     POST COMPOSER AND STORY CREATOR
+     KSKMediaUI owns both creation workflows.
   ======================================================= */
 
   function openPostComposer() {
-    if (MEDIA_UI()?.openPostComposer) {
-      MEDIA_UI().openPostComposer();
+    const mediaUI = MEDIA_UI();
+
+    if (typeof mediaUI?.openPostComposer === "function") {
+      mediaUI.openPostComposer();
       return true;
     }
 
-    const modal = openModal({
-      title: isEnglish() ? "Create Post" : "नयाँ पोस्ट",
-
-      content: `
-        <form id="kskFallbackPostForm">
-
-          <textarea
-            id="kskFallbackPostText"
-            class="form-textarea"
-            rows="5"
-            maxlength="10000"
-            placeholder="${isEnglish()
-              ? "What is on your mind?"
-              : "के सोच्दै हुनुहुन्छ?"}"
-            required></textarea>
-
-        </form>
-      `,
-
-      footer: `
-        <button
-          type="button"
-          class="btn btn-secondary"
-          data-modal-close>
-          ${translate("cancel", "रद्द")}
-        </button>
-
-        <button
-          type="submit"
-          form="kskFallbackPostForm"
-          class="btn btn-primary">
-          ${translate("publish", "प्रकाशित गर्नुहोस्")}
-        </button>
-      `
-    });
-
-    if (!modal) return false;
-
-    $("#kskFallbackPostText", modal.element)?.focus();
-
-    $("#kskFallbackPostForm", modal.element)?.addEventListener(
-      "submit",
-      event => {
-        event.preventDefault();
-
-        const text = $("#kskFallbackPostText", modal.element)
-          ?.value.trim();
-
-        if (!text) {
-          toast(
-            isEnglish()
-              ? "Please write something."
-              : "पोस्ट लेख्नुहोस्।",
-            "warning"
-          );
-          return;
-        }
-
-        const user = profile();
-
-        const result = DATA()?.addPost?.({
-          author: user.name || displayName(),
-          authorId: user.id || "",
-          authorInitial: initial(user.name),
-          text,
-          likes: 0,
-          liked: false
-        });
-
-        if (!result) {
-          toast(
-            isEnglish()
-              ? "Post could not be published."
-              : "पोस्ट प्रकाशित गर्न सकिएन।",
-            "error"
-          );
-          return;
-        }
-
-        closeModal();
-        refreshCurrentPage();
-
-        toast(
-          isEnglish()
-            ? "Post published successfully."
-            : "पोस्ट प्रकाशित भयो।",
-          "success"
-        );
-      }
+    toast(
+      isEnglish()
+        ? "Post creation is temporarily unavailable."
+        : "पोस्ट बनाउने सुविधा अहिले उपलब्ध छैन।",
+      "warning"
     );
 
-    return true;
+    return false;
   }
 
-  /* =======================================================
-     STORY CREATOR
-     KSKMediaUI owns the photo/story composer.
-  ======================================================= */
-
   function openStoryCreator() {
-    if (MEDIA_UI()?.openStoryCreator) {
-      MEDIA_UI().openStoryCreator();
+    const mediaUI = MEDIA_UI();
+
+    if (typeof mediaUI?.openStoryCreator === "function") {
+      mediaUI.openStoryCreator();
       return true;
     }
 
-    const modal = openModal({
-      title: isEnglish() ? "Create Story" : "नयाँ Story",
-
-      content: `
-        <form id="kskFallbackStoryForm">
-
-          <textarea
-            id="kskFallbackStoryText"
-            class="form-textarea"
-            rows="4"
-            maxlength="1000"
-            placeholder="${isEnglish()
-              ? "Write your story..."
-              : "आफ्नो Story लेख्नुहोस्..."}"
-            required></textarea>
-
-        </form>
-      `,
-
-      footer: `
-        <button
-          type="button"
-          class="btn btn-secondary"
-          data-modal-close>
-          ${translate("cancel", "रद्द")}
-        </button>
-
-        <button
-          type="submit"
-          form="kskFallbackStoryForm"
-          class="btn btn-primary">
-          ${isEnglish()
-            ? "Publish Story"
-            : "Story प्रकाशित गर्नुहोस्"}
-        </button>
-      `
-    });
-
-    if (!modal) return false;
-
-    $("#kskFallbackStoryForm", modal.element)?.addEventListener(
-      "submit",
-      event => {
-        event.preventDefault();
-
-        const text = $("#kskFallbackStoryText", modal.element)
-          ?.value.trim();
-
-        if (!text) return;
-
-        const result = DATA()?.addStory?.({
-          author: displayName(),
-          authorId: profile().id || "",
-          text
-        });
-
-        if (!result) {
-          toast(
-            isEnglish()
-              ? "Could not publish story."
-              : "Story प्रकाशित गर्न सकिएन।",
-            "error"
-          );
-          return;
-        }
-
-        closeModal();
-        renderStories();
-
-        toast(
-          isEnglish()
-            ? "Story published."
-            : "Story प्रकाशित भयो।",
-          "success"
-        );
-      }
+    toast(
+      isEnglish()
+        ? "Story creation is temporarily unavailable."
+        : "Story बनाउने सुविधा अहिले उपलब्ध छैन।",
+      "warning"
     );
 
-    return true;
+    return false;
   }
 
   /*
@@ -873,15 +716,6 @@
        * Their controls are intercepted before this handler.
        */
 
-      const createStory = target.closest(
-        "[data-story-create]"
-      );
-
-      if (createStory) {
-        openStoryCreator();
-        return;
-      }
-
       const viewStoryButton = target.closest(
         "[data-story-view]"
       );
@@ -1005,29 +839,10 @@
     );
 
     /*
-     * Media UI captures these composer controls first.
-     * These listeners are only safe fallbacks.
+     * KSKMediaUI captures #openComposer and #quickText
+     * in the document capture phase.
+     * Keep the optional legacy quick-photo delegate.
      */
-
-    els.openComposer?.addEventListener(
-      "click",
-      event => {
-        if (MEDIA_UI()?.openPostComposer) return;
-
-        event.preventDefault();
-        openPostComposer();
-      }
-    );
-
-    els.quickText?.addEventListener(
-      "click",
-      event => {
-        if (MEDIA_UI()?.openPostComposer) return;
-
-        event.preventDefault();
-        openPostComposer();
-      }
-    );
 
     els.quickPhoto?.addEventListener(
       "click",
