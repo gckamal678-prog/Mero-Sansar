@@ -613,9 +613,23 @@
     const comment = comments[index];
     const liked = !Boolean(comment.liked);
 
+    const reactionCounts = {
+      ...(comment.reactionCounts || {})
+    };
+
+    // Unlike गर्दा पहिलेको reaction count पनि घटाउने।
+    if (!liked && comment.myReaction) {
+      reactionCounts[comment.myReaction] = Math.max(
+        0,
+        Number(reactionCounts[comment.myReaction] || 0) - 1
+      );
+    }
+
     comments[index] = {
       ...comment,
       liked,
+      myReaction: liked ? (comment.myReaction || "") : "",
+      reactionCounts,
       likes: Math.max(
         0,
         Number(comment.likes || 0) + (liked ? 1 : -1)
@@ -631,6 +645,102 @@
       STORAGE.posts,
       replacePostInList(postId, updatedPost),
       "comment-like",
+      comments[index]
+    );
+  }
+
+  function setCommentReaction(postId, commentId, emoji) {
+    const allowedReactions = [
+      "🌹",
+      "😘",
+      "😢",
+      "😠",
+      "🤓"
+    ];
+
+    if (
+      emoji &&
+      !allowedReactions.includes(emoji)
+    ) {
+      return false;
+    }
+
+    const post = getPost(postId);
+
+    if (!post) return false;
+
+    const comments = isArray(post.comments);
+
+    const index = comments.findIndex(
+      item => String(item.id) === String(commentId)
+    );
+
+    if (index === -1) return false;
+
+    const comment = comments[index];
+    const previousReaction = comment.myReaction || "";
+
+    const reactionCounts = {
+      ...(comment.reactionCounts || {})
+    };
+
+    let likes = Math.max(
+      0,
+      Number(comment.likes || 0)
+    );
+
+    // उही Reaction फेरि छानेमा हटाउने।
+    if (previousReaction === emoji) {
+      reactionCounts[emoji] = Math.max(
+        0,
+        Number(reactionCounts[emoji] || 0) - 1
+      );
+
+      likes = Math.max(0, likes - 1);
+
+      comments[index] = {
+        ...comment,
+        liked: false,
+        myReaction: "",
+        reactionCounts,
+        likes
+      };
+    } else {
+      // पहिलेको Reaction हटाउने।
+      if (previousReaction) {
+        reactionCounts[previousReaction] = Math.max(
+          0,
+          Number(reactionCounts[previousReaction] || 0) - 1
+        );
+      }
+
+      // पहिलोपटक Like गर्दा मात्र कुल Like बढाउने।
+      if (!comment.liked) {
+        likes += 1;
+      }
+
+      reactionCounts[emoji] = Number(
+        reactionCounts[emoji] || 0
+      ) + 1;
+
+      comments[index] = {
+        ...comment,
+        liked: true,
+        myReaction: emoji,
+        reactionCounts,
+        likes
+      };
+    }
+
+    const updatedPost = {
+      ...post,
+      comments
+    };
+
+    return saveCollection(
+      STORAGE.posts,
+      replacePostInList(postId, updatedPost),
+      "comment-reaction",
       comments[index]
     );
   }
@@ -1169,6 +1279,7 @@
     updateComment,
     deleteComment,
     toggleCommentLike,
+    setCommentReaction,
     getCommentCount,
 
     // Stories
