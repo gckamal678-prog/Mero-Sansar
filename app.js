@@ -1093,94 +1093,25 @@
   }
 
   /* =======================================================
-     ADD FRIEND
+     FRIENDS
+     KSKFriendsPage owns friend creation and rendering.
   ======================================================= */
 
   function openAddFriend() {
-    const modal = openModal({
-      title: isEnglish()
-        ? "Add Friend"
-        : "साथी थप्नुहोस्",
+    const page = global.KSKFriendsPage;
 
-      content: `
-        <form id="kskAddFriendForm">
+    if (typeof page?.openAddFriend === "function") {
+      return page.openAddFriend();
+    }
 
-          <label
-            class="form-label"
-            for="kskFriendName">
-
-            ${isEnglish()
-              ? "Friend's name"
-              : "साथीको नाम"}
-
-          </label>
-
-          <input
-            id="kskFriendName"
-            class="form-input"
-            maxlength="60"
-            placeholder="${isEnglish()
-              ? "Enter friend's name"
-              : "साथीको नाम लेख्नुहोस्"}"
-            required>
-
-        </form>
-      `,
-
-      footer: `
-        <button
-          class="btn btn-secondary"
-          type="button"
-          data-modal-close>
-          ${translate("cancel", "रद्द")}
-        </button>
-
-        <button
-          class="btn btn-primary"
-          type="submit"
-          form="kskAddFriendForm">
-          ${translate("addFriend", "साथी थप्नुहोस्")}
-        </button>
-      `
-    });
-
-    if (!modal) return;
-
-    $("#kskFriendName", modal.element)?.focus();
-
-    $("#kskAddFriendForm", modal.element)?.addEventListener(
-      "submit",
-      event => {
-        event.preventDefault();
-
-        const name = $("#kskFriendName", modal.element)
-          ?.value.trim();
-
-        if (!name) return;
-
-        const friend = DATA()?.addFriend?.({ name });
-
-        if (!friend) {
-          toast(
-            isEnglish()
-              ? "Friend already exists or could not be added."
-              : "यो साथी पहिल्यै छ वा थप्न सकिएन।",
-            "warning"
-          );
-          return;
-        }
-
-        closeModal();
-        refreshCurrentPage();
-
-        toast(
-          isEnglish()
-            ? "Friend added."
-            : "साथी थपियो।",
-          "success"
-        );
-      }
+    toast(
+      isEnglish()
+        ? "Friends feature is unavailable. Please reload the app."
+        : "साथी सुविधा उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।",
+      "error"
     );
+
+    return false;
   }
 
   /* =======================================================
