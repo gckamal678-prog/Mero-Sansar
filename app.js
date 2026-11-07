@@ -1186,160 +1186,18 @@
   ======================================================= */
 
   function navigate(page, options = {}) {
-    if (!NAV()?.isValidPage?.(page)) {
-      toast(
-        isEnglish()
-          ? "This page is unavailable."
-          : "यो पृष्ठ उपलब्ध छैन।",
-        "warning"
-      );
+    const nav = window.KSKNavigation;
 
-      return false;
+    if (!nav) {
+      console.error("KSKNavigation module not loaded.");
+      return;
     }
 
-    if (page === "create") {
-      return openPostComposer();
-    }
-
-    if (page === "settings") {
-      return openSettings();
-    }
-
-    if (typeof NAV()?.navigate === "function") {
-      return NAV().navigate(page, options);
-    }
-
-    /*
-     * Safe fallback for environments where navigation
-     * module is unavailable.
-     */
-
-    handleNavigation({
-      detail: {
-        page,
-        options
-      }
-    });
-
-    return true;
+    nav.navigate(page, options);
   }
-
-  function handleNavigation(event) {
-    const page = event.detail?.page;
-
-    if (!page) return;
-
-    if (page === "settings") {
-      openSettings();
-      return;
-    }
-
-    if (page === "create") {
-      openPostComposer();
-      return;
-    }
-
-    if (!NAV()?.isValidPage?.(page)) {
-      return;
-    }
-
-    currentPage = page;
-
-    refreshNavigation();
-    refreshCurrentPage();
-  }
-
-  /* =======================================================
-     PAGE RENDER ROUTER
-  ======================================================= */
 
   function refreshCurrentPage() {
-    if (
-      currentPage === "home" ||
-      currentPage === "posts"
-    ) {
-      currentPage = "home";
-
-      showHomeLayout();
-
-      renderStories();
-      renderFeed();
-
-      return;
-    }
-
-    showOtherLayout();
-
-    const pages = {
-      friends: {
-        title: isEnglish()
-          ? "Friends"
-          : "साथीहरू",
-        render: renderFriends
-      },
-
-      messages: {
-        title: isEnglish()
-          ? "Messages"
-          : "सन्देशहरू",
-        render: renderMessages
-      },
-
-      profile: {
-        title: isEnglish()
-          ? "Profile"
-          : "प्रोफाइल",
-        render: renderProfile
-      },
-
-      notifications: {
-        title: isEnglish()
-          ? "Notifications"
-          : "सूचनाहरू",
-        render: renderNotifications
-      },
-
-      saved: {
-        title: isEnglish()
-          ? "Saved Posts"
-          : "सेभ गरिएका पोस्ट",
-        render: renderSaved
-      }
-    };
-
-    const selected = pages[currentPage];
-
-    if (!selected) {
-      setPageTitle(
-        isEnglish()
-          ? "Page unavailable"
-          : "पृष्ठ उपलब्ध छैन"
-      );
-
-      setPageContent(`
-        <div class="empty-state">
-          ${isEnglish()
-            ? "This page is not available."
-            : "यो पृष्ठ उपलब्ध छैन।"}
-        </div>
-      `);
-
-      return;
-    }
-
-    setPageTitle(selected.title);
-    setPageContent(selected.render());
-
-    if (currentPage === "friends") {
-      global.KSKUserCard?.refresh?.();
-    }
-
-    /*
-     * Feature modules refresh their own media.
-     */
-
-    MEDIA_UI()?.refresh?.();
-    PROFILE_MEDIA()?.refresh?.();
+    window.KSKNavigation?.refreshCurrentPage();
   }
 
   /* =======================================================
