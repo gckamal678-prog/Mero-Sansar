@@ -51,7 +51,6 @@
   const COMMENTS = () => global.KSKComments;
   const KSKPostActions = () => global.KSKPostActions;
 
-  let currentPage = "home";
   let searchQuery = "";
   let initialized = false;
 
@@ -261,32 +260,6 @@
 
   function getChats() {
     return DATA()?.getChats?.() || [];
-  }
-
-  
-     /*  PAGE LAYOUT  */
-  
-
-  function showHomeLayout() {
-    els.homePage?.classList.remove("hidden");
-    els.otherPage?.classList.add("hidden");
-  }
-
-  function showOtherLayout() {
-    els.homePage?.classList.add("hidden");
-    els.otherPage?.classList.remove("hidden");
-  }
-
-  function setPageTitle(title) {
-    if (els.otherPageTitle) {
-      els.otherPageTitle.textContent = title;
-    }
-  }
-
-  function setPageContent(html) {
-    if (els.otherPageText) {
-      els.otherPageText.innerHTML = html;
-    }
   }
 
   /*
@@ -850,192 +823,6 @@
   }
 
   /* =======================================================
-     PROFILE — DISPLAY ONLY
-     Avatar/Cover and editing belong to Profile Media UI.
-  ======================================================= */
-
-  function renderProfile() {
-    const user = profile();
-    const page = global.KSKProfilePage;
-
-    if (
-      typeof page?.render === "function" &&
-      String(user.name || "").trim()
-    ) {
-      const userId = String(user.id || "");
-
-      const posts = getPosts().filter(post => {
-        if (
-          userId &&
-          post.authorId &&
-          String(post.authorId) === userId
-        ) {
-          return true;
-        }
-
-        const author = String(post.author || "").trim();
-
-        return author === String(user.name).trim();
-      });
-
-      return page.render({
-        user: user,
-        posts: posts,
-        renderPost: renderPost
-      });
-    }
-
-    const userName = String(user.name || "").trim();
-    const userId = String(user.id || "");
-
-    const posts = getPosts().filter(post => {
-      if (
-        userId &&
-        post.authorId &&
-        String(post.authorId) === userId
-      ) {
-        return true;
-      }
-
-      const author = String(post.author || "").trim();
-
-      return author === userName ||
-        author === displayName();
-    });
-
-    return `
-      <section class="profile-section">
-
-        <div class="card profile-card">
-
-          <div class="profile-avatar">
-            ${avatarHTML(
-              user.name,
-              user.avatar,
-              "avatar-xl"
-            )}
-          </div>
-
-          <h2 class="text-center">
-            ${escapeHTML(user.name || (
-              isEnglish()
-                ? "Your Profile"
-                : "तपाईंको प्रोफाइल"
-            ))}
-          </h2>
-
-          ${
-            user.bio
-              ? `<p class="text-center">${escapeHTML(user.bio)}</p>`
-              : ""
-          }
-
-          ${
-            user.location
-              ? `
-                <p class="text-center text-muted">
-                  📍 ${escapeHTML(user.location)}
-                </p>
-              `
-              : ""
-          }
-
-          <div class="text-center">
-
-            <span class="badge badge-primary">
-              ${posts.length}
-              ${isEnglish()
-                ? "Posts"
-                : "पोस्ट"}
-            </span>
-
-          </div>
-
-          <div
-            class="flex-center"
-            style="margin-top:16px; gap:10px; flex-wrap:wrap;">
-
-            <button
-              class="btn btn-primary"
-              type="button"
-              data-edit-profile>
-
-              ✏️
-              ${isEnglish()
-                ? "Edit Profile"
-                : "प्रोफाइल सम्पादन"}
-
-            </button>
-
-            <button
-              class="btn btn-secondary"
-              type="button"
-              data-open-settings>
-
-              ⚙️
-              ${isEnglish()
-                ? "Manage"
-                : "व्यवस्थापन"}
-
-            </button>
-
-          </div>
-
-        </div>
-
-        <h3
-          class="section-title"
-          style="margin-top:20px">
-
-          ${isEnglish()
-            ? "My Posts"
-            : "मेरा पोस्टहरू"}
-
-        </h3>
-
-        <div class="profile-posts">
-
-          ${
-            posts.length
-              ? posts.map(renderPost).join("")
-              : `
-                <div class="empty-state">
-                  ${isEnglish()
-                    ? "You have not published any posts."
-                    : "तपाईंले अहिलेसम्म पोस्ट गर्नुभएको छैन।"}
-                </div>
-              `
-          }
-
-        </div>
-
-      </section>
-    `;
-  }
-
-  /*
-   * Profile editing is delegated to KSKProfileMediaUI.
-   * This fallback is only for safe operation if that module
-   * is temporarily unavailable.
-   */
-
-  function openProfileEditor() {
-    if (PROFILE_MEDIA()?.openEditor) {
-      PROFILE_MEDIA().openEditor();
-      return true;
-    }
-
-    toast(
-      isEnglish()
-        ? "Profile editor is unavailable."
-        : "प्रोफाइल सम्पादन सुविधा उपलब्ध छैन।",
-      "warning"
-    );
-
-    return false;
-  }
-
-  /* =======================================================
      NOTIFICATIONS
      KSKNotificationsPage owns notification rendering.
   ======================================================= */
@@ -1181,23 +968,12 @@
   }
 
   /* =======================================================
-     NAVIGATION
-     KSKNavigation owns shared page state and active menu.
+     PAGE REFRESH
+     Navigation and page rendering belong to KSKNavigation.
   ======================================================= */
 
-  function navigate(page, options = {}) {
-    const nav = window.KSKNavigation;
-
-    if (!nav) {
-      console.error("KSKNavigation module not loaded.");
-      return;
-    }
-
-    nav.navigate(page, options);
-  }
-
   function refreshCurrentPage() {
-    window.KSKNavigation?.refreshCurrentPage();
+    NAV()?.refreshCurrentPage?.();
   }
 
   /* =======================================================
@@ -1228,8 +1004,8 @@
 
     STATE()?.setSearchQuery?.(searchQuery);
 
-    if (currentPage !== "home") {
-      navigate("home");
+    if (NAV()?.getCurrentPage?.() !== "home") {
+      NAV()?.navigate?.("home");
     } else {
       renderFeed();
     }
@@ -1361,11 +1137,6 @@
 
     NAV()?.initializeNavigation?.(document);
 
-    global.addEventListener(
-      "ksk:navigate",
-      handleNavigation
-    );
-
     /*
      * Composer event is routed to the media feature.
      */
@@ -1471,7 +1242,7 @@
     els.notificationsToggle?.addEventListener(
       "click",
       () => {
-        navigate("notifications");
+        NAV()?.navigate?.("notifications");
       }
     );
 
@@ -1533,20 +1304,6 @@
     );
 
     /*
-     * Restore shared page state.
-     */
-
-    currentPage =
-      STATE()?.getState?.()?.currentPage || "home";
-
-    if (
-      currentPage === "create" ||
-      currentPage === "settings"
-    ) {
-      currentPage = "home";
-    }
-
-    /*
      * Bind application events after shared systems
      * have been initialized.
      */
@@ -1584,8 +1341,6 @@
 
     initialize,
 
-    navigate,
-
     refreshCurrentPage,
 
     openPostComposer,
@@ -1601,7 +1356,7 @@
     renderStories,
 
     getCurrentPage() {
-      return currentPage;
+      return NAV()?.getCurrentPage?.() || "home";
     },
 
     getPosts,
