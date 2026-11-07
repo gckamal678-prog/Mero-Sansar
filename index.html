@@ -1,3 +1,4 @@
+File path: "Mero-Sansar/index.html"
 
 <!DOCTYPE html>
 <html lang="ne" data-theme="light">
@@ -20,13 +21,12 @@
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
 
-  <!-- Application Styles -->
+  <!-- Application Styles: unchanged -->
   <link rel="stylesheet" href="core/design-system.css">
   <link rel="stylesheet" href="app.css">
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
-
 </head>
 
 <body>
@@ -36,7 +36,6 @@
     <div class="header-inner">
 
       <div class="brand">
-
         <div class="brand-logo">
           <img
             src="Nepal.jpg"
@@ -54,11 +53,9 @@
             साथी जोडौँ, कुरा गरौँ
           </p>
         </div>
-
       </div>
 
       <div class="header-actions">
-
         <button
           class="icon-button"
           id="searchToggle"
@@ -76,7 +73,6 @@
           title="सूचनाहरू">
           🔔
         </button>
-
       </div>
 
     </div>
@@ -326,43 +322,47 @@
   </div>
 
 
-  <!-- KSK CORE -->
+  <!-- =========================================
+       KSK CORE MODULES
+       Load shared dependencies first.
+  ========================================== -->
+
   <script src="core/state.js"></script>
   <script src="core/settings.js"></script>
   <script src="core/theme.js"></script>
   <script src="core/language.js"></script>
+
   <script src="core/toast.js"></script>
   <script src="core/utils.js"></script>
   <script src="core/media.js"></script>
   <script src="core/modal.js"></script>
   <script src="core/data.js"></script>
   <script src="core/navigation.js"></script>
+
   <script src="core/comments.js"></script>
   <script src="core/comments-bridge.js"></script>
-
-<!-- KSK USER CARD COMPONENT -->
-<script src="components/user-card.js"></script>
-  
-  <!-- MAIN APPLICATION -->
-  <script src="app.js"></script>
-
-
-  <!-- KSK REACTIONS -->
   <script src="core/reactions.js"></script>
-
-
-  <!-- KSK SHARE -->
   <script src="core/share.js"></script>
 
-
-  <!-- SETTINGS UI -->
   <script src="core/settings-ui.js"></script>
-
-
-  <!-- MEDIA SYSTEM -->
   <script src="core/media-ui.js"></script>
   <script src="core/profile-media.js"></script>
   <script src="core/avatar-ui.js"></script>
+
+
+  <!-- =========================================
+       KSK COMPONENTS
+  ========================================== -->
+
+  <script src="components/user-card.js"></script>
+
+
+  <!-- =========================================
+       MAIN APPLICATION
+       Load after all required modules.
+  ========================================== -->
+
+  <script src="app.js"></script>
 
 </body>
 </html>
