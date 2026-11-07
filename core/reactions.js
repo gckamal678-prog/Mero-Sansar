@@ -4,10 +4,11 @@
 /* =========================================================
    KSK REACTIONS
    Responsibility:
-   - Facebook-style post reaction picker
+   - Post reaction picker
+   - Comment reaction picker
    - Select, change and remove reactions
    - Persist reactions through KSKData
-   - Shared like emoji animation for posts and comments
+   - Shared emoji animation
 ========================================================= */
 
 (function (global) {
@@ -42,8 +43,15 @@
     return global.KSKData?.getPost?.(id) || null;
   }
 
+  function getComment(postId, commentId) {
+    return global.KSKData?.getComment?.(
+      postId,
+      commentId
+    ) || null;
+  }
+
   /* =========================================
-     LIKE EMOJI ANIMATION
+     EMOJI ANIMATION
   ========================================= */
 
   function installAnimationStyles() {
@@ -52,7 +60,6 @@
     }
 
     const style = document.createElement("style");
-
     style.id = ANIMATION_STYLE_ID;
 
     style.textContent = `
@@ -85,7 +92,7 @@
         font-size: 38px;
         line-height: 1;
         animation: ksk-like-float 850ms ease-out forwards;
-        filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.2));
+        filter: drop-shadow(0 3px 5px rgba(0,0,0,0.2));
         will-change: transform, opacity;
       }
 
@@ -110,8 +117,11 @@
     animation.textContent = emoji;
     animation.setAttribute("aria-hidden", "true");
 
-    animation.style.left = `${rect.left + rect.width / 2}px`;
-    animation.style.top = `${rect.top + rect.height / 2}px`;
+    animation.style.left =
+      `${rect.left + rect.width / 2}px`;
+
+    animation.style.top =
+      `${rect.top + rect.height / 2}px`;
 
     document.body.appendChild(animation);
 
@@ -144,15 +154,32 @@
     activeTriggerButton = null;
   }
 
-  function renderPicker(postId, currentReaction = "") {
+  function renderPicker(
+    contextType,
+    postId,
+    commentId = "",
+    currentReaction = ""
+  ) {
     closePicker();
 
     const picker = document.createElement("div");
 
     picker.className = "ksk-reaction-picker";
     picker.setAttribute("role", "group");
-    picker.setAttribute("aria-label", "पोस्ट Reaction छान्नुहोस्");
+
+    picker.setAttribute(
+      "aria-label",
+      contextType === "comment"
+        ? "टिप्पणी Reaction छान्नुहोस्"
+        : "पोस्ट Reaction छान्नुहोस्"
+    );
+
+    picker.dataset.contextType = contextType;
     picker.dataset.postId = postId;
+
+    if (commentId) {
+      picker.dataset.commentId = commentId;
+    }
 
     picker.innerHTML = REACTIONS.map(item => `
       <button
@@ -195,18 +222,37 @@
     picker.style.top = `${top}px`;
   }
 
-  function openPicker(button) {
+  function openPicker(button, contextType) {
     const postId = button.dataset.postId;
 
     if (!postId) return;
 
-    const post = getPost(postId);
+    let commentId = "";
+    let currentReaction = "";
 
-    if (!post) return;
+    if (contextType === "comment") {
+      commentId = button.dataset.commentId;
+
+      if (!commentId) return;
+
+      const comment = getComment(postId, commentId);
+
+      if (!comment) return;
+
+      currentReaction = comment.myReaction || "";
+    } else {
+      const post = getPost(postId);
+
+      if (!post) return;
+
+      currentReaction = post.myReaction || "";
+    }
 
     const picker = renderPicker(
+      contextType,
       postId,
-      post.myReaction || ""
+      commentId,
+      currentReaction
     );
 
     activeTriggerButton = button;
@@ -215,7 +261,7 @@
   }
 
   /* =========================================
-     SAVE REACTION
+     SAVE POST REACTION
   ========================================= */
 
   function selectReaction(postId, emoji) {
@@ -240,7 +286,6 @@
       Number(post.likes || 0)
     );
 
-    // Same reaction selected again: remove it.
     if (current === emoji) {
       counts[emoji] = Math.max(
         0,
@@ -259,7 +304,6 @@
       );
     }
 
-    // Changing an existing reaction.
     if (current) {
       counts[current] = Math.max(
         0,
@@ -269,7 +313,9 @@
       likes += 1;
     }
 
-    counts[emoji] = Number(counts[emoji] || 0) + 1;
+    counts[emoji] = Number(
+      counts[emoji] || 0
+    ) + 1;
 
     return Boolean(
       global.KSKData.updatePost(postId, {
@@ -281,12 +327,116 @@
     );
   }
 
+  /* =========================================
+     SAVE COMMENT REACTION
+  ========================================= */
+
+  function selectCommentReaction(
+    postId,
+    commentId,
+    emoji
+  ) {
+    const valid = REACTIONS.some(
+      item => item.emoji === emoji
+    );
+
+    if (!valid) return false;
+
+    const comment = getComment(postId, commentId);
+
+    if (!comment) return false;
+
+    return Boolean(
+      global.KSKData?.setCommentReaction?.(
+        postId,
+        commentId,
+        emoji
+      )
+    );
+  }
+
+  /* =========================================
+     REFRESH UI
+  ========================================= */
+
   function refreshFeed() {
     global.KSKApp?.refreshCurrentPage?.();
   }
 
+  function refreshComments() {
+    global.KSKComments?.refresh?.();
+  }
+
   /* =========================================
-     EVENTS
+     HANDLE REACTION SELECTION
+  ========================================= */
+
+  function handleReactionSelection(option) {
+    if (!activePicker || !activePicker.contains(option)) {
+      return false;
+    }
+
+    const contextType =
+      activePicker.dataset.contextType;
+
+    const postId =
+      activePicker.dataset.postId;
+
+    const commentId =
+      activePicker.dataset.commentId || "";
+
+    const emoji = option.dataset.kskReaction;
+
+    const triggerButton = activeTriggerButton;
+
+    const animationRect =
+      triggerButton?.getBoundingClientRect?.() || null;
+
+    let previousReaction = "";
+
+    if (contextType === "comment") {
+      const comment = getComment(postId, commentId);
+      previousReaction = comment?.myReaction || "";
+    } else {
+      const post = getPost(postId);
+      previousReaction = post?.myReaction || "";
+    }
+
+    let success = false;
+
+    if (contextType === "comment") {
+      success = selectCommentReaction(
+        postId,
+        commentId,
+        emoji
+      );
+    } else {
+      success = selectReaction(postId, emoji);
+    }
+
+    closePicker();
+
+    if (!success) return false;
+
+    // नयाँ Reaction वा Reaction परिवर्तन हुँदा मात्र animation।
+    if (
+      previousReaction !== emoji &&
+      animationRect
+    ) {
+      showLikeAnimationAt(animationRect, emoji);
+    }
+
+    if (contextType === "comment") {
+      refreshComments();
+    } else {
+      refreshFeed();
+    }
+
+    return true;
+  }
+
+  /* =========================================
+     DOCUMENT EVENTS
   ========================================= */
 
   function onDocumentClick(event) {
@@ -294,18 +444,7 @@
 
     if (!target?.closest) return;
 
-    const reactionButton = target.closest(
-      '[data-post-action="like"]'
-    );
-
-    if (reactionButton) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      openPicker(reactionButton);
-      return;
-    }
-
+    // पहिले Emoji Picker भित्रको विकल्प जाँच गर्ने।
     const option = target.closest(
       "[data-ksk-reaction]"
     );
@@ -314,34 +453,49 @@
       event.preventDefault();
       event.stopImmediatePropagation();
 
-      const postId = activePicker.dataset.postId;
-      const emoji = option.dataset.kskReaction;
+      handleReactionSelection(option);
+      return;
+    }
 
-      const triggerButton = activeTriggerButton;
-      const post = getPost(postId);
+    // Comment Emoji Picker खोल्ने।
+    const commentReactionButton = target.closest(
+      "[data-comment-reaction]"
+    );
 
-      const previousReaction = post?.myReaction || "";
+    if (commentReactionButton) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
 
-      const animationRect =
-        triggerButton?.getBoundingClientRect?.() || null;
-
-      const success = selectReaction(postId, emoji);
-
-      closePicker();
-
-      if (success) {
-        // Do not animate when the user removes a reaction.
-        if (previousReaction !== emoji && animationRect) {
-          showLikeAnimationAt(animationRect, emoji);
-        }
-
-        refreshFeed();
-      }
+      openPicker(
+        commentReactionButton,
+        "comment"
+      );
 
       return;
     }
 
-    if (activePicker && !activePicker.contains(target)) {
+    // Post Emoji Picker खोल्ने।
+    const postReactionButton = target.closest(
+      '[data-post-action="like"]'
+    );
+
+    if (postReactionButton) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      openPicker(
+        postReactionButton,
+        "post"
+      );
+
+      return;
+    }
+
+    // Picker बाहिर क्लिक गर्दा बन्द गर्ने।
+    if (
+      activePicker &&
+      !activePicker.contains(target)
+    ) {
       closePicker();
     }
   }
@@ -357,10 +511,21 @@
   ========================================= */
 
   function initialize() {
+    document.removeEventListener(
+      "click",
+      onDocumentClick,
+      true
+    );
+
     document.addEventListener(
       "click",
       onDocumentClick,
       true
+    );
+
+    document.removeEventListener(
+      "keydown",
+      onKeyDown
     );
 
     document.addEventListener(
@@ -406,6 +571,8 @@
     );
 
     closePicker();
+
+    return true;
   }
 
   /* =========================================
@@ -417,8 +584,7 @@
     destroy,
     closePicker,
     selectReaction,
-
-    // Shared animation API for comments and other UI.
+    selectCommentReaction,
     showLikeAnimation,
 
     getReactions() {
