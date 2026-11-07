@@ -262,42 +262,9 @@
     return DATA()?.getChats?.() || [];
   }
 
-  /* =======================================================
-     MARK AS READ
-     Avoid unnecessary storage writes when all
-     notifications are already marked as read.
-  ======================================================= */
-
-  function markAllAsRead() {
-    const data = DATA();
-
-    if (
-      typeof data?.getNotifications !== "function" ||
-      typeof data?.markNotificationsRead !== "function"
-    ) {
-      return false;
-    }
-
-    const notifications = data.getNotifications();
-
-    if (!Array.isArray(notifications)) {
-      return false;
-    }
-
-    const hasUnread = notifications.some(
-      item => !item.read
-    );
-
-    if (!hasUnread) {
-      return true;
-    }
-
-    return data.markNotificationsRead();
-  }
-
-  /* =======================================================
-     PAGE LAYOUT
-  ======================================================= */
+  
+     /*  PAGE LAYOUT  */
+  
 
   function showHomeLayout() {
     els.homePage?.classList.remove("hidden");
@@ -330,10 +297,8 @@
     NAV()?.refreshNavigation?.();
   }
 
-  /* =======================================================
-     STORIES — RENDERING ONLY
-     Creation and viewing belong to KSKMediaUI.
-  ======================================================= */
+  /*   STORIES — RENDERING ONLY
+     Creation and viewing belong to KSKMediaUI. */
 
   function renderStories() {
     if (!els.storiesList) return;
@@ -382,9 +347,7 @@
     MEDIA_UI()?.refresh?.();
   }
 
-  /* =======================================================
-     POST RENDERING
-  ======================================================= */
+  /*  POST RENDERING  */
 
   function renderPost(post) {
     const id = escapeHTML(post.id);
