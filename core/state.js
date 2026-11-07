@@ -1,378 +1,159 @@
-
 "use strict";
 
-/* =========================================================
-   KSK — GLOBAL APPLICATION STATE
-   Version: 2.0
-
-   RESPONSIBILITY:
-   - Current page
-   - Search query
-   - Theme state
-   - Language state
-   - UI preferences mirror
-   - Last data-change information
-
-   IMPORTANT:
-   Persistent application data belongs ONLY to KSKData.
-
-   KSKState does NOT own:
-   - Posts
-   - Stories
-   - Friends
-   - Messages
-   - Notifications
-   - Profile data
-========================================================= */
+/*
+ * KSK GLOBAL APPLICATION STATE
+ *
+ * OWNER:
+ * - Current page
+ * - Search query
+ * - Last data change
+ *
+ * PERSISTENT SETTINGS:
+ * - Owned exclusively by KSKSettings
+ *
+ * No localStorage persistence in this module.
+ */
 
 (function (global) {
+  "use strict";
 
   if (global.KSKState) return;
 
-
-  /* =====================================================
-     CONFIGURATION
-  ===================================================== */
-
-  const STORAGE_KEY = "ksk_global_state_v1";
-
-
-  /* =====================================================
-     DEFAULT STATE
-  ===================================================== */
-
-  const DEFAULT_STATE = Object.freeze({
-
-    theme: "light",
-
-    language: "ne",
-
-    currentPage: "home",
-
-    searchQuery: "",
-
-    settings: {
-      notifications: true,
-      compactMode: false
-    },
-
-    lastDataChange: null
-
-  });
-
-
   const listeners = new Set();
 
-
-  /* =====================================================
-     VALIDATION HELPERS
-  ===================================================== */
+  const state = {
+    currentPage: "home",
+    searchQuery: "",
+    lastDataChange: null
+  };
 
   function isObject(value) {
-
     return (
       value !== null &&
       typeof value === "object" &&
       !Array.isArray(value)
     );
-
   }
 
-
-  function validTheme(value) {
-
-    return value === "dark"
-      ? "dark"
-      : "light";
-
-  }
-
-
-  function validLanguage(value) {
-
-    return value === "en"
-      ? "en"
-      : "ne";
-
-  }
-
-
-  function validPage(value) {
-
-    if (
-      typeof value !== "string" ||
-      !value.trim()
-    ) {
-      return "home";
-    }
-
-    return value.trim();
-
-  }
-
-
-  function validSearchQuery(value) {
-
-    return String(value ?? "")
-      .slice(0, 500);
-
-  }
-
-
-  function cloneObject(value) {
-
-    if (!isObject(value)) {
-      return {};
-    }
-
+  function clone(value) {
     try {
-
-      return JSON.parse(
-        JSON.stringify(value)
-      );
-
+      return JSON.parse(JSON.stringify(value));
     } catch (error) {
-
-      return {};
-
+      return null;
     }
-
   }
 
-
-  /* =====================================================
-     STORAGE
-  ===================================================== */
-
-  function readStorage() {
-
-    try {
-
-      const raw = global.localStorage.getItem(
-        STORAGE_KEY
-      );
-
-      if (!raw) return {};
-
-      const parsed = JSON.parse(raw);
-
-      return isObject(parsed)
-        ? parsed
-        : {};
-
-    } catch (error) {
-
-      console.warn(
-        "KSKState: Unable to read saved state.",
-        error
-      );
-
-      return {};
-
-    }
-
+  function getSettings() {
+    return global.KSKSettings?.getSettings?.() || {
+      theme: "light",
+      language: "ne",
+      notifications: true,
+      compactMode: false
+    };
   }
-
-
-  function persist() {
-
-    try {
-
-      const persistentState = {
-
-        theme: state.theme,
-
-        language: state.language,
-
-        currentPage: state.currentPage,
-
-        settings: {
-          ...state.settings
-        }
-
-      };
-
-
-      global.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(persistentState)
-      );
-
-      return true;
-
-    } catch (error) {
-
-      console.warn(
-        "KSKState: Unable to save state.",
-        error
-      );
-
-      return false;
-
-    }
-
-  }
-
-
-  /* =====================================================
-     INITIAL STATE
-  ===================================================== */
-
-  const saved = readStorage();
-
-
-  let state = {
-
-    theme: validTheme(saved.theme),
-
-    language: validLanguage(saved.language),
-
-    currentPage: validPage(saved.currentPage),
-
-    searchQuery: "",
-
-    settings: {
-
-      ...DEFAULT_STATE.settings,
-
-      ...(isObject(saved.settings)
-        ? saved.settings
-        : {})
-
-    },
-
-    lastDataChange: null
-
-  };
-
-
-  /* =====================================================
-     STATE SNAPSHOT
-  ===================================================== */
 
   function getState() {
+    const settings = getSettings();
 
     return {
-
-      theme: state.theme,
-
-      language: state.language,
+      theme: settings.theme,
+      language: settings.language,
 
       currentPage: state.currentPage,
-
       searchQuery: state.searchQuery,
 
       settings: {
-        ...state.settings
+        notifications: settings.notifications,
+        compactMode: settings.compactMode
       },
 
-      lastDataChange: state.lastDataChange
-        ? cloneObject(state.lastDataChange)
-        : null
-
+      lastDataChange: clone(state.lastDataChange)
     };
-
   }
 
-
-  /* =====================================================
-     NOTIFICATION
-  ===================================================== */
-
   function notify(changeName) {
-
     const snapshot = getState();
 
-
     listeners.forEach(listener => {
-
       try {
-
-        listener(
-          snapshot,
-          changeName
-        );
-
+        listener(snapshot, changeName);
       } catch (error) {
-
         console.error(
           "KSKState listener error:",
           error
         );
-
       }
-
     });
-
 
     global.dispatchEvent(
       new CustomEvent("ksk:state-change", {
-
         detail: {
-
           state: snapshot,
-
           change: changeName
-
         }
-
       })
     );
-
   }
 
+  /*
+   * Update application state.
+   * Preference changes are forwarded to KSKSettings.
+   */
 
-  /* =====================================================
-     UPDATE STATE
-  ===================================================== */
+  function setState(updates = {}, changeName = "state-change") {
+    if (!isObject(updates)) return false;
 
-  function setState(
-    updates = {},
-    changeName = "state-change"
-  ) {
+    let changed = false;
 
-    if (!isObject(updates)) {
-      return false;
+    const preferenceUpdates = {};
+
+    if (Object.prototype.hasOwnProperty.call(updates, "theme")) {
+      preferenceUpdates.theme =
+        updates.theme === "dark" ? "dark" : "light";
     }
 
+    if (Object.prototype.hasOwnProperty.call(updates, "language")) {
+      preferenceUpdates.language =
+        updates.language === "en" ? "en" : "ne";
+    }
 
-    /*
-      Only UI/application state is accepted.
+    if (isObject(updates.settings)) {
+      if (
+        Object.prototype.hasOwnProperty.call(
+          updates.settings,
+          "notifications"
+        )
+      ) {
+        preferenceUpdates.notifications =
+          updates.settings.notifications !== false;
+      }
 
-      Entity data such as posts, stories,
-      friends and messages must use KSKData.
-    */
+      if (
+        Object.prototype.hasOwnProperty.call(
+          updates.settings,
+          "compactMode"
+        )
+      ) {
+        preferenceUpdates.compactMode =
+          updates.settings.compactMode === true;
+      }
+    }
 
-    const next = {};
+    if (Object.keys(preferenceUpdates).length) {
+      if (!global.KSKSettings?.updateSettings) {
+        console.error(
+          "KSKState: KSKSettings is not available."
+        );
 
+        return false;
+      }
 
-    if (
-      Object.prototype.hasOwnProperty.call(
-        updates,
-        "theme"
-      )
-    ) {
-
-      next.theme = validTheme(
-        updates.theme
+      global.KSKSettings.updateSettings(
+        preferenceUpdates
       );
 
+      changed = true;
     }
-
-
-    if (
-      Object.prototype.hasOwnProperty.call(
-        updates,
-        "language"
-      )
-    ) {
-
-      next.language = validLanguage(
-        updates.language
-      );
-
-    }
-
 
     if (
       Object.prototype.hasOwnProperty.call(
@@ -380,13 +161,15 @@
         "currentPage"
       )
     ) {
+      const page = String(
+        updates.currentPage || "home"
+      ).trim();
 
-      next.currentPage = validPage(
-        updates.currentPage
-      );
-
+      if (page) {
+        state.currentPage = page;
+        changed = true;
+      }
     }
-
 
     if (
       Object.prototype.hasOwnProperty.call(
@@ -394,32 +177,12 @@
         "searchQuery"
       )
     ) {
+      state.searchQuery = String(
+        updates.searchQuery ?? ""
+      ).slice(0, 500);
 
-      next.searchQuery = validSearchQuery(
-        updates.searchQuery
-      );
-
+      changed = true;
     }
-
-
-    if (
-      Object.prototype.hasOwnProperty.call(
-        updates,
-        "settings"
-      ) &&
-      isObject(updates.settings)
-    ) {
-
-      next.settings = {
-
-        ...state.settings,
-
-        ...updates.settings
-
-      };
-
-    }
-
 
     if (
       Object.prototype.hasOwnProperty.call(
@@ -427,225 +190,100 @@
         "lastDataChange"
       )
     ) {
+      state.lastDataChange = isObject(
+        updates.lastDataChange
+      )
+        ? clone(updates.lastDataChange)
+        : null;
 
-      next.lastDataChange =
-        isObject(updates.lastDataChange)
-          ? cloneObject(updates.lastDataChange)
-          : null;
-
+      changed = true;
     }
 
-
-    if (Object.keys(next).length === 0) {
-      return false;
-    }
-
-
-    state = {
-
-      ...state,
-
-      ...next
-
-    };
-
-
-    persist();
+    if (!changed) return false;
 
     notify(changeName);
 
     return true;
-
   }
 
-
-  /* =====================================================
-     SUBSCRIBE
-  ===================================================== */
-
   function subscribe(listener) {
-
     if (typeof listener !== "function") {
-
       throw new TypeError(
         "KSKState.subscribe requires a function."
       );
-
     }
-
 
     listeners.add(listener);
 
-
     return function unsubscribe() {
-
       listeners.delete(listener);
-
     };
-
   }
-
-
-  /* =====================================================
-     THEME
-  ===================================================== */
 
   function setTheme(value) {
+    if (!global.KSKSettings?.updateSetting) return false;
 
-    return setState(
-
-      {
-        theme: validTheme(value)
-      },
-
-      "theme-change"
-
+    return global.KSKSettings.updateSetting(
+      "theme",
+      value === "dark" ? "dark" : "light"
     );
-
   }
-
-
-  /* =====================================================
-     LANGUAGE
-  ===================================================== */
 
   function setLanguage(value) {
+    if (!global.KSKSettings?.updateSetting) return false;
 
-    return setState(
-
-      {
-        language: validLanguage(value)
-      },
-
-      "language-change"
-
+    return global.KSKSettings.updateSetting(
+      "language",
+      value === "en" ? "en" : "ne"
     );
-
   }
-
-
-  /* =====================================================
-     NAVIGATION
-  ===================================================== */
 
   function setCurrentPage(page) {
-
-    if (
-      typeof page !== "string" ||
-      !page.trim()
-    ) {
-      return false;
-    }
-
-
-    return setState(
-
-      {
-        currentPage: page.trim()
-      },
-
-      "page-change"
-
-    );
-
+    return setState({
+      currentPage: page
+    }, "page-change");
   }
-
-
-  /* =====================================================
-     SEARCH
-  ===================================================== */
 
   function setSearchQuery(query) {
-
-    return setState(
-
-      {
-        searchQuery: validSearchQuery(query)
-      },
-
-      "search-change"
-
-    );
-
+    return setState({
+      searchQuery: query
+    }, "search-change");
   }
 
-
-  /* =====================================================
-     RESET
-  ===================================================== */
+  /*
+   * Resets temporary application state only.
+   * Saved user preferences remain unchanged.
+   */
 
   function resetState() {
-
-    state = {
-
-      theme: DEFAULT_STATE.theme,
-
-      language: DEFAULT_STATE.language,
-
-      currentPage: DEFAULT_STATE.currentPage,
-
-      searchQuery: "",
-
-      settings: {
-        ...DEFAULT_STATE.settings
-      },
-
-      lastDataChange: null
-
-    };
-
-
-    persist();
+    state.currentPage = "home";
+    state.searchQuery = "";
+    state.lastDataChange = null;
 
     notify("state-reset");
 
     return getState();
-
   }
 
-
-  /* =====================================================
-     PUBLIC API
-  ===================================================== */
-
-  const KSKState = Object.freeze({
-
+  global.KSKState = Object.freeze({
     get state() {
       return getState();
     },
 
-
     getState,
-
     setState,
-
     subscribe,
 
-
     setTheme,
-
     setLanguage,
-
     setCurrentPage,
-
     setSearchQuery,
 
-
     resetState
-
   });
-
-
-  /* =====================================================
-     REGISTER GLOBAL API
-  ===================================================== */
-
-  global.KSKState = KSKState;
-
 
   console.info(
     "KSKState initialized successfully."
   );
-
 
 })(window);
