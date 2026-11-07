@@ -732,13 +732,28 @@
     renderModal();
   }
 
-  function likeComment(commentId) {
+  function likeComment(commentId, button) {
+    const comment = getComment(commentId);
+
+    // पहिले Like नभएको अवस्थामा मात्र animation देखाउने।
+    const shouldAnimate = Boolean(
+      comment && !comment.liked
+    );
+
     const result = data()?.toggleCommentLike?.(
       activePostId,
       commentId
     );
 
     if (!result) return;
+
+    // साझा KSK reaction animation प्रयोग गर्ने।
+    if (shouldAnimate) {
+      global.KSKReactions?.showLikeAnimation?.(
+        button,
+        "❤️"
+      );
+    }
 
     renderModal();
   }
@@ -869,7 +884,8 @@
 
       if (target.hasAttribute("data-comment-like")) {
         likeComment(
-          target.getAttribute("data-comment-like")
+          target.getAttribute("data-comment-like"),
+          target
         );
         return;
       }
