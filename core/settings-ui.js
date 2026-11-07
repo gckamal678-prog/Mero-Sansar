@@ -1,5 +1,3 @@
-File path: "Mero-Sansar/core/settings-ui.js"
-
 "use strict";
 
 /* =========================================================
@@ -1234,6 +1232,27 @@ File path: "Mero-Sansar/core/settings-ui.js"
   }
 
   /* =======================================================
+     PROFILE MANAGE BUTTON
+     Independent click handling
+  ======================================================= */
+
+  function handleManageButtonClick(event) {
+    const target = event.target;
+
+    if (!target?.closest) return;
+
+    const button = target.closest("[data-open-settings]");
+
+    if (!button) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    open();
+  }
+
+  /* =======================================================
      INITIALIZE
   ======================================================= */
 
@@ -1247,6 +1266,14 @@ File path: "Mero-Sansar/core/settings-ui.js"
     }
 
     initialized = true;
+
+    /* Profile Manage button:
+       Capture phase मा स्वतन्त्र रूपमा क्लिक समात्ने। */
+    document.addEventListener(
+      "click",
+      handleManageButtonClick,
+      true
+    );
 
     modal.addEventListener("click", handleClick);
     modal.addEventListener("change", handleChange);
