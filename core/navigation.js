@@ -1,188 +1,169 @@
-
-"use strict";
-
-/* =========================================================
-   KSK — GLOBAL NAVIGATION CONTROLLER
-   Centralized application page navigation.
-========================================================= */
-
 (function (global) {
+  "use strict";
 
-  const ALLOWED_PAGES = Object.freeze([
+  const VALID_PAGES = [
     "home",
     "posts",
-    "create",
     "friends",
     "messages",
     "notifications",
-    "profile",
-    "settings",
-    "saved"
-  ]);
+    "saved",
+    "profile"
+  ];
 
-  const initializedRoots = new WeakSet();
+  let currentPage = "home";
+  let renderPage = null;
+  let onNavigate = null;
+  let initialized = false;
+  let rootElement = document;
 
-  function isValidPage(page) {
-    return (
-      typeof page === "string" &&
-      ALLOWED_PAGES.includes(page)
-    );
+  function normalizePage(page) {
+    const value = String(page || "home").trim().toLowerCase();
+    return VALID_PAGES.includes(value) ? value : "home";
   }
 
-  function getCurrentPage() {
-    return global.KSKState?.getState()?.currentPage || "home";
+  function configure(options = {}) {
+    if (typeof options.renderPage === "function") {
+      renderPage = options.renderPage;
+    }
+
+    if (typeof options.onNavigate === "function") {
+      onNavigate = options.onNavigate;
+    }
+
+    if (options.initialPage) {
+      currentPage = normalizePage(options.initialPage);
+    }
+  }
+
+  function updateActiveNavigation() {
+    if (!rootElement) return;
+
+    rootElement
+      .querySelectorAll("[data-page], [data-nav-page]")
+      .forEach((element) => {
+        const page = normalizePage(
+          element.dataset.page || element.dataset.navPage
+        );
+
+        const active = page === currentPage;
+
+        element.classList.toggle("active", active);
+        element.classList.toggle("is-active", active);
+
+        if (active) {
+          element.setAttribute("aria-current", "page");
+        } else {
+          element.removeAttribute("aria-current");
+        }
+      });
+  }
+
+  function renderCurrentPage() {
+    if (typeof renderPage === "function") {
+      renderPage(currentPage);
+    }
+
+    updateActiveNavigation();
   }
 
   function navigate(page, options = {}) {
-    if (!isValidPage(page)) {
-      global.KSKToast?.error(
-        global.KSKLanguage?.translate("pageUnavailable") ||
-        "यो पृष्ठ उपलब्ध छैन।"
-      );
+    const nextPage = normalizePage(page);
 
-      return false;
+    if (nextPage === currentPage && !options.force) {
+      updateActiveNavigation();
+      return currentPage;
     }
 
-    const navigationOptions = (
-      options &&
-      typeof options === "object" &&
-      !Array.isArray(options)
-    ) ? { ...options } : {};
+    const previousPage = currentPage;
+    currentPage = nextPage;
 
-    /* OPEN POST COMPOSER */
+    renderCurrentPage();
 
-    if (page === "create") {
-      global.dispatchEvent(
-        new CustomEvent("ksk:open-composer", {
-          detail: {
-            options: navigationOptions
-          }
-        })
-      );
-
-      return true;
+    if (typeof onNavigate === "function") {
+      onNavigate(nextPage, previousPage);
     }
-
-    /* UPDATE SHARED STATE */
-
-    global.KSKState?.setCurrentPage(page);
-
-    /* NOTIFY APPLICATION */
-
-    global.dispatchEvent(
-      new CustomEvent("ksk:navigate", {
-        detail: {
-          page,
-          options: navigationOptions
-        }
-      })
-    );
-
-    return true;
-  }
-
-  function initializeNavigation(root = document) {
-    if (
-      !root ||
-      typeof root.addEventListener !== "function" ||
-      initializedRoots.has(root)
-    ) {
-      return false;
-    }
-
-    initializedRoots.add(root);
-
-    root.addEventListener("click", function (event) {
-      const target = event.target;
-
-      if (!target || typeof target.closest !== "function") {
-        return;
-      }
-
-      const trigger = target.closest("[data-page]");
-
-      if (!trigger || !root.contains(trigger)) {
-        return;
-      }
-
-      if (
-        trigger.disabled ||
-        trigger.getAttribute("aria-disabled") === "true"
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-
-      const page = trigger.dataset.page;
-
-      navigate(page);
-    });
-
-    return true;
-  }
-
-  function getPages() {
-    return [...ALLOWED_PAGES];
-  }
-
-  function isCurrentPage(page) {
-    return isValidPage(page) && getCurrentPage() === page;
-  }
-
-  function refreshNavigation() {
-    const currentPage = getCurrentPage();
-
-    document.querySelectorAll("[data-page]").forEach(element => {
-      const active = element.dataset.page === currentPage;
-
-      element.classList.toggle("active", active);
-
-      if (active) {
-        element.setAttribute("aria-current", "page");
-      } else {
-        element.removeAttribute("aria-current");
-      }
-    });
 
     return currentPage;
   }
 
-  /* PUBLIC API */
+  function handleClick(event) {
+    const target = event.target;
 
-  global.KSKNavigation = Object.freeze({
-    navigate,
-    getCurrentPage,
-    getPages,
-    isValidPage,
-    isCurrentPage,
-    initializeNavigation,
-    refreshNavigation
-  });
+    if (!(target instanceof Element)) return;
 
-  /* INITIALIZATION */
+    const link = target.closest("[data-page], [data-nav-page]");
 
-  function initialize() {
-    initializeNavigation(document);
-    refreshNavigation();
+    if (!link || !rootElement.contains(link)) return;
 
-    global.addEventListener("ksk:navigate", refreshNavigation);
+    const page = link.dataset.page || link.dataset.navPage;
 
-    global.addEventListener("ksk:state-change", function (event) {
-      if (event.detail?.change === "page-change") {
-        refreshNavigation();
-      }
-    });
+    if (!page) return;
+
+    event.preventDefault();
+    navigate(page);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener(
-      "DOMContentLoaded",
-      initialize,
-      { once: true }
+  function handleNavigateEvent(event) {
+    const page = event.detail && (
+      event.detail.page || event.detail
     );
-  } else {
-    initialize();
+
+    if (page) {
+      navigate(page);
+    }
   }
 
+  function initializeNavigation(root = document) {
+    rootElement = root || document;
+
+    if (initialized) {
+      updateActiveNavigation();
+      return;
+    }
+
+    rootElement.addEventListener("click", handleClick);
+    global.addEventListener("ksk:navigate", handleNavigateEvent);
+
+    initialized = true;
+    updateActiveNavigation();
+  }
+
+  function refreshCurrentPage() {
+    renderCurrentPage();
+  }
+
+  function refreshNavigation() {
+    updateActiveNavigation();
+  }
+
+  function setCurrentPage(page) {
+    currentPage = normalizePage(page);
+    updateActiveNavigation();
+    return currentPage;
+  }
+
+  function getCurrentPage() {
+    return currentPage;
+  }
+
+  function destroy() {
+    if (!initialized) return;
+
+    rootElement.removeEventListener("click", handleClick);
+    global.removeEventListener("ksk:navigate", handleNavigateEvent);
+
+    initialized = false;
+  }
+
+  global.KSKNavigation = {
+    configure,
+    initializeNavigation,
+    navigate,
+    setCurrentPage,
+    getCurrentPage,
+    refreshCurrentPage,
+    refreshNavigation,
+    destroy
+  };
 })(window);
