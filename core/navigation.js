@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -8,9 +9,8 @@
  * - Current page state
  * - Active navigation menu
  * - Page module rendering
- *
- * Page content is owned by pages/*.js.
- * Home feed and stories are owned by app.js.
+ * - Shared post card rendering on Profile and Saved
+ * - Refresh media after page rendering
  */
 
 (function (global) {
@@ -75,9 +75,14 @@
 
   function getLanguage() {
     const language =
+      global.KSKLanguage?.getLanguage?.() ||
       global.KSKState?.getState?.()?.language;
 
     return language === "en" ? "en" : "ne";
+  }
+
+  function isEnglish() {
+    return getLanguage() === "en";
   }
 
   function getPageTitle(page) {
@@ -85,6 +90,37 @@
 
     return PAGE_TITLES[page]?.[language] ||
       PAGE_TITLES.home[language];
+  }
+
+  /*
+   * Shared post card.
+   * Profile and Saved must use the same card as Home.
+   */
+
+  function renderPost(post) {
+    const postCard = global.KSKPostCard;
+
+    if (typeof postCard?.render !== "function") {
+      console.error(
+        "KSKNavigation: KSKPostCard is unavailable."
+      );
+
+      return "";
+    }
+
+    return postCard.render(post, {
+      isEnglish: isEnglish(),
+      formatDate: value => {
+        if (typeof global.KSKUtils?.formatDateTime === "function") {
+          return global.KSKUtils.formatDateTime(
+            value,
+            getLanguage()
+          );
+        }
+
+        return "";
+      }
+    });
   }
 
   function getPageHTML(page) {
@@ -99,10 +135,15 @@
         return global.KSKNotificationsPage?.render?.();
 
       case "saved":
-        return global.KSKSavedPage?.render?.();
+        return global.KSKSavedPage?.render?.({
+          isEnglish: isEnglish(),
+          renderPost
+        });
 
       case "profile":
-        return global.KSKProfilePage?.render?.();
+        return global.KSKProfilePage?.render?.({
+          renderPost
+        });
 
       default:
         return null;
@@ -139,6 +180,21 @@
     $("#otherPage")?.classList.add("hidden");
   }
 
+  function refreshPageMedia() {
+    /*
+     * Media UI scans all visible post cards.
+     * It loads images from IndexedDB using mediaId.
+     */
+
+    global.KSKMediaUI?.refresh?.();
+
+    /*
+     * Profile Media UI handles profile-specific media.
+     */
+
+    global.KSKProfileMediaUI?.refresh?.();
+  }
+
   function showOtherPage(page, html) {
     const home = $("#homePage");
     const other = $("#otherPage");
@@ -154,6 +210,13 @@
 
     if (content) {
       content.innerHTML = html;
+
+      /*
+       * Important:
+       * Refresh media AFTER the page HTML is inserted.
+       */
+
+      refreshPageMedia();
     }
   }
 
@@ -178,10 +241,12 @@
 
       if (typeof html !== "string") {
         showOtherPage(currentPage, showPageError());
+
         console.error(
           "KSKNavigation: Page module is missing or returned invalid content:",
           currentPage
         );
+
         return false;
       }
 
@@ -201,12 +266,6 @@
   }
 
   function dispatchNavigationEvent(page, options) {
-    /*
-     * Page modules listen to ksk:navigate.
-     * Navigation does NOT listen to this event,
-     * preventing navigation event recursion.
-     */
-
     global.dispatchEvent(
       new CustomEvent("ksk:navigate", {
         detail: {
@@ -237,16 +296,7 @@
 
     currentPage = next;
 
-    /*
-     * Shared state owns persistence.
-     */
-
     global.KSKState?.setCurrentPage?.(next);
-
-    /*
-     * Notify feature modules before rendering.
-     * Example: notifications mark themselves as read.
-     */
 
     dispatchNavigationEvent(next, {
       ...options,
@@ -324,10 +374,6 @@
 
     clickRoot = root || document;
 
-    /*
-     * Restore saved page from shared state.
-     */
-
     const savedPage =
       global.KSKState?.getState?.()?.currentPage || "home";
 
@@ -343,11 +389,6 @@
       "click",
       handleDocumentClick
     );
-
-    /*
-     * External navigation requests use a separate event.
-     * ksk:navigate is reserved for notifying feature modules.
-     */
 
     global.addEventListener(
       "ksk:navigate-request",
