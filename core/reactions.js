@@ -1,5 +1,3 @@
-फाइल: "core/reactions.js"
-
 "use strict";
 
 /* =========================================================
@@ -145,15 +143,20 @@
     activeTriggerButton = null;
   }
 
-  function renderPicker(postId, currentReaction = "") {
+  function renderPicker(targetId, currentReaction = "", isComment = false) {
     closePicker();
 
     const picker = document.createElement("div");
 
     picker.className = "ksk-reaction-picker";
     picker.setAttribute("role", "group");
-    picker.setAttribute("aria-label", "पोस्ट Reaction छान्नुहोस्");
-    picker.dataset.postId = postId;
+    picker.setAttribute("aria-label", isComment ? "टिप्पणी Reaction छान्नुहोस्" : "पोस्ट Reaction छान्नुहोस्");
+    
+    if (isComment) {
+      picker.dataset.commentId = targetId;
+    } else {
+      picker.dataset.postId = targetId;
+    }
 
     picker.innerHTML = REACTIONS.map(item => `
       <button
@@ -198,6 +201,24 @@
 
   function openPicker(button) {
     const postId = button.dataset.postId;
+    const commentId = button.dataset.commentId;
+
+    if (commentId) {
+      const activePostId = global.KSKComments?._getActivePostId?.() || button.dataset.postId;
+      const comment = global.KSKData?.getComment?.(activePostId, commentId);
+
+      if (!comment) return;
+
+      const picker = renderPicker(
+        commentId,
+        comment.myReaction || "",
+        true
+      );
+
+      activeTriggerButton = button;
+      positionPicker(button, picker);
+      return;
+    }
 
     if (!postId) return;
 
@@ -207,7 +228,8 @@
 
     const picker = renderPicker(
       postId,
-      post.myReaction || ""
+      post.myReaction || "",
+      false
     );
 
     activeTriggerButton = button;
@@ -296,7 +318,7 @@
     if (!target?.closest) return;
 
     const reactionButton = target.closest(
-      '[data-post-action="like"]'
+      '[data-post-action="like"], [data-comment-like]'
     );
 
     if (reactionButton) {
@@ -315,16 +337,39 @@
       event.preventDefault();
       event.stopImmediatePropagation();
 
-      const postId = activePicker.dataset.postId;
       const emoji = option.dataset.kskReaction;
-
       const triggerButton = activeTriggerButton;
+      const animationRect = triggerButton?.getBoundingClientRect?.() || null;
+
+      const commentId = activePicker.dataset.commentId;
+
+      if (commentId) {
+        const activePostId = global.KSKComments?._getActivePostId?.();
+        if (!activePostId) {
+          closePicker();
+          return;
+        }
+
+        const comment = global.KSKData?.getComment?.(activePostId, commentId);
+        const previousReaction = comment?.myReaction || "";
+
+        const success = global.KSKData?.setCommentReaction?.(activePostId, commentId, emoji);
+
+        closePicker();
+
+        if (success) {
+          if (previousReaction !== emoji && animationRect) {
+            showLikeAnimationAt(animationRect, emoji);
+          }
+          global.KSKComments?.refresh?.();
+        }
+        return;
+      }
+
+      const postId = activePicker.dataset.postId;
       const post = getPost(postId);
 
       const previousReaction = post?.myReaction || "";
-
-      const animationRect =
-        triggerButton?.getBoundingClientRect?.() || null;
 
       const success = selectReaction(postId, emoji);
 
