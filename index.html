@@ -20,7 +20,7 @@
     href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
 
-  <!-- Application Styles: unchanged -->
+  <!-- Application Styles -->
   <link rel="stylesheet" href="core/design-system.css">
   <link rel="stylesheet" href="app.css">
 
@@ -77,7 +77,6 @@
     </div>
   </header>
 
-
   <!-- MAIN APPLICATION -->
   <main class="app-main">
 
@@ -95,7 +94,6 @@
 
     </section>
 
-
     <!-- HOME PAGE -->
     <section id="homePage" class="page">
 
@@ -109,7 +107,6 @@
         <div id="storiesList" class="stories-row"></div>
 
       </section>
-
 
       <!-- POST COMPOSER -->
       <section class="composer-card card">
@@ -143,7 +140,6 @@
 
       </section>
 
-
       <!-- NEWS FEED -->
       <section class="feed-section">
 
@@ -173,7 +169,6 @@
 
     </section>
 
-
     <!-- OTHER PAGES -->
     <section id="otherPage" class="page hidden">
 
@@ -197,7 +192,6 @@
 
   </main>
 
-
   <!-- BOTTOM NAVIGATION -->
   <nav
     class="bottom-nav"
@@ -218,7 +212,6 @@
 
       </button>
 
-
       <button
         class="nav-item"
         type="button"
@@ -229,7 +222,6 @@
         <span data-i18n="friends">साथीहरू</span>
 
       </button>
-
 
       <button
         class="nav-item nav-create"
@@ -242,7 +234,6 @@
 
       </button>
 
-
       <button
         class="nav-item"
         type="button"
@@ -253,7 +244,6 @@
         <span data-i18n="messages">सन्देश</span>
 
       </button>
-
 
       <button
         class="nav-item"
@@ -269,7 +259,6 @@
     </div>
 
   </nav>
-
 
   <!-- SETTINGS MODAL -->
   <div
@@ -311,7 +300,6 @@
 
   </div>
 
-
   <!-- GLOBAL TOAST -->
   <div
     id="toastContainer"
@@ -320,12 +308,7 @@
     aria-atomic="true">
   </div>
 
-
-  <!-- =========================================
-       KSK CORE MODULES
-       Load shared dependencies first.
-  ========================================== -->
-
+  <!-- CORE MODULES -->
   <script src="core/state.js"></script>
   <script src="core/settings.js"></script>
   <script src="core/theme.js"></script>
@@ -337,35 +320,24 @@
   <script src="core/modal.js"></script>
   <script src="core/data.js"></script>
   <script src="core/post-actions.js"></script>
-  
 
   <script src="core/comments.js"></script>
   <script src="core/comments-bridge.js"></script>
   <script src="core/reactions.js"></script>
   <script src="core/share.js"></script>
 
-  <!-- Existing UI modules -->
+  <!-- UI MODULES -->
   <script src="core/settings-ui.js"></script>
   <script src="core/media-ui.js"></script>
   <script src="core/profile-media.js"></script>
   <script src="core/avatar-ui.js"></script>
 
-
-  <!-- =========================================
-       KSK COMPONENTS
-       Load before dependent page modules.
-  ========================================== -->
-
+  <!-- COMPONENTS -->
   <script src="components/user-card.js"></script>
   <script src="components/message-item.js"></script>
   <script src="components/post-card.js"></script>
 
-
-  <!-- =========================================
-       KSK PAGE MODULES
-       Load after their dependencies.
-  ========================================== -->
-
+  <!-- PAGE MODULES -->
   <script src="pages/friends.js"></script>
   <script src="pages/messages.js"></script>
   <script src="pages/profile.js"></script>
@@ -373,13 +345,59 @@
   <script src="pages/saved.js"></script>
   <script src="pages/settings.js"></script>
 
+  <!-- NAVIGATION -->
+  <script src="core/navigation.js"></script>
+
+  <!-- MAIN APPLICATION -->
+  <script src="app.js"></script>
 
   <!-- =========================================
-       MAIN APPLICATION
-       Load after all required modules.
+       SERVICE WORKER REGISTRATION
   ========================================== -->
-<script src="core/navigation.js"></script>
-  <script src="app.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      if (!("serviceWorker" in navigator)) {
+        console.warn(
+          "Service Worker is not supported by this browser."
+        );
+        return;
+      }
+
+      window.addEventListener("load", function () {
+
+        navigator.serviceWorker.register("./sw.js", {
+          scope: "./"
+        })
+        .then(function (registration) {
+
+          console.info(
+            "Hamro Sansar Service Worker registered.",
+            registration.scope
+          );
+
+          registration.update().catch(function (error) {
+            console.warn(
+              "Service Worker update check failed:",
+              error
+            );
+          });
+
+        })
+        .catch(function (error) {
+
+          console.error(
+            "Service Worker registration failed:",
+            error
+          );
+
+        });
+
+      }, { once: true });
+
+    })();
+  </script>
 
 </body>
 </html>
