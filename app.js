@@ -1596,7 +1596,7 @@
 
           <div
             class="flex-center"
-            style="margin-top:16px">
+            style="margin-top:16px; gap:10px; flex-wrap:wrap;">
 
             <button
               class="btn btn-primary"
@@ -1607,6 +1607,18 @@
               ${isEnglish()
                 ? "Edit Profile"
                 : "प्रोफाइल सम्पादन"}
+
+            </button>
+
+            <button
+              class="btn btn-secondary"
+              type="button"
+              data-open-settings>
+
+              ⚙️
+              ${isEnglish()
+                ? "Manage"
+                : "व्यवस्थापन"}
 
             </button>
 
@@ -1637,24 +1649,6 @@
                 </div>
               `
           }
-
-        </div>
-
-        <div
-          class="flex-center"
-          style="margin-top:18px">
-
-          <button
-            class="btn btn-secondary"
-            type="button"
-            data-open-settings>
-
-            ⚙️
-            ${isEnglish()
-              ? "Settings"
-              : "सेटिङ"}
-
-          </button>
 
         </div>
 
