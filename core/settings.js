@@ -3,8 +3,7 @@
 
 /* =========================================================
    KSK — CENTRAL SETTINGS MANAGER
-   WhatsApp-style settings architecture
-   Single Settings Data Layer
+   Single Source of Truth for Persistent Settings
 ========================================================= */
 
 (function (global) {
@@ -99,6 +98,7 @@
         isObject(base[key]) &&
         isObject(incoming[key])
       ) {
+
         result[key] = mergeObjects(
           base[key],
           incoming[key]
@@ -109,7 +109,9 @@
         !isObject(incoming[key]) &&
         !Array.isArray(incoming[key])
       ) {
+
         result[key] = incoming[key];
+
       }
 
     });
@@ -171,9 +173,7 @@
     result.privacy.allowFriendRequests =
       result.privacy.allowFriendRequests !== false;
 
-    /* NOTIFICATIONS
-       Master switch does not erase individual preferences.
-    */
+    /* NOTIFICATION PREFERENCES */
 
     Object.keys(DEFAULT_SETTINGS.notificationPreferences)
       .forEach(key => {
@@ -183,7 +183,7 @@
 
       });
 
-    /* PROFILE */
+    /* PROFILE PREFERENCES */
 
     Object.keys(DEFAULT_SETTINGS.profilePreferences)
       .forEach(key => {
@@ -354,27 +354,9 @@
 
   }
 
-  function syncGlobalState(changeName) {
-
-    if (!global.KSKState) return;
-
-    global.KSKState.setState({
-
-      theme: settings.theme,
-
-      language: settings.language,
-
-      settings: {
-        notifications: settings.notifications,
-        compactMode: settings.compactMode
-      }
-
-    }, changeName);
-
-  }
-
   /* =======================================================
      UPDATE SETTINGS
+     Settings Manager is the only persistent owner.
   ======================================================= */
 
   function updateSettings(values = {}) {
@@ -388,8 +370,6 @@
     settings = normalizeSettings(next);
 
     persist();
-
-    syncGlobalState("settings-change");
 
     notify("settings-change");
 
@@ -436,10 +416,14 @@
     keys.forEach((key, index) => {
 
       if (index === keys.length - 1) {
+
         current[key] = value;
+
       } else {
+
         current[key] = {};
         current = current[key];
+
       }
 
     });
@@ -458,8 +442,6 @@
     settings = clone(DEFAULT_SETTINGS);
 
     persist();
-
-    syncGlobalState("settings-reset");
 
     notify("settings-reset");
 
@@ -508,6 +490,8 @@
           ? parsed.settings
           : parsed;
 
+      const previousSettings = settings;
+
       settings = normalizeSettings(
         mergeObjects(
           clone(DEFAULT_SETTINGS),
@@ -518,10 +502,11 @@
       const saved = persist();
 
       if (!saved) {
+
+        settings = previousSettings;
+
         return false;
       }
-
-      syncGlobalState("settings-import");
 
       notify("settings-import");
 
@@ -568,8 +553,6 @@
   function initialize() {
 
     settings = normalizeSettings(settings);
-
-    syncGlobalState("settings-initialize");
 
     return getSettings();
 
