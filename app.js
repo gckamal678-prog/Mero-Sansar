@@ -1396,60 +1396,22 @@
 
   /* =======================================================
      NOTIFICATIONS
+     KSKNotificationsPage owns notification rendering.
   ======================================================= */
 
   function renderNotifications() {
     const page = global.KSKNotificationsPage;
 
     if (typeof page?.render === "function") {
-      return page.render({
-        notifications: DATA()?.getNotifications?.() || []
-      });
-    }
-
-    const notifications =
-      DATA()?.getNotifications?.() || [];
-
-    if (!notifications.length) {
-      return `
-        <div class="empty-state">
-
-          <div class="empty-state-icon">🔔</div>
-
-          <h3 class="empty-state-title">
-            ${isEnglish()
-              ? "No notifications"
-              : "अहिले कुनै सूचना छैन"}
-          </h3>
-
-        </div>
-      `;
+      return page.render();
     }
 
     return `
-      <section>
-
-        <h3 class="section-title">
-          ${isEnglish()
-            ? "Notifications"
-            : "सूचनाहरू"}
-        </h3>
-
-        ${notifications.map(item => `
-          <article class="card notification-item">
-
-            <p>
-              ${escapeHTML(item.text || "")}
-            </p>
-
-            <small class="post-time">
-              ${escapeHTML(formatDate(item.createdAt))}
-            </small>
-
-          </article>
-        `).join("")}
-
-      </section>
+      <div class="empty-state">
+        ${isEnglish()
+          ? "Notifications are unavailable. Please reload the app."
+          : "सूचना सुविधा उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
+      </div>
     `;
   }
 
@@ -2035,7 +1997,6 @@
     els.notificationsToggle?.addEventListener(
       "click",
       () => {
-        DATA()?.markNotificationsRead?.();
         navigate("notifications");
       }
     );
