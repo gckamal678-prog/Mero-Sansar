@@ -263,6 +263,39 @@
   }
 
   /* =======================================================
+     MARK AS READ
+     Avoid unnecessary storage writes when all
+     notifications are already marked as read.
+  ======================================================= */
+
+  function markAllAsRead() {
+    const data = DATA();
+
+    if (
+      typeof data?.getNotifications !== "function" ||
+      typeof data?.markNotificationsRead !== "function"
+    ) {
+      return false;
+    }
+
+    const notifications = data.getNotifications();
+
+    if (!Array.isArray(notifications)) {
+      return false;
+    }
+
+    const hasUnread = notifications.some(
+      item => !item.read
+    );
+
+    if (!hasUnread) {
+      return true;
+    }
+
+    return data.markNotificationsRead();
+  }
+
+  /* =======================================================
      PAGE LAYOUT
   ======================================================= */
 
@@ -730,10 +763,10 @@
         renderStories();
 
         toast(
-          isEnglish()
-            ? "Story published."
-            : "Story प्रकाशित भयो।",
-          "success"
+            isEnglish()
+              ? "Story published."
+              : "Story प्रकाशित भयो।",
+            "success"
         );
       }
     );
