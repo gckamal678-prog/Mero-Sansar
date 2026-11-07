@@ -49,6 +49,7 @@
   const MEDIA_UI = () => global.KSKMediaUI;
   const PROFILE_MEDIA = () => global.KSKProfileMediaUI;
   const COMMENTS = () => global.KSKComments;
+  const KSKPostActions = () => global.KSKPostActions;
 
   let currentPage = "home";
   let searchQuery = "";
@@ -665,174 +666,6 @@
         </button>
       `
     });
-  }
-
-  /* =======================================================
-     POST EDITING
-  ======================================================= */
-
-  function editPost(id) {
-    const post = DATA()?.getPost?.(id);
-
-    if (!post) return;
-
-    const modal = openModal({
-      title: isEnglish() ? "Edit Post" : "पोस्ट सम्पादन",
-
-      content: `
-        <form id="kskEditPostForm">
-
-          <textarea
-            id="kskEditPostText"
-            class="form-textarea"
-            rows="5"
-            maxlength="10000"
-            required>${escapeHTML(post.text || "")}</textarea>
-
-        </form>
-      `,
-
-      footer: `
-        <button
-          type="button"
-          class="btn btn-secondary"
-          data-modal-close>
-          ${translate("cancel", "रद्द")}
-        </button>
-
-        <button
-          type="submit"
-          form="kskEditPostForm"
-          class="btn btn-primary">
-          ${isEnglish()
-            ? "Save Changes"
-            : "परिवर्तन सुरक्षित गर्नुहोस्"}
-        </button>
-      `
-    });
-
-    if (!modal) return;
-
-    $("#kskEditPostForm", modal.element)?.addEventListener(
-      "submit",
-      event => {
-        event.preventDefault();
-
-        const text = $("#kskEditPostText", modal.element)
-          ?.value.trim();
-
-        if (!text) return;
-
-        const success = DATA()?.updatePost?.(id, { text });
-
-        if (!success) {
-          toast(
-            isEnglish()
-              ? "Could not update post."
-              : "पोस्ट परिवर्तन गर्न सकिएन।",
-            "error"
-          );
-          return;
-        }
-
-        closeModal();
-        refreshCurrentPage();
-
-        toast(
-          isEnglish()
-            ? "Post updated."
-            : "पोस्ट परिवर्तन भयो।",
-          "success"
-        );
-      }
-    );
-  }
-
-  /* =======================================================
-     POST MENU
-  ======================================================= */
-
-  function openPostMenu(id) {
-    const post = DATA()?.getPost?.(id);
-
-    if (!post) return;
-
-    openModal({
-      title: isEnglish() ? "Post options" : "पोस्ट विकल्प",
-
-      content: `
-        <div class="post-menu-actions">
-
-          <button
-            class="dropdown-item"
-            type="button"
-            data-edit-post="${escapeHTML(id)}">
-
-            ✏️
-            ${isEnglish()
-              ? "Edit post"
-              : "पोस्ट सम्पादन"}
-
-          </button>
-
-          <button
-            class="dropdown-item"
-            type="button"
-            data-delete-post="${escapeHTML(id)}">
-
-            🗑️
-            ${isEnglish()
-              ? "Delete post"
-              : "पोस्ट मेटाउनुहोस्"}
-
-          </button>
-
-        </div>
-      `,
-
-      footer: `
-        <button
-          class="btn btn-secondary"
-          type="button"
-          data-modal-close>
-          ${translate("close", "बन्द")}
-        </button>
-      `
-    });
-  }
-
-  /* =======================================================
-     POST DELETE
-  ======================================================= */
-
-  function deletePost(id) {
-    const message = isEnglish()
-      ? "Are you sure you want to delete this post?"
-      : "के तपाईं यो पोस्ट मेटाउन चाहनुहुन्छ?";
-
-    if (!confirmAction(message)) return;
-
-    const success = DATA()?.deletePost?.(id);
-
-    if (!success) {
-      toast(
-        isEnglish()
-          ? "Could not delete post."
-          : "पोस्ट मेटाउन सकिएन।",
-        "error"
-      );
-      return;
-    }
-
-    closeModal();
-    refreshCurrentPage();
-
-    toast(
-      isEnglish()
-        ? "Post deleted."
-        : "पोस्ट मेटाइयो।",
-      "success"
-    );
   }
 
   /* =======================================================
@@ -1577,13 +1410,6 @@
         return;
       }
 
-      const postMenu = target.closest("[data-post-menu]");
-
-      if (postMenu) {
-        openPostMenu(postMenu.dataset.postMenu);
-        return;
-      }
-
       const postAction = target.closest(
         "[data-post-action]"
       );
@@ -1597,25 +1423,7 @@
         return;
       }
 
-      const editPostButton = target.closest(
-        "[data-edit-post]"
-      );
-
-      if (editPostButton) {
-        const id = editPostButton.dataset.editPost;
-
-        closeModal();
-        editPost(id);
-
-        return;
-      }
-
-      const deletePostButton = target.closest(
-        "[data-delete-post]"
-      );
-
-      if (deletePostButton) {
-        deletePost(deletePostButton.dataset.deletePost);
+      if (global.KSKPostActions?.handleClick(target)) {
         return;
       }
 
@@ -1846,6 +1654,12 @@
     THEME()?.initializeTheme?.();
     LANG()?.initialize?.();
     SETTINGS_UI()?.initialize?.();
+    KSKPostActions()?.initialize?.({
+      isEnglish,
+      translate,
+      toast,
+      refreshCurrentPage
+    });
 
     /*
      * Restore saved appearance settings.
