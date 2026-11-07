@@ -1,26 +1,33 @@
+
 "use strict";
 
 /*
  * =========================================================
  * KSK — MESSAGES PAGE MODULE
  *
- * RESPONSIBILITY:
- * - Render conversation list
- * - Render individual chat view
- * - Display messages and timestamps
+ * OWNER:
+ * - Conversation list
+ * - Individual chat view
+ * - Opening conversations
+ * - Opening friend conversations
+ * - Sending messages
+ * - Returning to conversation list
+ * - Message page state
  *
- * DATA SOURCE:
+ * DEPENDENCIES:
  * - KSKData
- *
- * COMPONENTS:
- * - KSKMessageItem
+ * - KSKLanguage
+ * - KSKUtils
  * - KSKUserCard
+ * - KSKMessageItem
+ * - KSKNavigation
+ * - KSKToast
+ * - KSKApp
  *
- * IMPORTANT:
- * - Does not send messages.
- * - Does not manage navigation.
- * - Does not modify application state.
- * - Existing app.js continues handling chat actions.
+ * app.js:
+ * - Does not own message rendering.
+ * - Does not own message sending.
+ * - Does not own active chat state.
  * =========================================================
  */
 
@@ -30,15 +37,26 @@
   if (global.KSKMessagesPage) return;
 
   /* =======================================================
-     SHARED HELPERS
+     MODULE STATE
   ======================================================= */
 
-  function escapeHTML(value) {
-    if (global.KSKUtils?.escapeHTML) {
-      return global.KSKUtils.escapeHTML(value);
+  let activeChatId = null;
+  let initialized = false;
+
+  const DATA = () => global.KSKData || null;
+  const LANG = () => global.KSKLanguage || null;
+  const UTILS = () => global.KSKUtils || null;
+
+  /* =======================================================
+     COMMON HELPERS
+  ======================================================= */
+
+  function escapeHTML(value = "") {
+    if (typeof UTILS()?.escapeHTML === "function") {
+      return UTILS().escapeHTML(String(value));
     }
 
-    return String(value ?? "").replace(/[&<>"']/g, char => ({
+    return String(value).replace(/[&<>"']/g, char => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
@@ -48,7 +66,7 @@
   }
 
   function getLanguage() {
-    return global.KSKLanguage?.getLanguage?.() || "ne";
+    return LANG()?.getLanguage?.() || "ne";
   }
 
   function isEnglish() {
@@ -56,15 +74,39 @@
   }
 
   function getChats() {
-    return global.KSKData?.getChats?.() || [];
+    return DATA()?.getChats?.() || [];
+  }
+
+  function getFriends() {
+    return DATA()?.getFriends?.() || [];
+  }
+
+  function getProfile() {
+    return DATA()?.getProfile?.() || {
+      id: "",
+      name: ""
+    };
+  }
+
+  function displayName() {
+    return getProfile().name ||
+      (isEnglish() ? "You" : "तपाईं");
+  }
+
+  function showToast(message, type = "info") {
+    const toast = global.KSKToast;
+
+    if (typeof toast?.[type] === "function") {
+      toast[type](message);
+      return;
+    }
+
+    toast?.show?.(message, type);
   }
 
   function formatTime(value) {
-    if (global.KSKUtils?.formatTime) {
-      return global.KSKUtils.formatTime(
-        value,
-        getLanguage()
-      );
+    if (typeof UTILS()?.formatTime === "function") {
+      return UTILS().formatTime(value, getLanguage());
     }
 
     const date = new Date(value);
@@ -82,8 +124,12 @@
     );
   }
 
+  /* =======================================================
+     AVATAR
+  ======================================================= */
+
   function renderAvatar(chat = {}) {
-    if (global.KSKUserCard?.renderAvatar) {
+    if (typeof global.KSKUserCard?.renderAvatar === "function") {
       return global.KSKUserCard.renderAvatar({
         name: chat.name || "साथी",
         avatar: chat.avatar || "",
@@ -94,9 +140,7 @@
     const name = String(chat.name || "").trim();
     const avatar = String(chat.avatar || "").trim();
 
-    if (
-      /^(https?:\/\/|data:image\/|blob:)/i.test(avatar)
-    ) {
+    if (/^(https?:\/\/|data:image\/|blob:)/i.test(avatar)) {
       return `
         <div class="avatar">
           <img
@@ -115,7 +159,7 @@
   }
 
   /* =======================================================
-     EMPTY MESSAGE LIST
+     EMPTY STATE
   ======================================================= */
 
   function renderEmptyMessages() {
@@ -149,7 +193,7 @@
   function renderConversationList(chats) {
     const messageItem = global.KSKMessageItem;
 
-    if (!messageItem?.render) {
+    if (typeof messageItem?.render !== "function") {
       return `
         <div class="empty-state">
           ${isEnglish()
@@ -285,9 +329,16 @@
   ======================================================= */
 
   function render(options = {}) {
-    const chats = getChats();
+    /*
+     * Compatibility with the existing app.js.
+     * A valid supplied chat ID can restore the view.
+     */
 
-    const activeChatId = options.activeChatId || null;
+    if (options.activeChatId && !activeChatId) {
+      activeChatId = String(options.activeChatId);
+    }
+
+    const chats = getChats();
 
     if (activeChatId) {
       const chat = chats.find(item =>
@@ -297,6 +348,8 @@
       if (chat) {
         return renderChat(chat);
       }
+
+      activeChatId = null;
     }
 
     if (!chats.length) {
@@ -307,17 +360,298 @@
   }
 
   /* =======================================================
+     NAVIGATION
+  ======================================================= */
+
+  function navigateToMessages() {
+    const navigation = global.KSKNavigation;
+
+    if (typeof navigation?.navigate === "function") {
+      return navigation.navigate("messages", {
+        keepChat: true
+      });
+    }
+
+    global.dispatchEvent(
+      new CustomEvent("ksk:navigate", {
+        detail: {
+          page: "messages",
+          options: {
+            keepChat: true
+          }
+        }
+      })
+    );
+
+    return true;
+  }
+
+  function refreshPage() {
+    if (
+      typeof global.KSKApp?.refreshCurrentPage === "function"
+    ) {
+      global.KSKApp.refreshCurrentPage();
+    }
+  }
+
+  /* =======================================================
+     OPEN CHAT
+  ======================================================= */
+
+  function openChat(chatId) {
+    const id = String(chatId || "");
+
+    if (!id) return false;
+
+    const chat = getChats().find(item =>
+      String(item.id) === id
+    );
+
+    if (!chat) return false;
+
+    activeChatId = id;
+
+    return navigateToMessages();
+  }
+
+  /* =======================================================
+     OPEN FRIEND CHAT
+  ======================================================= */
+
+  function openFriendChat(friendId) {
+    const id = String(friendId || "");
+
+    if (!id) return false;
+
+    const friend = getFriends().find(item =>
+      String(item.id) === id
+    );
+
+    if (!friend) return false;
+
+    const chatId = DATA()?.createChat?.(friend);
+
+    if (!chatId) {
+      showToast(
+        isEnglish()
+          ? "Could not open conversation."
+          : "कुराकानी खोल्न सकिएन।",
+        "error"
+      );
+
+      return false;
+    }
+
+    return openChat(chatId);
+  }
+
+  /* =======================================================
+     CLOSE CHAT
+  ======================================================= */
+
+  function closeChat() {
+    activeChatId = null;
+
+    refreshPage();
+
+    return true;
+  }
+
+  /* =======================================================
+     SEND MESSAGE
+  ======================================================= */
+
+  function sendMessage(event) {
+    event?.preventDefault?.();
+
+    if (!activeChatId) return false;
+
+    const form = event?.target ||
+      document.getElementById("kskMessageForm");
+
+    const input = form?.querySelector("#kskMessageInput");
+
+    const message = input?.value.trim();
+
+    if (!message) return false;
+
+    const result = DATA()?.sendMessage?.(
+      activeChatId,
+      message,
+      {
+        sender: displayName(),
+        fromMe: true
+      }
+    );
+
+    if (!result) {
+      showToast(
+        isEnglish()
+          ? "Message could not be sent."
+          : "सन्देश पठाउन सकिएन।",
+        "error"
+      );
+
+      return false;
+    }
+
+    refreshPage();
+
+    document
+      .getElementById("kskMessageInput")
+      ?.focus();
+
+    return true;
+  }
+
+  /* =======================================================
+     CLICK EVENTS
+  ======================================================= */
+
+  function stopEvent(event) {
+    event.preventDefault();
+
+    event.stopPropagation();
+
+    event.stopImmediatePropagation();
+  }
+
+  function handleClick(event) {
+    const target = event.target;
+
+    if (!target?.closest) return;
+
+    const openChatButton = target.closest("[data-open-chat]");
+
+    if (openChatButton) {
+      stopEvent(event);
+
+      openChat(openChatButton.dataset.openChat);
+
+      return;
+    }
+
+    const backButton = target.closest("[data-back-messages]");
+
+    if (backButton) {
+      stopEvent(event);
+
+      closeChat();
+
+      return;
+    }
+
+    const friendButton = target.closest("[data-message-friend]");
+
+    if (friendButton) {
+      stopEvent(event);
+
+      openFriendChat(friendButton.dataset.messageFriend);
+    }
+  }
+
+  /* =======================================================
+     SUBMIT EVENTS
+  ======================================================= */
+
+  function handleSubmit(event) {
+    if (event.target?.id !== "kskMessageForm") {
+      return;
+    }
+
+    stopEvent(event);
+
+    sendMessage(event);
+  }
+
+  /* =======================================================
+     NAVIGATION STATE
+  ======================================================= */
+
+  function handleNavigation(event) {
+    const page = event.detail?.page;
+
+    const options = event.detail?.options || {};
+
+    if (page !== "messages") {
+      activeChatId = null;
+      return;
+    }
+
+    if (!options.keepChat) {
+      activeChatId = null;
+    }
+  }
+
+  /* =======================================================
+     INITIALIZATION
+  ======================================================= */
+
+  function initialize() {
+    if (initialized) return true;
+
+    initialized = true;
+
+    document.addEventListener(
+      "click",
+      handleClick,
+      true
+    );
+
+    document.addEventListener(
+      "submit",
+      handleSubmit,
+      true
+    );
+
+    global.addEventListener(
+      "ksk:navigate",
+      handleNavigation
+    );
+
+    return true;
+  }
+
+  /* =======================================================
      PUBLIC API
   ======================================================= */
 
   global.KSKMessagesPage = Object.freeze({
 
+    initialize,
+
     render,
 
     renderChat,
 
-    renderConversationList
+    renderConversationList,
+
+    openChat,
+
+    openFriendChat,
+
+    closeChat,
+
+    sendMessage,
+
+    getActiveChatId() {
+      return activeChatId;
+    }
 
   });
+
+  /* =======================================================
+     AUTO INITIALIZATION
+  ======================================================= */
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      initialize,
+      { once: true }
+    );
+  } else {
+    initialize();
+  }
 
 })(window);
