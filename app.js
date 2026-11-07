@@ -1342,7 +1342,57 @@
     `;
   }
 
-  
+  /* =======================================================
+     SAVED POSTS
+  ======================================================= */
+
+  function renderSaved() {
+    const page = global.KSKSavedPage;
+
+    if (typeof page?.render === "function") {
+      return page.render({
+        isEnglish: isEnglish(),
+        renderPost: renderPost
+      });
+    }
+
+    const ids = DATA()?.getSavedPosts?.() || [];
+
+    const posts = ids
+      .map(id => DATA()?.getPost?.(id))
+      .filter(Boolean);
+
+    return `
+      <section>
+
+        <h3 class="section-title">
+          ${isEnglish()
+            ? "Saved Posts"
+            : "सेभ गरिएका पोस्ट"}
+        </h3>
+
+        ${
+          posts.length
+            ? posts.map(renderPost).join("")
+            : `
+              <div class="empty-state">
+
+                <div class="empty-state-icon">🔖</div>
+
+                <p>
+                  ${isEnglish()
+                    ? "No saved posts yet."
+                    : "अहिलेसम्म पोस्ट सेभ गरिएको छैन।"}
+                </p>
+
+              </div>
+            `
+        }
+
+      </section>
+    `;
+  }
+
   /* =======================================================
      SETTINGS — SINGLE SETTINGS UI
   ======================================================= */
