@@ -106,6 +106,11 @@
     })[char]);
   }
 
+  /*
+   * Language Core owns language selection and translation.
+   * app.js only reads its public API.
+   */
+
   function language() {
     return LANG()?.getLanguage?.() || "ne";
   }
@@ -951,21 +956,6 @@
     }
   }
 
-  function changeLanguage(value) {
-    const selected = value === "en" ? "en" : "ne";
-
-    LANG()?.setLanguage?.(selected);
-
-    refreshCurrentPage();
-
-    toast(
-      selected === "en"
-        ? "Language updated."
-        : "भाषा परिवर्तन भयो.",
-      "success"
-    );
-  }
-
   /* =======================================================
      PAGE REFRESH
      Navigation and page rendering belong to KSKNavigation.
@@ -1144,6 +1134,13 @@
       "ksk:open-composer",
       openPostComposer
     );
+
+    /*
+     * Language Core changes the language and dispatches
+     * ksk:language-change.
+     *
+     * App Controller only refreshes visible app content.
+     */
 
     global.addEventListener(
       "ksk:language-change",
