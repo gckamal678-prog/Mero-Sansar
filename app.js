@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -939,23 +938,6 @@
     );
   }
 
-  function applySettingsTheme() {
-    const settings = SETTINGS()?.getSettings?.();
-
-    if (!settings?.theme) return;
-
-    const selected = settings.theme === "dark"
-      ? "dark"
-      : "light";
-
-    const current =
-      document.documentElement.dataset.theme || "light";
-
-    if (current !== selected) {
-      THEME()?.applyTheme?.(selected, false);
-    }
-  }
-
   /* =======================================================
      PAGE REFRESH
      Navigation and page rendering belong to KSKNavigation.
@@ -1151,20 +1133,9 @@
     );
 
     global.addEventListener(
-      "ksk:theme-change",
-      () => {
-        // KSKTheme owns theme presentation.
-      }
-    );
-
-    global.addEventListener(
       "ksk:settings-change",
       event => {
         const changedSettings = event.detail?.settings;
-
-        if (changedSettings?.theme) {
-          applySettingsTheme();
-        }
 
         document.body.classList.toggle(
           "ksk-compact-mode",
@@ -1293,19 +1264,6 @@
       toast,
       refreshCurrentPage
     });
-
-    /*
-     * Restore saved appearance settings.
-     */
-
-    applySettingsTheme();
-
-    const savedSettings = SETTINGS()?.getSettings?.();
-
-    document.body.classList.toggle(
-      "ksk-compact-mode",
-      Boolean(savedSettings?.compactMode)
-    );
 
     /*
      * Bind application events after shared systems
