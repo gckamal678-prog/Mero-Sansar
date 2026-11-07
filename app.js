@@ -1079,98 +1079,22 @@
   ======================================================= */
 
   function renderFriends() {
-    const friends = getFriends();
+    const friendsPage = global.KSKFriendsPage;
 
-    const list = friends.length
-      ? friends.map(friend => `
-          <article class="card friend-card">
-
-            <div class="flex align-center gap-3">
-
-              ${avatarHTML(
-                friend.name,
-                friend.avatar
-              )}
-
-              <div class="flex-column">
-
-                <strong>
-                  ${escapeHTML(friend.name || "साथी")}
-                </strong>
-
-                <span class="text-muted text-small">
-                  ${escapeHTML(friend.location || "")}
-                </span>
-
-              </div>
-
-              <button
-                class="icon-button"
-                type="button"
-                data-message-friend="${escapeHTML(friend.id)}"
-                aria-label="${isEnglish()
-                  ? "Message"
-                  : "सन्देश"}">
-
-                💬
-
-              </button>
-
-            </div>
-
-          </article>
-        `).join("")
-      : `
+    if (!friendsPage?.render) {
+      return `
         <div class="empty-state">
-
-          <div class="empty-state-icon">👥</div>
-
-          <h3 class="empty-state-title">
-            ${isEnglish()
-              ? "No friends added yet"
-              : "अहिलेसम्म साथी थपिएको छैन"}
-          </h3>
-
-          <p>
-            ${isEnglish()
-              ? "Add a friend by entering their name."
-              : "नाम लेखेर साथी थप्न सक्नुहुन्छ।"}
-          </p>
-
+          ${isEnglish()
+            ? "Friends page is unavailable. Please reload the app."
+            : "साथीहरूको पृष्ठ उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
         </div>
       `;
+    }
 
-    return `
-      <section class="page-section">
-
-        <div class="flex-between">
-
-          <h3 class="section-title">
-            ${isEnglish()
-              ? "My Friends"
-              : "मेरा साथीहरू"}
-          </h3>
-
-          <button
-            class="btn btn-primary btn-sm"
-            type="button"
-            data-add-friend-open>
-
-            +
-            ${isEnglish()
-              ? "Add Friend"
-              : "साथी थप्नुहोस्"}
-
-          </button>
-
-        </div>
-
-        <div class="friends-list">
-          ${list}
-        </div>
-
-      </section>
-    `;
+    return friendsPage.render({
+      friends: getFriends(),
+      isEnglish: isEnglish()
+    });
   }
 
   /* =======================================================
@@ -1993,6 +1917,10 @@
 
     setPageTitle(selected.title);
     setPageContent(selected.render());
+
+    if (currentPage === "friends") {
+      global.KSKUserCard?.refresh?.();
+    }
 
     /*
      * Feature modules refresh their own media.
