@@ -1,66 +1,117 @@
 "use strict";
 
+/*
+ * =========================================================
+ * KSK — FRIENDS PAGE MODULE
+ *
+ * RESPONSIBILITY:
+ * - Render friends page
+ * - Display friends using KSKUserCard
+ *
+ * DATA SOURCE:
+ * - KSKData
+ *
+ * DEPENDENCIES:
+ * - KSKUserCard
+ *
+ * NOTE:
+ * - No Hamro system dependency.
+ * - Friend creation remains in app.js for now.
+ * =========================================================
+ */
+
 (function (global) {
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  })[c]);
+  "use strict";
 
-  global.HamroPages.register("friends", {
-    render() {
-      const friends = global.HamroData.getFriends();
+  if (global.KSKFriendsPage) return;
 
-      return `
-        <section class="hs-page">
-          <div class="hs-page-heading">
-            <h2>साथीहरू</h2>
-            <p>साथी जोड्नुहोस् र कुराकानी सुरु गर्नुहोस्।</p>
-          </div>
+  function escapeHTML(value) {
+    if (global.KSKUtils?.escapeHTML) {
+      return global.KSKUtils.escapeHTML(value);
+    }
 
-          <form class="hs-inline-form" data-hs-form="add-friend">
-            <input class="form-input" name="friendName"
-              placeholder="साथीको नाम लेख्नुहोस्" required maxlength="60">
-            <button class="btn btn-primary" type="submit">साथी थप्नुहोस्</button>
-          </form>
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    })[char]);
+  }
 
-          <div class="hs-list">
-            ${friends.length
-              ? friends.map((friend) => global.HamroUserCard.render(friend)).join("")
-              : `<div class="empty-state"><p>अहिलेसम्म साथी छैन।</p></div>`}
-          </div>
-        </section>
+  function render(options = {}) {
+    const data = global.KSKData;
+    const userCard = global.KSKUserCard;
+
+    const friends = Array.isArray(options.friends)
+      ? options.friends
+      : data?.getFriends?.() || [];
+
+    const isEnglish = Boolean(options.isEnglish);
+
+    const friendList = friends.length
+      ? friends.map(friend => {
+          if (userCard?.render) {
+            return userCard.render(friend);
+          }
+
+          return `
+            <article class="card friend-card">
+              <strong>
+                ${escapeHTML(friend.name || "साथी")}
+              </strong>
+            </article>
+          `;
+        }).join("")
+      : `
+        <div class="empty-state">
+          <div class="empty-state-icon">👥</div>
+
+          <h3 class="empty-state-title">
+            ${isEnglish
+              ? "No friends added yet"
+              : "अहिलेसम्म साथी थपिएको छैन"}
+          </h3>
+
+          <p>
+            ${isEnglish
+              ? "Add a friend by entering their name."
+              : "नाम लेखेर साथी थप्न सक्नुहुन्छ।"}
+          </p>
+        </div>
       `;
-    },
 
-    handle(action, data, root) {
-      if (action === "remove-friend") {
-        global.HamroData.removeFriend(data.userId);
-        global.HamroApp?.refreshPage();
-      }
+    return `
+      <section class="page-section">
 
-      if (action === "message") {
-        const friend = global.HamroData.getFriends()
-          .find((item) => item.id === data.userId);
-        if (!friend) return;
+        <div class="flex-between">
 
-        const chatId = global.HamroData.createChat(friend);
-        global.HamroApp?.openChat(chatId);
-      }
-    }
+          <h3 class="section-title">
+            ${isEnglish ? "My Friends" : "मेरा साथीहरू"}
+          </h3>
+
+          <button
+            class="btn btn-primary btn-sm"
+            type="button"
+            data-add-friend-open>
+
+            +
+            ${isEnglish ? "Add Friend" : "साथी थप्नुहोस्"}
+
+          </button>
+
+        </div>
+
+        <div class="friends-list">
+          ${friendList}
+        </div>
+
+      </section>
+    `;
+  }
+
+  global.KSKFriendsPage = Object.freeze({
+    render
   });
 
-  document.addEventListener("submit", (event) => {
-    const form = event.target.closest('[data-hs-form="add-friend"]');
-    if (!form) return;
-
-    event.preventDefault();
-    const name = new FormData(form).get("friendName");
-
-    if (global.HamroData.addFriend(name)) {
-      form.reset();
-      global.HamroApp?.refreshPage();
-      global.HamroToast?.show("साथी थपियो।");
-    } else {
-      global.HamroToast?.show("नाम खाली छ वा साथी पहिले नै छ।");
-    }
-  });
 })(window);
