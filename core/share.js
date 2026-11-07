@@ -1,108 +1,180 @@
+
 "use strict";
 
 /*
- * KSK — POST SHARING
+ * =========================================================
+ * KSK — POST SHARE MODULE
+ *
+ * FILE: core/share.js
  *
  * RESPONSIBILITY:
  * - Share post text and author
- * - Share original post photo as a file
- * - Use native mobile share sheet
- * - Provide clipboard fallback
+ * - Share application URL with every post
+ * - Share original post photo when supported
+ * - Open native mobile share sheet
+ * - Copy complete share message as fallback
  *
  * DEPENDENCIES:
- * KSKData, KSKMedia, KSKLanguage, KSKToast
+ * - KSKData
+ * - KSKMedia
+ * - KSKLanguage
+ * - KSKToast
+ *
+ * IMPORTANT:
+ * app.js only calls KSKShare.sharePost().
+ * All sharing logic belongs to this file.
+ * =========================================================
  */
 
 (function (global) {
+  "use strict";
+
+  if (global.KSKShare) return;
 
   /* =====================================================
      LANGUAGE
   ===================================================== */
 
   function isEnglish() {
-    return (
-      global.KSKLanguage?.getLanguage?.() === "en"
-    );
+    return global.KSKLanguage?.getLanguage?.() === "en";
   }
 
+  function message(nepali, english) {
+    return isEnglish() ? english : nepali;
+  }
 
   /* =====================================================
      TOAST
   ===================================================== */
 
-  function toast(message, type = "info") {
-
+  function toast(text, type = "info") {
     const api = global.KSKToast;
 
-    if (api?.[type]) {
-      api[type](message);
+    if (typeof api?.[type] === "function") {
+      api[type](text);
       return;
     }
 
-    api?.show?.(message, type);
-  }
+    if (typeof api?.show === "function") {
+      api.show(text, type);
+      return;
+    }
 
+    console.warn("KSKShare:", text);
+  }
 
   /* =====================================================
      POST DATA
   ===================================================== */
 
   function getPost(id) {
-
     if (!id) return null;
 
     return global.KSKData?.getPost?.(id) || null;
   }
 
-
-  function getShareText(post) {
-
+  function getPostText(post) {
     const author = String(
-      post.author || (
-        isEnglish() ? "KSK Member" : "हाम्रो संसार सदस्य"
-      )
+      post.author ||
+      message("हाम्रो संसार सदस्य", "Hamro Sansar Member")
     ).trim();
 
-    const content = String(
-      post.text || ""
-    ).trim();
+    const content = String(post.text || "").trim();
 
     return [author, content]
       .filter(Boolean)
       .join("\n\n");
   }
 
+  /* =====================================================
+     APPLICATION SHARE URL
+  ===================================================== */
+
+  function getApplicationUrl() {
+    try {
+      if (!global.location?.href || !global.URL) {
+        return "";
+      }
+
+      /*
+       * Current page, query and hash हटाएर
+       * एपको मुख्य URL तयार गर्ने।
+       *
+       * उदाहरण:
+       * https://example.com/Mero-Sansar/
+       */
+
+      const appUrl = new global.URL(
+        "./",
+        global.location.href
+      );
+
+      if (
+        appUrl.protocol !== "https:" &&
+        appUrl.protocol !== "http:"
+      ) {
+        return "";
+      }
+
+      return appUrl.href;
+
+    } catch (error) {
+      console.error(
+        "KSKShare: Application URL failed:",
+        error
+      );
+
+      return "";
+    }
+  }
+
+  /* =====================================================
+     SHARE MESSAGE
+  ===================================================== */
+
+  function getShareTitle(post) {
+    return String(
+      post.author ||
+      message("हाम्रो संसार पोस्ट", "Hamro Sansar Post")
+    ).trim();
+  }
+
+  function getCompleteShareMessage(text, url) {
+    const parts = [text];
+
+    if (url) {
+      parts.push(
+        message(
+          "हाम्रो संसार खोल्नुहोस्:",
+          "Open Hamro Sansar:"
+        ) + "\n" + url
+      );
+    }
+
+    return parts
+      .filter(Boolean)
+      .join("\n\n");
+  }
 
   /* =====================================================
      IMAGE FILE
   ===================================================== */
 
   async function getPostImageFile(post) {
-
     if (!post?.mediaId) {
       return null;
     }
 
     const media = global.KSKMedia;
 
-    if (!media?.getImage) {
-      throw new Error(
-        isEnglish()
-          ? "Photo storage is unavailable."
-          : "फोटो भण्डारण सुविधा उपलब्ध छैन।"
-      );
+    if (typeof media?.getImage !== "function") {
+      throw new Error("Photo storage is unavailable.");
     }
 
-    const record = await media.getImage(
-      post.mediaId
-    );
+    const record = await media.getImage(post.mediaId);
 
     if (!record?.blob) {
-      throw new Error(
-        isEnglish()
-          ? "Post photo could not be found."
-          : "पोस्टको फोटो भेटिएन।"
-      );
+      throw new Error("Post photo could not be found.");
     }
 
     const blob = record.blob;
@@ -123,13 +195,13 @@
     const safeId = String(post.id || "post")
       .replace(/[^a-zA-Z0-9_-]/g, "");
 
-    const fileName = `ksk-post-${safeId}.${extension}`;
+    const fileName = `hamro-sansar-post-${safeId}.${extension}`;
 
-    if (typeof File !== "function") {
+    if (typeof global.File !== "function") {
       return null;
     }
 
-    return new File(
+    return new global.File(
       [blob],
       fileName,
       {
@@ -139,76 +211,89 @@
     );
   }
 
-
   /* =====================================================
-     CLIPBOARD FALLBACK
+     CLIPBOARD
   ===================================================== */
 
-  async function copyPostText(text) {
-
+  async function copyText(text) {
     if (!text) return false;
 
-    if (navigator.clipboard?.writeText) {
+    /*
+     * Modern Clipboard API
+     */
 
-      await navigator.clipboard.writeText(text);
-
-      return true;
+    if (
+      global.navigator?.clipboard?.writeText &&
+      global.isSecureContext
+    ) {
+      try {
+        await global.navigator.clipboard.writeText(text);
+        return true;
+      } catch (error) {
+        console.warn(
+          "KSKShare: Modern clipboard failed:",
+          error
+        );
+      }
     }
 
-    const textarea = document.createElement("textarea");
+    /*
+     * Older browser fallback
+     */
 
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    textarea.style.pointerEvents = "none";
-
-    document.body.appendChild(textarea);
-
-    textarea.select();
-
-    let copied = false;
+    let textarea = null;
 
     try {
-      copied = document.execCommand("copy");
-    } finally {
-      textarea.remove();
-    }
+      textarea = document.createElement("textarea");
 
-    return copied;
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "0";
+      textarea.style.opacity = "0";
+
+      document.body.appendChild(textarea);
+
+      textarea.focus();
+      textarea.select();
+
+      return Boolean(
+        document.execCommand("copy")
+      );
+
+    } catch (error) {
+      console.error(
+        "KSKShare: Clipboard fallback failed:",
+        error
+      );
+
+      return false;
+
+    } finally {
+      textarea?.remove();
+    }
   }
 
-
   /* =====================================================
-     SHARE TEXT ONLY
+     COPY FALLBACK
   ===================================================== */
 
-  async function shareText(post, text) {
-
-    const title = String(
-      post.author || (
-        isEnglish() ? "KSK Post" : "हाम्रो संसार पोस्ट"
-      )
+  async function copyShareMessage(text, url) {
+    const completeMessage = getCompleteShareMessage(
+      text,
+      url
     );
 
-    if (typeof navigator.share === "function") {
-
-      await navigator.share({
-        title,
-        text
-      });
-
-      return true;
-    }
-
-    const copied = await copyPostText(text);
+    const copied = await copyText(completeMessage);
 
     if (copied) {
-
       toast(
-        isEnglish()
-          ? "Post text copied. You can paste it anywhere."
-          : "पोस्टको Text कपी भयो। अब जहाँ चाहनुहुन्छ Paste गर्नुहोस्।",
+        message(
+          "पोस्टको Text र Link Copy भयो। अब जहाँ चाहनुहुन्छ Paste गरेर पठाउनुहोस्।",
+          "Post text and link copied. Paste them wherever you want to share."
+        ),
         "success"
       );
 
@@ -216,70 +301,88 @@
     }
 
     toast(
-      isEnglish()
-        ? "Sharing is not available in this browser."
-        : "यो ब्राउजरमा Share सुविधा उपलब्ध छैन।",
-      "warning"
+      message(
+        "पोस्ट Copy गर्न सकिएन। कृपया फेरि प्रयास गर्नुहोस्।",
+        "Could not copy the post. Please try again."
+      ),
+      "error"
     );
 
     return false;
   }
 
+  /* =====================================================
+     NATIVE TEXT SHARE
+  ===================================================== */
+
+  async function shareText(post, text, url) {
+    const title = getShareTitle(post);
+
+    if (typeof global.navigator?.share === "function") {
+      await global.navigator.share({
+        title,
+        text,
+        ...(url ? { url } : {})
+      });
+
+      return true;
+    }
+
+    return copyShareMessage(text, url);
+  }
 
   /* =====================================================
-     SHARE POST WITH PHOTO
+     SHARE POST
   ===================================================== */
 
   async function sharePost(id) {
-
     const post = getPost(id);
 
     if (!post) {
-
       toast(
-        isEnglish()
-          ? "Post could not be found."
-          : "पोस्ट भेटिएन।",
+        message(
+          "पोस्ट भेटिएन।",
+          "Post could not be found."
+        ),
         "error"
       );
 
       return false;
     }
 
-    const text = getShareText(post);
+    const text = getPostText(post);
+    const title = getShareTitle(post);
+    const url = getApplicationUrl();
 
-    const title = String(
-      post.author || (
-        isEnglish() ? "KSK Post" : "हाम्रो संसार पोस्ट"
-      )
-    );
+    /*
+     * Link नभए पनि Text Share रोकिँदैन।
+     */
 
     const hasPhoto = Boolean(post.mediaId);
 
-
     /* -----------------------------------------------
-       NO PHOTO
+       TEXT-ONLY POST
     ----------------------------------------------- */
 
     if (!hasPhoto) {
-
       try {
-        return await shareText(post, text);
-      } catch (error) {
+        return await shareText(post, text, url);
 
+      } catch (error) {
         if (error?.name === "AbortError") {
           return false;
         }
 
         console.error(
-          "KSK text sharing failed:",
+          "KSKShare: Text sharing failed:",
           error
         );
 
         toast(
-          isEnglish()
-            ? "Could not share this post."
-            : "पोस्ट Share गर्न सकिएन।",
+          message(
+            "पोस्ट Share गर्न सकिएन।",
+            "Could not share this post."
+          ),
           "error"
         );
 
@@ -287,138 +390,138 @@
       }
     }
 
-
     /* -----------------------------------------------
-       PHOTO SHARE
+       PHOTO POST
     ----------------------------------------------- */
 
     try {
-
       const file = await getPostImageFile(post);
 
+      /*
+       * फोटो File बनाउन नसके Text + Link पठाउने।
+       */
+
       if (!file) {
-
         toast(
-          isEnglish()
-            ? "This browser cannot attach the photo. Sharing text instead."
-            : "यो ब्राउजरबाट फोटो जोड्न मिलेन। Text मात्र Share गरिँदैछ।",
+          message(
+            "फोटो जोड्न मिलेन। Text र Link Share गरिँदैछ।",
+            "Photo attachment is unavailable. Sharing text and link instead."
+          ),
           "warning"
         );
 
-        return await shareText(post, text);
+        return await shareText(post, text, url);
       }
 
+      /*
+       * Native Share उपलब्ध नभए फोटो पठाउन सकिँदैन।
+       */
 
-      if (typeof navigator.share !== "function") {
-
+      if (typeof global.navigator?.share !== "function") {
         toast(
-          isEnglish()
-            ? "Photo sharing is not supported here. Post text will be copied."
-            : "यहाँ फोटोसहित Share गर्न मिल्दैन। पोस्टको Text कपी गरिँदैछ।",
+          message(
+            "यो ब्राउजरमा फोटो Share गर्न मिल्दैन। Text र Link Copy गरिँदैछ।",
+            "Photo sharing is not supported here. Copying text and link instead."
+          ),
           "warning"
         );
 
-        return await shareText(post, text);
+        return await copyShareMessage(text, url);
       }
 
+      /*
+       * Check file sharing support.
+       */
+
+      if (
+        typeof global.navigator.canShare === "function" &&
+        !global.navigator.canShare({
+          files: [file]
+        })
+      ) {
+        toast(
+          message(
+            "यो ब्राउजरले फोटो Share समर्थन गर्दैन। Text र Link पठाइँदैछ।",
+            "This browser does not support photo sharing. Sharing text and link instead."
+          ),
+          "warning"
+        );
+
+        return await shareText(post, text, url);
+      }
+
+      /*
+       * Photo + Text + Application URL
+       */
 
       const shareData = {
         title,
         text,
-        files: [file]
+        files: [file],
+        ...(url ? { url } : {})
       };
 
-
-      /* CHECK FILE SHARING SUPPORT */
-
-      if (
-        typeof navigator.canShare === "function" &&
-        !navigator.canShare({
-          files: [file]
-        })
-      ) {
-
-        toast(
-          isEnglish()
-            ? "Photo sharing is not supported by this browser. Sharing text instead."
-            : "यो ब्राउजरले फोटोसहित Share समर्थन गर्दैन। Text मात्र Share गरिँदैछ।",
-          "warning"
-        );
-
-        return await shareText(post, text);
-      }
-
-
-      /* OPEN NATIVE SHARE SHEET */
-
-      await navigator.share(shareData);
+      await global.navigator.share(shareData);
 
       return true;
 
     } catch (error) {
-
-      /* USER CANCELLED */
+      /*
+       * User cancelled the share sheet.
+       */
 
       if (error?.name === "AbortError") {
         return false;
       }
 
       console.error(
-        "KSK photo sharing failed:",
+        "KSKShare: Photo sharing failed:",
         error
       );
 
-
-      /* FALLBACK TO TEXT */
+      /*
+       * Photo sharing failed.
+       * Try Text + Link instead.
+       */
 
       try {
-
         toast(
-          isEnglish()
-            ? "Photo attachment failed. Trying text sharing instead."
-            : "फोटो जोड्न सकिएन। Text Share गर्ने प्रयास गरिँदैछ।",
+          message(
+            "फोटो Share गर्न सकिएन। Text र Link पठाउने प्रयास गरिँदैछ।",
+            "Photo sharing failed. Trying text and link sharing instead."
+          ),
           "warning"
         );
 
-        return await shareText(post, text);
+        return await shareText(post, text, url);
 
       } catch (fallbackError) {
-
         if (fallbackError?.name === "AbortError") {
           return false;
         }
 
         console.error(
-          "KSK share fallback failed:",
+          "KSKShare: Final sharing fallback failed:",
           fallbackError
         );
 
-        toast(
-          isEnglish()
-            ? "Could not share this post."
-            : "पोस्ट Share गर्न सकिएन।",
-          "error"
-        );
+        /*
+         * Last fallback: Clipboard
+         */
 
-        return false;
+        return await copyShareMessage(text, url);
       }
     }
   }
-
 
   /* =====================================================
      PUBLIC API
   ===================================================== */
 
   global.KSKShare = Object.freeze({
-
     sharePost
-
   });
 
-
-  console.info(
-    "KSK Share initialized."
-  );
+  console.info("KSK Share initialized.");
 
 })(window);
