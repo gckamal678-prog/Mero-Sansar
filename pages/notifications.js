@@ -1,22 +1,24 @@
+
 "use strict";
 
 /*
  * =========================================================
  * KSK — NOTIFICATIONS PAGE MODULE
  *
- * RESPONSIBILITY:
- * - Render notification list
- * - Show empty notification state
- * - Display notification date
- * - Display read/unread status
+ * OWNER:
+ * - Render notification page
+ * - Render notification items
+ * - Empty notification state
+ * - Read / unread display
+ * - Mark notifications as read when page opens
  *
  * DATA SOURCE:
  * - KSKData
  *
- * IMPORTANT:
- * - Does not create notifications.
- * - Does not mark notifications as read automatically.
- * - Does not manage navigation.
+ * app.js:
+ * - Must not render notification HTML.
+ * - Must not directly mark notifications as read.
+ * - Only coordinates application navigation and rendering.
  * =========================================================
  */
 
@@ -25,16 +27,38 @@
 
   if (global.KSKNotificationsPage) return;
 
+  let initialized = false;
+
+  /* =======================================================
+     DEPENDENCIES
+  ======================================================= */
+
+  const DATA = () => global.KSKData || null;
+  const LANG = () => global.KSKLanguage || null;
+  const UTILS = () => global.KSKUtils || null;
+
+  /* =======================================================
+     LANGUAGE
+  ======================================================= */
+
+  function isEnglish() {
+    return LANG()?.getLanguage?.() === "en";
+  }
+
+  function translate(nepali, english) {
+    return isEnglish() ? english : nepali;
+  }
+
   /* =======================================================
      HELPERS
   ======================================================= */
 
-  function escapeHTML(value) {
-    if (global.KSKUtils?.escapeHTML) {
-      return global.KSKUtils.escapeHTML(value);
+  function escapeHTML(value = "") {
+    if (typeof UTILS()?.escapeHTML === "function") {
+      return UTILS().escapeHTML(String(value));
     }
 
-    return String(value ?? "").replace(/[&<>"']/g, char => ({
+    return String(value).replace(/[&<>"']/g, char => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
@@ -43,19 +67,19 @@
     })[char]);
   }
 
-  function isEnglish() {
-    return global.KSKLanguage?.getLanguage?.() === "en";
-  }
-
   function getNotifications() {
-    return global.KSKData?.getNotifications?.() || [];
+    const notifications = DATA()?.getNotifications?.();
+
+    return Array.isArray(notifications)
+      ? notifications
+      : [];
   }
 
   function formatNotificationDate(value) {
     if (!value) return "";
 
-    if (global.KSKUtils?.formatDate) {
-      return global.KSKUtils.formatDate(
+    if (typeof UTILS()?.formatDate === "function") {
+      return UTILS().formatDate(
         value,
         isEnglish() ? "en" : "ne"
       );
@@ -83,10 +107,18 @@
         <div class="empty-state-icon">🔔</div>
 
         <h3 class="empty-state-title">
-          ${isEnglish()
-            ? "No notifications"
-            : "अहिले कुनै सूचना छैन"}
+          ${translate(
+            "अहिले कुनै सूचना छैन",
+            "No notifications"
+          )}
         </h3>
+
+        <p>
+          ${translate(
+            "नयाँ सूचना आएपछि यहाँ देखिनेछ।",
+            "New notifications will appear here."
+          )}
+        </p>
 
       </div>
     `;
@@ -96,29 +128,41 @@
      SINGLE NOTIFICATION
   ======================================================= */
 
-  function renderNotification(item) {
+  function renderNotification(item = {}) {
+    const id = escapeHTML(item.id || "");
     const text = escapeHTML(item.text || "");
 
     const date = escapeHTML(
-      formatNotificationDate(item.createdAt || item.time)
+      formatNotificationDate(
+        item.createdAt || item.time
+      )
     );
 
-    const unreadClass = item.read
+    const isRead = Boolean(item.read);
+
+    const unreadClass = isRead
       ? ""
       : " notification-unread";
 
     return `
       <article
         class="card notification-item${unreadClass}"
-        data-notification-id="${escapeHTML(item.id || "")}">
+        data-notification-id="${id}"
+        aria-label="${escapeHTML(
+          translate("सूचना", "Notification")
+        )}">
 
-        <p>
-          ${text}
-        </p>
+        <div class="notification-content">
 
-        <small class="post-time">
-          ${date}
-        </small>
+          <p>
+            ${text}
+          </p>
+
+          <small class="post-time">
+            ${date}
+          </small>
+
+        </div>
 
       </article>
     `;
@@ -129,7 +173,9 @@
   ======================================================= */
 
   function render(options = {}) {
-    const notifications = Array.isArray(options.notifications)
+    const notifications = Array.isArray(
+      options.notifications
+    )
       ? options.notifications
       : getNotifications();
 
@@ -138,17 +184,17 @@
     }
 
     return `
-      <section>
+      <section class="notifications-page">
 
         <h3 class="section-title">
-          ${isEnglish()
-            ? "Notifications"
-            : "सूचनाहरू"}
+          ${translate("सूचनाहरू", "Notifications")}
         </h3>
 
         <div class="notifications-list">
 
-          ${notifications.map(renderNotification).join("")}
+          ${notifications
+            .map(renderNotification)
+            .join("")}
 
         </div>
 
@@ -157,17 +203,82 @@
   }
 
   /* =======================================================
+     MARK AS READ
+  ======================================================= */
+
+  function markAllAsRead() {
+    if (
+      typeof DATA()?.markNotificationsRead !== "function"
+    ) {
+      return false;
+    }
+
+    return DATA().markNotificationsRead();
+  }
+
+  /* =======================================================
+     NAVIGATION HANDLER
+  ======================================================= */
+
+  function handleNavigation(event) {
+    const page = event.detail?.page;
+
+    if (page !== "notifications") {
+      return;
+    }
+
+    markAllAsRead();
+  }
+
+  /* =======================================================
+     INITIALIZATION
+  ======================================================= */
+
+  function initialize() {
+    if (initialized) {
+      return true;
+    }
+
+    initialized = true;
+
+    global.addEventListener(
+      "ksk:navigate",
+      handleNavigation
+    );
+
+    return true;
+  }
+
+  /* =======================================================
      PUBLIC API
   ======================================================= */
 
   global.KSKNotificationsPage = Object.freeze({
 
+    initialize,
+
     render,
 
     getNotifications,
 
-    renderNotification
+    renderNotification,
+
+    markAllAsRead
 
   });
+
+  /* =======================================================
+     AUTO INITIALIZATION
+  ======================================================= */
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      initialize,
+      { once: true }
+    );
+  } else {
+    initialize();
+  }
 
 })(window);
