@@ -2,7 +2,15 @@
 
 /*
  * KSK NAVIGATION CONTROLLER
- * Page routing and navigation state.
+ *
+ * RESPONSIBILITY:
+ * - Page navigation
+ * - Current page state
+ * - Active navigation menu
+ * - Page module rendering
+ *
+ * Page content is owned by pages/*.js.
+ * Home feed and stories are owned by app.js.
  */
 
 (function (global) {
@@ -12,7 +20,6 @@
 
   const VALID_PAGES = new Set([
     "home",
-    "posts",
     "friends",
     "messages",
     "notifications",
@@ -20,20 +27,39 @@
     "profile"
   ]);
 
+  const PAGE_TITLES = {
+    home: {
+      ne: "गृहपृष्ठ",
+      en: "Home"
+    },
+    friends: {
+      ne: "साथीहरू",
+      en: "Friends"
+    },
+    messages: {
+      ne: "सन्देश",
+      en: "Messages"
+    },
+    notifications: {
+      ne: "सूचनाहरू",
+      en: "Notifications"
+    },
+    saved: {
+      ne: "सेभ गरिएका पोस्ट",
+      en: "Saved Posts"
+    },
+    profile: {
+      ne: "प्रोफाइल",
+      en: "Profile"
+    }
+  };
+
   let currentPage = "home";
-  let renderPage = null;
-  let onNavigate = null;
   let initialized = false;
   let clickRoot = null;
 
   const $ = (selector, root = document) =>
     root.querySelector(selector);
-
-  function isValidPage(page) {
-    return VALID_PAGES.has(
-      String(page || "").trim().toLowerCase()
-    );
-  }
 
   function normalizePage(page) {
     const value = String(page || "home")
@@ -43,31 +69,59 @@
     return value === "posts" ? "home" : value;
   }
 
-  function setCurrentPage(page, options = {}) {
-    const next = normalizePage(page);
+  function isValidPage(page) {
+    return VALID_PAGES.has(normalizePage(page));
+  }
 
-    if (!isValidPage(next)) return false;
+  function getLanguage() {
+    const language =
+      global.KSKState?.getState?.()?.language;
 
-    currentPage = next;
+    return language === "en" ? "en" : "ne";
+  }
 
-    if (options.render !== false) {
-      refreshCurrentPage();
+  function getPageTitle(page) {
+    const language = getLanguage();
+
+    return PAGE_TITLES[page]?.[language] ||
+      PAGE_TITLES.home[language];
+  }
+
+  function getPageHTML(page) {
+    switch (page) {
+      case "friends":
+        return global.KSKFriendsPage?.render?.();
+
+      case "messages":
+        return global.KSKMessagesPage?.render?.();
+
+      case "notifications":
+        return global.KSKNotificationsPage?.render?.();
+
+      case "saved":
+        return global.KSKSavedPage?.render?.();
+
+      case "profile":
+        return global.KSKProfilePage?.render?.();
+
+      default:
+        return null;
     }
-
-    return true;
   }
 
   function updateActiveNavigation() {
     document
       .querySelectorAll("[data-page], [data-nav-page]")
       .forEach(node => {
-        const value =
+        const page = normalizePage(
           node.dataset.page ||
           node.dataset.navPage ||
-          "";
+          ""
+        );
 
         const active =
-          normalizePage(value) === currentPage;
+          isValidPage(page) &&
+          page === currentPage;
 
         node.classList.toggle("active", active);
         node.classList.toggle("is-active", active);
@@ -80,88 +134,178 @@
       });
   }
 
-  function renderResult(result) {
+  function showHomePage() {
+    $("#homePage")?.classList.remove("hidden");
+    $("#otherPage")?.classList.add("hidden");
+  }
+
+  function showOtherPage(page, html) {
     const home = $("#homePage");
     const other = $("#otherPage");
     const title = $("#otherPageTitle");
     const content = $("#otherPageText");
 
-    if (currentPage === "home") {
-      home?.classList.remove("hidden");
-      other?.classList.add("hidden");
-      return;
-    }
-
     home?.classList.add("hidden");
     other?.classList.remove("hidden");
 
     if (title) {
-      title.textContent = result?.title || "";
+      title.textContent = getPageTitle(page);
     }
 
     if (content) {
-      content.innerHTML = result?.html || "";
+      content.innerHTML = html;
     }
+  }
+
+  function showPageError() {
+    const language = getLanguage();
+
+    return language === "en"
+      ? '<div class="empty-state">This page is temporarily unavailable. Please try again.</div>'
+      : '<div class="empty-state">यो पृष्ठ अहिले उपलब्ध छैन। कृपया फेरि प्रयास गर्नुहोस्।</div>';
   }
 
   function refreshCurrentPage() {
-    if (typeof renderPage !== "function") {
-      console.error(
-        "KSKNavigation: page renderer is not configured."
-      );
-      return false;
+    updateActiveNavigation();
+
+    if (currentPage === "home") {
+      showHomePage();
+      return true;
     }
 
     try {
-      const result = renderPage(currentPage);
+      const html = getPageHTML(currentPage);
 
-      renderResult(result || {});
-      updateActiveNavigation();
+      if (typeof html !== "string") {
+        showOtherPage(currentPage, showPageError());
+        console.error(
+          "KSKNavigation: Page module is missing or returned invalid content:",
+          currentPage
+        );
+        return false;
+      }
 
+      showOtherPage(currentPage, html);
       return true;
+
     } catch (error) {
       console.error(
-        "KSKNavigation: page rendering failed.",
+        "KSKNavigation: Page rendering failed:",
+        currentPage,
         error
       );
 
-      const content = $("#otherPageText");
-
-      if (content && currentPage !== "home") {
-        content.innerHTML =
-          '<div class="empty-state">यो पृष्ठ खोल्न सकिएन। कृपया पुनः प्रयास गर्नुहोस्।</div>';
-      }
-
+      showOtherPage(currentPage, showPageError());
       return false;
     }
   }
 
-  function navigate(page, options = {}) {
-    const next = normalizePage(page);
-
-    if (!isValidPage(next)) return false;
-
-    currentPage = next;
-
-    if (typeof onNavigate === "function") {
-      onNavigate(next, options);
-    }
-
-    refreshCurrentPage();
+  function dispatchNavigationEvent(page, options) {
+    /*
+     * Page modules listen to ksk:navigate.
+     * Navigation does NOT listen to this event,
+     * preventing navigation event recursion.
+     */
 
     global.dispatchEvent(
-      new CustomEvent("ksk:page-change", {
+      new CustomEvent("ksk:navigate", {
         detail: {
-          page: next,
+          page,
           options
         }
       })
     );
 
+    global.dispatchEvent(
+      new CustomEvent("ksk:page-change", {
+        detail: {
+          page,
+          options
+        }
+      })
+    );
+  }
+
+  function navigate(page, options = {}) {
+    const next = normalizePage(page);
+
+    if (!isValidPage(next)) {
+      return false;
+    }
+
+    const previousPage = currentPage;
+
+    currentPage = next;
+
+    /*
+     * Shared state owns persistence.
+     */
+
+    global.KSKState?.setCurrentPage?.(next);
+
+    /*
+     * Notify feature modules before rendering.
+     * Example: notifications mark themselves as read.
+     */
+
+    dispatchNavigationEvent(next, {
+      ...options,
+      previousPage
+    });
+
+    refreshCurrentPage();
+
     return true;
   }
 
-  function handleNavigationEvent(event) {
+  function setCurrentPage(page, options = {}) {
+    const next = normalizePage(page);
+
+    if (!isValidPage(next)) {
+      return false;
+    }
+
+    currentPage = next;
+
+    global.KSKState?.setCurrentPage?.(next);
+
+    updateActiveNavigation();
+
+    if (options.render !== false) {
+      refreshCurrentPage();
+    }
+
+    return true;
+  }
+
+  function handleDocumentClick(event) {
+    const target = event.target?.closest?.(
+      "[data-page], [data-nav-page]"
+    );
+
+    if (!target) return;
+
+    const page =
+      target.dataset.page ||
+      target.dataset.navPage;
+
+    /*
+     * Create is a composer action.
+     * Media UI owns it, not navigation.
+     */
+
+    if (!isValidPage(page)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    navigate(page, {
+      source: "navigation-control"
+    });
+  }
+
+  function handleNavigationRequest(event) {
     const detail = event.detail || {};
 
     if (!detail.page) return;
@@ -172,68 +316,47 @@
     );
   }
 
-  function handleDocumentClick(event) {
-    const target =
-      event.target?.closest?.(
-        "[data-page], [data-nav-page]"
-      );
-
-    if (!target) return;
-
-    const page =
-      target.dataset.page ||
-      target.dataset.navPage;
-
-    if (!isValidPage(page)) return;
-
-    event.preventDefault();
-
-    navigate(page, {
-      source: "navigation-control"
-    });
-  }
-
   function initializeNavigation(root = document) {
     if (initialized) {
       updateActiveNavigation();
       return true;
     }
 
-    initialized = true;
     clickRoot = root || document;
+
+    /*
+     * Restore saved page from shared state.
+     */
+
+    const savedPage =
+      global.KSKState?.getState?.()?.currentPage || "home";
+
+    currentPage = isValidPage(savedPage)
+      ? normalizePage(savedPage)
+      : "home";
+
+    if (currentPage !== savedPage) {
+      global.KSKState?.setCurrentPage?.(currentPage);
+    }
 
     clickRoot.addEventListener(
       "click",
       handleDocumentClick
     );
 
+    /*
+     * External navigation requests use a separate event.
+     * ksk:navigate is reserved for notifying feature modules.
+     */
+
     global.addEventListener(
-      "ksk:navigate",
-      handleNavigationEvent
+      "ksk:navigate-request",
+      handleNavigationRequest
     );
 
+    initialized = true;
+
     updateActiveNavigation();
-
-    return true;
-  }
-
-  function configure(options = {}) {
-    if (typeof options.renderPage === "function") {
-      renderPage = options.renderPage;
-    }
-
-    if (typeof options.onNavigate === "function") {
-      onNavigate = options.onNavigate;
-    }
-
-    if (
-      options.initialPage &&
-      isValidPage(options.initialPage)
-    ) {
-      currentPage = normalizePage(
-        options.initialPage
-      );
-    }
 
     return true;
   }
@@ -251,8 +374,8 @@
     }
 
     global.removeEventListener(
-      "ksk:navigate",
-      handleNavigationEvent
+      "ksk:navigate-request",
+      handleNavigationRequest
     );
 
     initialized = false;
@@ -260,14 +383,13 @@
   }
 
   global.KSKNavigation = Object.freeze({
-    configure,
     initializeNavigation,
     isValidPage,
     navigate,
-    refreshNavigation,
-    refreshCurrentPage,
     setCurrentPage,
     getCurrentPage: () => currentPage,
+    refreshNavigation,
+    refreshCurrentPage,
     destroy
   });
 
