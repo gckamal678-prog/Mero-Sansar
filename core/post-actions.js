@@ -8,34 +8,19 @@
  *
  * RESPONSIBILITY:
  * - Open post options menu
- * - Edit an existing post
- * - Delete an existing post
- * - Handle post menu button clicks
+ * - Edit and delete posts
+ * - Save and unsave posts
+ * - Handle post menu and save button clicks
  *
- * DEPENDENCIES:
- * - KSKData
- * - KSKModal
- * - KSKUtils
- *
- * APP INTEGRATION:
- * initialize({
- *   isEnglish,
- *   translate,
- *   toast,
- *   refreshCurrentPage
- * });
- *
- * app.js will call:
- * KSKPostActions.handleClick(target)
+ * LIKE / REACTION:
+ * Owned by core/reactions.js
  * =========================================================
  */
 
 (function (global) {
   "use strict";
 
-  if (global.KSKPostActions) {
-    return;
-  }
+  if (global.KSKPostActions) return;
 
   const DATA = () => global.KSKData || null;
   const MODAL = () => global.KSKModal || null;
@@ -97,6 +82,13 @@
     MODAL()?.closeModal?.();
   }
 
+  function isReady() {
+    if (initialized) return true;
+
+    console.error("KSKPostActions is not initialized.");
+    return false;
+  }
+
   /* =======================================================
      INITIALIZATION
   ======================================================= */
@@ -123,19 +115,85 @@
     }
 
     initialized = true;
+
+    document.removeEventListener(
+      "click",
+      onDocumentClick,
+      true
+    );
+
+    document.addEventListener(
+      "click",
+      onDocumentClick,
+      true
+    );
+
     return true;
   }
 
-  function isReady() {
-    if (initialized) {
-      return true;
+  /* =======================================================
+     SAVE / UNSAVE POST
+  ======================================================= */
+
+  function isPostSaved(id) {
+    const saved = DATA()?.getSavedPosts?.() || [];
+
+    return Array.isArray(saved) &&
+      saved.some(item => String(item) === String(id));
+  }
+
+  function toggleSave(id) {
+    if (!isReady()) return false;
+
+    const post = DATA()?.getPost?.(id);
+
+    if (!post) {
+      toast(
+        isEnglish()
+          ? "Post could not be found."
+          : "पोस्ट भेटिएन।",
+        "warning"
+      );
+
+      return false;
     }
 
-    console.error(
-      "KSKPostActions is not initialized."
-    );
+    const wasSaved = isPostSaved(id);
 
-    return false;
+    const success = wasSaved
+      ? DATA()?.unsavePost?.(id)
+      : DATA()?.savePost?.(id);
+
+    if (!success) {
+      toast(
+        isEnglish()
+          ? "Could not update saved post."
+          : "पोस्टको Save अवस्था परिवर्तन गर्न सकिएन।",
+        "error"
+      );
+
+      return false;
+    }
+
+    if (wasSaved) {
+      toast(
+        isEnglish()
+          ? "Post removed from saved."
+          : "सेभबाट हटाइयो।",
+        "success"
+      );
+    } else {
+      toast(
+        isEnglish()
+          ? "Post saved."
+          : "पोस्ट सेभ भयो।",
+        "success"
+      );
+    }
+
+    app.refreshCurrentPage();
+
+    return true;
   }
 
   /* =======================================================
@@ -195,9 +253,7 @@
       `
     });
 
-    if (!modal?.element) {
-      return false;
-    }
+    if (!modal?.element) return false;
 
     const form = modal.element.querySelector(
       "#kskEditPostForm"
@@ -264,9 +320,7 @@
 
     const post = DATA()?.getPost?.(id);
 
-    if (!post) {
-      return false;
-    }
+    if (!post) return false;
 
     openModal({
       title: isEnglish()
@@ -358,8 +412,35 @@
   }
 
   /* =======================================================
+     DOCUMENT CLICK HANDLER
+  ======================================================= */
+
+  function onDocumentClick(event) {
+    const target = event.target;
+
+    if (!target?.closest || !isReady()) return;
+
+    /*
+     * Save button is handled here in capture phase.
+     * This prevents the old app.js save handler
+     * from processing the same click again.
+     */
+
+    const saveButton = target.closest(
+      '[data-post-action="save"]'
+    );
+
+    if (saveButton) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      toggleSave(saveButton.dataset.postId);
+      return;
+    }
+  }
+
+  /* =======================================================
      POST MENU CLICK HANDLER
-     app.js delegates matching clicks to this module.
   ======================================================= */
 
   function handleClick(target) {
@@ -398,15 +479,34 @@
   }
 
   /* =======================================================
+     CLEANUP
+  ======================================================= */
+
+  function destroy() {
+    document.removeEventListener(
+      "click",
+      onDocumentClick,
+      true
+    );
+
+    initialized = false;
+
+    return true;
+  }
+
+  /* =======================================================
      PUBLIC API
   ======================================================= */
 
   global.KSKPostActions = Object.freeze({
     initialize,
+    destroy,
     handleClick,
     editPost,
     openPostMenu,
-    deletePost
+    deletePost,
+    toggleSave,
+    isPostSaved
   });
 
 })(window);
