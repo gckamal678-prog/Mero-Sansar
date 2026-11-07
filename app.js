@@ -1202,7 +1202,6 @@
     if (!chats.length) {
       return `
         <section>
-
           <div class="empty-state">
 
             <div class="empty-state-icon">💬</div>
@@ -1220,8 +1219,19 @@
             </p>
 
           </div>
-
         </section>
+      `;
+    }
+
+    const messageItem = global.KSKMessageItem;
+
+    if (!messageItem?.render) {
+      return `
+        <div class="empty-state">
+          ${isEnglish()
+            ? "Messages are unavailable. Please reload the app."
+            : "सन्देश सुविधा उपलब्ध छैन। कृपया एप पुनः खोल्नुहोस्।"}
+        </div>
       `;
     }
 
@@ -1236,41 +1246,11 @@
 
         <div class="chat-list">
 
-          ${chats.map(chat => {
-            const last = chat.messages?.[
-              chat.messages.length - 1
-            ];
-
-            return `
-              <button
-                class="card chat-item"
-                type="button"
-                data-open-chat="${escapeHTML(chat.id)}">
-
-                <div class="flex align-center gap-3">
-
-                  ${avatarHTML(
-                    chat.name,
-                    chat.avatar
-                  )}
-
-                  <div class="flex-column">
-
-                    <strong>
-                      ${escapeHTML(chat.name || "साथी")}
-                    </strong>
-
-                    <span class="text-muted text-small">
-                      ${escapeHTML(last?.text || "")}
-                    </span>
-
-                  </div>
-
-                </div>
-
-              </button>
-            `;
-          }).join("")}
+          ${chats.map(chat =>
+            messageItem.render(chat, {
+              isEnglish: isEnglish()
+            })
+          ).join("")}
 
         </div>
 
@@ -1919,6 +1899,10 @@
     setPageContent(selected.render());
 
     if (currentPage === "friends") {
+      global.KSKUserCard?.refresh?.();
+    }
+
+    if (currentPage === "messages" && !activeChatId) {
       global.KSKUserCard?.refresh?.();
     }
 
