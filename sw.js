@@ -27,8 +27,8 @@ const APP_FILES = [
     /* Main files */
   "./index.html",
   "./app.css",
-  "./app.js",
   "./core/comments.ccs",
+  "./app.js",
   "./core/app-events.js",
   "./core/search.js",
   "./core/ui-actions.js",
