@@ -260,6 +260,7 @@
 
   global.KSKProfilePage = Object.freeze({
     render,
+    getProfile,
     getProfilePosts
   });
 
