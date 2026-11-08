@@ -116,18 +116,6 @@
 
       if (!target?.closest) return;
 
-      const storyButton = target.closest("[data-story-view]");
-
-      if (storyButton) {
-        callHandler(
-          options,
-          "onStoryView",
-          storyButton.dataset.storyView,
-          event
-        );
-        return;
-      }
-
       const postAction = target.closest("[data-post-action]");
 
       if (postAction) {
