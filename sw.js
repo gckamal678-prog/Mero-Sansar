@@ -28,6 +28,7 @@ const APP_FILES = [
   "./index.html",
   "./app.css",
   "./app.js",
+  "./core/comments.ccs",
   "./core/app-events.js",
   "./core/search.js",
   "./core/ui-actions.js",
@@ -53,7 +54,6 @@ const APP_FILES = [
   /* Post features */
   "./core/post-actions.js",
   "./core/comments.js",
-  "./core/comments-bridge.js",
   "./core/reactions.js",
   "./core/share.js",
 
