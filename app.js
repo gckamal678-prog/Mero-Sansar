@@ -43,6 +43,7 @@
   const PROFILE_MEDIA = () => global.KSKProfileMediaUI;
   const COMMENTS = () => global.KSKComments;
   const KSKPostActions = () => global.KSKPostActions;
+  const DATA_REFRESH = () => global.KSKDataRefresh;
 
   let initialized = false;
 
@@ -477,48 +478,6 @@
   }
 
   /* =======================================================
-     DATA CHANGE HANDLING
-  ======================================================= */
-
-  function shouldRefreshForCollection(collection) {
-    const name = String(collection || "").toLowerCase();
-
-    return [
-      "posts",
-      "stories",
-      "friends",
-      "messages",
-      "chats",
-      "profile",
-      "saved",
-      "notifications"
-    ].some(part => name.includes(part));
-  }
-
-  function handleDataChange(event) {
-    const collection = event.detail?.collection || "";
-
-    if (!shouldRefreshForCollection(collection)) {
-      return;
-    }
-
-    refreshCurrentPage();
-
-    const changed = String(collection).toLowerCase();
-
-    if (changed.includes("posts")) {
-      renderFeed();
-    }
-
-    if (changed.includes("stories")) {
-      renderStories();
-    }
-
-    MEDIA_UI()?.refresh?.();
-    PROFILE_MEDIA()?.refresh?.();
-  }
-
-  /* =======================================================
      INITIALIZATION
   ======================================================= */
 
@@ -551,6 +510,14 @@
       refreshCurrentPage
     });
 
+    DATA_REFRESH()?.initialize?.({
+      refreshCurrentPage,
+      renderFeed,
+      renderStories,
+      refreshMedia: () => MEDIA_UI()?.refresh?.(),
+      refreshProfileMedia: () => PROFILE_MEDIA()?.refresh?.()
+    });
+
     global.KSKAppEvents.initialize({
       navigation: NAV(),
       elements: els,
@@ -568,7 +535,8 @@
           Boolean(changedSettings?.compactMode)
         );
       },
-      onDataChange: handleDataChange,
+      onDataChange: event =>
+        DATA_REFRESH()?.handleDataChange?.(event),
       onQuickPhoto: event => {
         event.preventDefault();
         openPostComposer();
