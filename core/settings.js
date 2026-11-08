@@ -1,4 +1,3 @@
-
 "use strict";
 
 /* =========================================================
@@ -526,16 +525,6 @@
   }
 
   /* =======================================================
-     INITIALIZE
-  ======================================================= */
-
-  function initialize() {
-    settings = normalizeSettings(settings);
-
-    return getSettings();
-  }
-
-  /* =======================================================
      PUBLIC API
   ======================================================= */
 
@@ -548,7 +537,6 @@
     exportSettings,
     importSettings,
     subscribeSettings,
-    initialize,
     DEFAULT_SETTINGS: clone(DEFAULT_SETTINGS)
   });
 
