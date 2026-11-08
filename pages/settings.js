@@ -17,16 +17,6 @@
 
   const SETTINGS_UI = () => global.KSKSettingsUI || null;
 
-  function initialize() {
-    const settingsUI = SETTINGS_UI();
-
-    if (typeof settingsUI?.initialize !== "function") {
-      return false;
-    }
-
-    return settingsUI.initialize();
-  }
-
   function open() {
     const settingsUI = SETTINGS_UI();
 
@@ -68,7 +58,6 @@
   }
 
   const api = Object.freeze({
-    initialize,
     open,
     close,
     render,
