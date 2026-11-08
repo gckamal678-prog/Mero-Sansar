@@ -1,9 +1,10 @@
+
 "use strict";
 
 /*
  * KSK UI ACTION ROUTER
  * Owns delegated clicks for app-wide UI actions.
- * Feature capture-phase handlers remain in their modules.
+ * Profile and Settings capture-phase handlers remain in their modules.
  */
 
 (function (global) {
@@ -50,15 +51,6 @@
     if (target.closest("[data-add-friend-open]")) {
       callHandler("onAddFriend", event);
       return;
-    }
-
-    if (target.closest("[data-edit-profile]")) {
-      callHandler("onEditProfile", event);
-      return;
-    }
-
-    if (target.closest("[data-open-settings]")) {
-      callHandler("onOpenSettings", event);
     }
   }
 
