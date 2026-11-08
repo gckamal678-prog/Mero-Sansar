@@ -41,52 +41,6 @@
     about: ["एपको बारेमा", "About"]
   };
 
-  const defaults = {
-    theme: "light",
-    language: "ne",
-    compactMode: false,
-    notifications: true,
-
-    notificationPreferences: {
-      messages: true,
-      friends: true,
-      comments: true,
-      likes: true,
-      stories: true,
-      sound: true,
-      vibration: true
-    },
-
-    privacy: {
-      profileVisibility: "everyone",
-      lastSeen: "everyone",
-      onlineStatus: "everyone",
-      readReceipts: true,
-      showProfilePhoto: "everyone",
-      showAbout: "everyone",
-      allowFriendRequests: true
-    },
-
-    profilePreferences: {
-      showBio: true,
-      showLocation: true,
-      showPostCount: true
-    },
-
-    chat: {
-      fontSize: "medium",
-      enterToSend: false,
-      wallpaper: "default",
-      linkPreviews: true
-    },
-
-    data: {
-      autoDownloadImages: false,
-      autoDownloadVideos: false,
-      saveMediaToDevice: false
-    }
-  };
-
   /* =======================================================
      COMMON HELPERS
   ======================================================= */
@@ -110,37 +64,11 @@
   }
 
   function getSettings() {
-    const saved = SETTINGS()?.getSettings?.() || {};
+    const settings = SETTINGS()?.getSettings?.();
 
-    return {
-      ...defaults,
-      ...saved,
-
-      privacy: {
-        ...defaults.privacy,
-        ...(saved.privacy || {})
-      },
-
-      notificationPreferences: {
-        ...defaults.notificationPreferences,
-        ...(saved.notificationPreferences || {})
-      },
-
-      profilePreferences: {
-        ...defaults.profilePreferences,
-        ...(saved.profilePreferences || {})
-      },
-
-      chat: {
-        ...defaults.chat,
-        ...(saved.chat || {})
-      },
-
-      data: {
-        ...defaults.data,
-        ...(saved.data || {})
-      }
-    };
+    return settings && typeof settings === "object"
+      ? settings
+      : {};
   }
 
   function saveSetting(path, value) {
@@ -418,7 +346,7 @@
           t("साथी अनुरोध स्वीकार गर्ने", "Allow friend requests"),
           t("अन्य सदस्यले साथी अनुरोध पठाउन सक्नेछन्", "Allow other members to send friend requests"),
           "privacy.allowFriendRequests",
-          s.privacy.allowFriendRequests
+          s.privacy?.allowFriendRequests
         )
       )}
 
@@ -436,7 +364,7 @@
   ======================================================= */
 
   function renderPrivacy() {
-    const p = getSettings().privacy;
+    const p = getSettings().privacy || {};
 
     const visibility = [
       { value: "everyone", label: t("सबैजना", "Everyone") },
@@ -525,7 +453,7 @@
 
   function renderNotifications() {
     const s = getSettings();
-    const n = s.notificationPreferences;
+    const n = s.notificationPreferences || {};
 
     return `
       ${backButton()}
@@ -652,7 +580,7 @@
   ======================================================= */
 
   function renderProfile() {
-    const p = getSettings().profilePreferences;
+    const p = getSettings().profilePreferences || {};
 
     return `
       ${backButton()}
@@ -701,7 +629,7 @@
   ======================================================= */
 
   function renderChats() {
-    const c = getSettings().chat;
+    const c = getSettings().chat || {};
 
     return `
       ${backButton()}
@@ -760,7 +688,7 @@
   ======================================================= */
 
   function renderData() {
-    const d = getSettings().data;
+    const d = getSettings().data || {};
 
     return `
       ${backButton()}
@@ -823,7 +751,7 @@
 
       <div class="ksk-settings-info">
         ${t(
-          "Auto Download र Device मा Save हाल प्राथमिकता मात्र हुन्। वास्तविक Media Download व्यवहार Media प्रणालीसँग जोड्नुपर्नेछ।",
+          "Auto Download र Device मा Save हाल प्राथमिकता मात्र हुन्। वास्तविक Media Download व्यवहार प्रदान गर्नुपर्नेछ।",
           "Auto-download and save-to-device are preferences only until connected to the media system."
         )}
       </div>
@@ -907,7 +835,7 @@
 
         <p>
           ${t(
-            "साथी जोडौँ, कुरा गरौँ।",
+            "साथी जोडौँ, कुरा गरौँ。",
             "Connect with friends and talk."
           )}
         </p>
