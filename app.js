@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -7,7 +6,7 @@
  * Single Data Layer Architecture
  *
  * DATA          : KSKData
- * SETTINGS      : KSKSettings / KSKSettingsPage
+ * SETTINGS      : KSKSettingsPage
  * THEME         : KSKTheme
  * LANGUAGE      : KSKLanguage
  * NAVIGATION    : KSKNavigation
@@ -32,7 +31,6 @@
   ======================================================= */
 
   const DATA = () => global.KSKData;
-  const SETTINGS = () => global.KSKSettings;
   const SETTINGS_PAGE = () => global.KSKSettingsPage;
   const PROFILE_PAGE = () => global.KSKProfilePage;
   const THEME = () => global.KSKTheme;
@@ -325,10 +323,7 @@
 
     TOAST()?.initialize?.();
 
-    DATA()?.initialize?.();
-    SETTINGS()?.initialize?.();
     THEME()?.initializeTheme?.();
-    LANG()?.initialize?.();
     SETTINGS_PAGE()?.initialize?.();
 
     KSKPostActions()?.initialize?.({
