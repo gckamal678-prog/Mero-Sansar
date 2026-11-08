@@ -42,6 +42,8 @@
   const COMMENTS = () => global.KSKComments;
   const KSKPostActions = () => global.KSKPostActions;
   const DATA_REFRESH = () => global.KSKDataRefresh;
+  const SEARCH = () => global.KSKSearch;
+  const UI_ACTIONS = () => global.KSKUIActions;
 
   let initialized = false;
 
@@ -145,7 +147,6 @@
 
   /* =======================================================
      HOME PAGE DELEGATES
-     Home UI belongs to pages/home.js.
   ======================================================= */
 
   function renderStories() {
@@ -158,7 +159,6 @@
 
   /* =======================================================
      POST COMPOSER AND STORY CREATOR
-     KSKMediaUI owns both creation workflows.
   ======================================================= */
 
   function openPostComposer() {
@@ -199,7 +199,6 @@
 
   /* =======================================================
      SHARE POST
-     KSKShare owns all sharing functionality.
   ======================================================= */
 
   function sharePost(id) {
@@ -219,11 +218,7 @@
   }
 
   /* =======================================================
-     POST ACTION ROUTER
-     Like / Reaction : core/reactions.js
-     Save / Unsave   : core/post-actions.js
-     Comment         : KSKComments
-     Share           : KSKShare
+     POST ACTION HANDLERS
   ======================================================= */
 
   function handlePostAction(action, id) {
@@ -309,37 +304,11 @@
   }
 
   /* =======================================================
-     SEARCH
-     Search filtering belongs to KSKHomePage.
+     SEARCH DELEGATE
   ======================================================= */
 
-  function toggleSearch() {
-    if (!els.searchPanel) return;
-
-    els.searchPanel.classList.toggle("hidden");
-
-    if (!els.searchPanel.classList.contains("hidden")) {
-      els.searchInput?.focus();
-      return;
-    }
-
-    global.KSKHomePage?.clearSearch?.();
-
-    if (els.searchInput) {
-      els.searchInput.value = "";
-    }
-
-    renderFeed();
-  }
-
   function search(value) {
-    global.KSKHomePage?.setSearchQuery?.(value);
-
-    if (NAV()?.getCurrentPage?.() !== "home") {
-      NAV()?.navigate?.("home");
-    }
-
-    renderFeed();
+    return SEARCH()?.search?.(value) || false;
   }
 
   /* =======================================================
@@ -359,6 +328,12 @@
     initialized = true;
 
     cacheElements();
+
+    SEARCH()?.initialize?.({
+      elements: els,
+      navigation: NAV(),
+      homePage: global.KSKHomePage
+    });
 
     TOAST()?.initialize?.();
 
@@ -421,16 +396,14 @@
         );
       },
 
-      onSearchToggle: toggleSearch,
-
-      onSearch: value => search(value),
-
       onNotifications: () => {
         NAV()?.navigate?.("notifications");
       },
 
-      onCloseSettings: closeSettings,
+      onCloseSettings: closeSettings
+    });
 
+    UI_ACTIONS()?.initialize?.({
       onPostAction: handlePostAction,
 
       onPostActionsClick: target =>
