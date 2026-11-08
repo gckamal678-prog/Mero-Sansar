@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -14,7 +13,7 @@
  * - Story photo viewer
  *
  * DEPENDENCIES:
- * KSKMedia, KSKData, KSKModal, KSKApp
+ * KSKMedia, KSKData, KSKModal
  */
 
 (function (global) {
@@ -25,6 +24,8 @@
 
   const $ = (selector, root = document) =>
     root.querySelector(selector);
+
+  let initialized = false;
 
   let postObserver = null;
   let storyObserver = null;
@@ -649,17 +650,18 @@
     }
 
 
-    /* REFRESH */
+    /*
+     * REFRESH RESPONSIBILITY
+     *
+     * KSKData emits ksk:data-change.
+     * KSKDataRefresh updates the affected page.
+     * MutationObserver detects the changed DOM
+     * and queues the required media rendering.
+     *
+     * Do not render Home or queue media manually here.
+     */
 
     closeModal();
-
-    global.KSKApp?.renderStories?.();
-
-    global.KSKApp?.renderFeed?.();
-
-    queueStoryRender();
-
-    queuePostRender();
 
 
     toast(
@@ -1148,37 +1150,20 @@
 
 
   /* =====================================================
-     DATA CHANGE
-  ===================================================== */
-
-  function handleDataChange(event) {
-
-    const collection =
-      event.detail?.collection || "";
-
-
-    if (
-      collection.includes("posts")
-    ) {
-      queuePostRender();
-    }
-
-
-    if (
-      collection.includes("stories")
-    ) {
-      queueStoryRender();
-    }
-  }
-
-
-  /* =====================================================
      INITIALIZE
   ===================================================== */
 
   function initialize() {
 
-    if (postObserver || storyObserver) return;
+    if (initialized) return true;
+
+    /*
+     * Set the guard before registering listeners.
+     * This prevents duplicate listeners and observers
+     * if initialize() is called more than once.
+     */
+
+    initialized = true;
 
 
     injectStyles();
@@ -1248,14 +1233,6 @@
     }
 
 
-    /* DATA EVENTS */
-
-    global.addEventListener(
-      "ksk:data-change",
-      handleDataChange
-    );
-
-
     /* INITIAL RENDER */
 
     queuePostRender();
@@ -1266,6 +1243,8 @@
     console.info(
       "KSK Media UI initialized."
     );
+
+    return true;
   }
 
 
