@@ -1,30 +1,33 @@
+
 "use strict";
 
 /*
  * KSK — SINGLE DATA LAYER
- * Central data access for the entire application.
+ *
+ * RESPONSIBILITY:
+ * - Central data storage and retrieval.
+ * - Posts, comments, stories, friends, profile,
+ *   messages, notifications and saved posts.
+ * - Notify the application when stored data changes.
  *
  * All features must use window.KSKData.
  * No feature should access localStorage directly.
  */
 
 (function (global) {
+  "use strict";
+
+  if (global.KSKData) return;
+
   const STORAGE = Object.freeze({
     posts: "ksk_posts_v2",
-    oldPosts: "ksk_posts_v1",
     stories: "ksk_stories_v1",
     friends: "ksk_friends_v1",
     messages: "ksk_messages_v1",
     profile: "ksk_profile_v1",
     saved: "ksk_saved_v1",
     notifications: "ksk_notifications_v1",
-    chats: "ksk_feature_chats",
-
-    featureFriends: "hs_feature_friends",
-    featureChats: "hs_feature_chats",
-    featureProfile: "hs_feature_profile",
-    featureNotifications: "hs_feature_notifications",
-    featureSaved: "hs_feature_savedPosts"
+    chats: "ksk_feature_chats"
   });
 
   const DEFAULT_PROFILE = Object.freeze({
@@ -38,9 +41,9 @@
   const listeners = new Set();
   let initialized = false;
 
-  /* =========================================
+  /* =======================================================
      HELPERS
-  ========================================= */
+  ======================================================= */
 
   function clone(value) {
     if (value === undefined || value === null) {
@@ -60,7 +63,9 @@
 
       const value = JSON.parse(raw);
 
-      return value === null ? clone(fallback) : value;
+      return value === null
+        ? clone(fallback)
+        : value;
     } catch (error) {
       console.error("KSK data read failed:", error);
       return clone(fallback);
@@ -116,12 +121,17 @@
       try {
         listener(detail);
       } catch (error) {
-        console.error("KSK data listener failed:", error);
+        console.error(
+          "KSK data listener failed:",
+          error
+        );
       }
     });
 
     global.dispatchEvent(
-      new CustomEvent("ksk:data-change", { detail })
+      new CustomEvent("ksk:data-change", {
+        detail
+      })
     );
 
     if (global.KSKState?.setState) {
@@ -152,7 +162,12 @@
     return () => listeners.delete(listener);
   }
 
-  function saveCollection(key, collection, action, item) {
+  function saveCollection(
+    key,
+    collection,
+    action,
+    item
+  ) {
     const saved = write(key, collection);
 
     if (saved) {
@@ -169,87 +184,13 @@
     );
   }
 
-  /* =========================================
-     LEGACY DATA MIGRATION
-  ========================================= */
-
-  function migrateLegacyData() {
-    const migrated = [];
-
-    const migrations = [
-      {
-        target: STORAGE.posts,
-        sources: [STORAGE.oldPosts]
-      },
-      {
-        target: STORAGE.friends,
-        sources: [STORAGE.featureFriends]
-      },
-      {
-        target: STORAGE.chats,
-        sources: [STORAGE.featureChats]
-      },
-      {
-        target: STORAGE.profile,
-        sources: [STORAGE.featureProfile]
-      },
-      {
-        target: STORAGE.notifications,
-        sources: [STORAGE.featureNotifications]
-      },
-      {
-        target: STORAGE.saved,
-        sources: [STORAGE.featureSaved]
-      }
-    ];
-
-    migrations.forEach(migration => {
-      try {
-        const existing = global.localStorage.getItem(
-          migration.target
-        );
-
-        if (existing !== null) return;
-
-        for (const source of migration.sources) {
-          const oldValue = global.localStorage.getItem(source);
-
-          if (oldValue === null) continue;
-
-          const parsed = JSON.parse(oldValue);
-
-          if (parsed !== null && parsed !== undefined) {
-            if (write(migration.target, parsed)) {
-              migrated.push({
-                from: source,
-                to: migration.target
-              });
-            }
-          }
-
-          break;
-        }
-      } catch (error) {
-        console.error("KSK migration failed:", error);
-      }
-    });
-
-    return migrated;
-  }
-
-  /* =========================================
+  /* =======================================================
      POSTS
-  ========================================= */
+  ======================================================= */
 
   function getPosts() {
-    const posts = read(STORAGE.posts, null);
-
-    if (Array.isArray(posts)) {
-      return sortNewest(posts);
-    }
-
     return sortNewest(
-      isArray(read(STORAGE.oldPosts, []))
+      isArray(read(STORAGE.posts, []))
     );
   }
 
@@ -302,7 +243,11 @@
   function updatePost(postId, changes = {}) {
     const id = String(postId || "");
 
-    if (!id || !changes || typeof changes !== "object") {
+    if (
+      !id ||
+      !changes ||
+      typeof changes !== "object"
+    ) {
       return false;
     }
 
@@ -321,16 +266,30 @@
     };
 
     if (
-      Object.prototype.hasOwnProperty.call(changes, "text")
+      Object.prototype.hasOwnProperty.call(
+        changes,
+        "text"
+      )
     ) {
-      updated.text = cleanText(changes.text, 10000);
+      updated.text = cleanText(
+        changes.text,
+        10000
+      );
     }
 
-    // Keep comments intact unless explicitly supplied.
-    if (!Object.prototype.hasOwnProperty.call(changes, "comments")) {
-      updated.comments = isArray(posts[index].comments);
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        changes,
+        "comments"
+      )
+    ) {
+      updated.comments = isArray(
+        posts[index].comments
+      );
     } else {
-      updated.comments = isArray(changes.comments);
+      updated.comments = isArray(
+        changes.comments
+      );
     }
 
     posts[index] = updated;
@@ -351,7 +310,9 @@
       post => String(post.id) !== id
     );
 
-    if (next.length === posts.length) return false;
+    if (next.length === posts.length) {
+      return false;
+    }
 
     return saveCollection(
       STORAGE.posts,
@@ -361,10 +322,10 @@
     );
   }
 
-  /* =========================================
-     COMMENTS — FACEBOOK STYLE
+  /* =======================================================
+     COMMENTS
      Flat comment structure with parentId.
-  ========================================= */
+  ======================================================= */
 
   function getComments(postId) {
     const post = getPost(postId);
@@ -387,22 +348,19 @@
     return comment ? clone(comment) : null;
   }
 
-  /*
-   * Add a comment or reply.
-   *
-   * options:
-   * {
-   *   parentId: "parent comment ID",
-   *   replyTo: "person name",
-   *   mentions: [{ id, name }]
-   * }
-   */
-
-  function addComment(postId, comment = {}, options = {}) {
+  function addComment(
+    postId,
+    comment = {},
+    options = {}
+  ) {
     const id = String(postId || "");
     const post = getPost(id);
 
-    if (!post || !comment || typeof comment !== "object") {
+    if (
+      !post ||
+      !comment ||
+      typeof comment !== "object"
+    ) {
       return false;
     }
 
@@ -418,7 +376,6 @@
       ""
     );
 
-    // Replies must point to an existing comment.
     if (parentId) {
       const parentExists = comments.some(
         item => String(item.id) === parentId
@@ -442,20 +399,30 @@
         options.replyTo || comment.replyTo,
         60
       ),
-      author: cleanText(comment.author || "सदस्य", 60),
-      authorId: cleanText(comment.authorId, 120),
+      author: cleanText(
+        comment.author || "सदस्य",
+        60
+      ),
+      authorId: cleanText(
+        comment.authorId,
+        120
+      ),
       authorInitial: cleanText(
         comment.authorInitial ||
         comment.author?.charAt?.(0) ||
         "स",
         4
       ),
-      avatar: cleanText(comment.avatar, 200000),
+      avatar: cleanText(
+        comment.avatar,
+        200000
+      ),
       text,
       mentions,
       likes: Number(comment.likes || 0),
       liked: Boolean(comment.liked),
-      createdAt: comment.createdAt || new Date().toISOString(),
+      createdAt: comment.createdAt ||
+        new Date().toISOString(),
       editedAt: null
     };
 
@@ -478,7 +445,10 @@
     return clone(item);
   }
 
-  function replacePostInList(postId, updatedPost) {
+  function replacePostInList(
+    postId,
+    updatedPost
+  ) {
     const posts = getPosts();
 
     const index = posts.findIndex(
@@ -492,11 +462,19 @@
     return posts;
   }
 
-  function updateComment(postId, commentId, changes = {}) {
+  function updateComment(
+    postId,
+    commentId,
+    changes = {}
+  ) {
     const id = String(postId || "");
     const post = getPost(id);
 
-    if (!post || !changes || typeof changes !== "object") {
+    if (
+      !post ||
+      !changes ||
+      typeof changes !== "object"
+    ) {
       return false;
     }
 
@@ -517,9 +495,15 @@
     };
 
     if (
-      Object.prototype.hasOwnProperty.call(changes, "text")
+      Object.prototype.hasOwnProperty.call(
+        changes,
+        "text"
+      )
     ) {
-      updatedComment.text = cleanText(changes.text, 3000);
+      updatedComment.text = cleanText(
+        changes.text,
+        3000
+      );
 
       if (!updatedComment.text) return false;
     }
@@ -538,10 +522,6 @@
       updatedComment
     );
   }
-
-  /*
-   * Deleting a parent comment also deletes its replies.
-   */
 
   function deleteComment(postId, commentId) {
     const id = String(postId || "");
@@ -597,7 +577,10 @@
     );
   }
 
-  function toggleCommentLike(postId, commentId) {
+  function toggleCommentLike(
+    postId,
+    commentId
+  ) {
     const post = getPost(postId);
 
     if (!post) return false;
@@ -617,22 +600,26 @@
       ...(comment.reactionCounts || {})
     };
 
-    // Unlike गर्दा पहिलेको reaction count पनि घटाउने।
     if (!liked && comment.myReaction) {
       reactionCounts[comment.myReaction] = Math.max(
         0,
-        Number(reactionCounts[comment.myReaction] || 0) - 1
+        Number(
+          reactionCounts[comment.myReaction] || 0
+        ) - 1
       );
     }
 
     comments[index] = {
       ...comment,
       liked,
-      myReaction: liked ? (comment.myReaction || "") : "",
+      myReaction: liked
+        ? (comment.myReaction || "")
+        : "",
       reactionCounts,
       likes: Math.max(
         0,
-        Number(comment.likes || 0) + (liked ? 1 : -1)
+        Number(comment.likes || 0) +
+          (liked ? 1 : -1)
       )
     };
 
@@ -649,7 +636,11 @@
     );
   }
 
-  function setCommentReaction(postId, commentId, emoji) {
+  function setCommentReaction(
+    postId,
+    commentId,
+    emoji
+  ) {
     const allowedReactions = [
       "🌹",
       "😘",
@@ -689,7 +680,6 @@
       Number(comment.likes || 0)
     );
 
-    // उही Reaction फेरि छानेमा हटाउने।
     if (previousReaction === emoji) {
       reactionCounts[emoji] = Math.max(
         0,
@@ -706,15 +696,15 @@
         likes
       };
     } else {
-      // पहिलेको Reaction हटाउने।
       if (previousReaction) {
         reactionCounts[previousReaction] = Math.max(
           0,
-          Number(reactionCounts[previousReaction] || 0) - 1
+          Number(
+            reactionCounts[previousReaction] || 0
+          ) - 1
         );
       }
 
-      // पहिलोपटक Like गर्दा मात्र कुल Like बढाउने।
       if (!comment.liked) {
         likes += 1;
       }
@@ -749,9 +739,9 @@
     return getComments(postId).length;
   }
 
-  /* =========================================
+  /* =======================================================
      STORIES
-  ========================================= */
+  ======================================================= */
 
   function getStories(includeExpired = false) {
     const now = Date.now();
@@ -779,9 +769,12 @@
     const item = {
       ...clone(story),
       id: story.id || makeId("story"),
-      createdAt: story.createdAt || new Date(now).toISOString(),
+      createdAt: story.createdAt ||
+        new Date(now).toISOString(),
       expiresAt: story.expiresAt ||
-        new Date(now + 24 * 60 * 60 * 1000).toISOString()
+        new Date(
+          now + 24 * 60 * 60 * 1000
+        ).toISOString()
     };
 
     if (
@@ -815,7 +808,9 @@
       story => String(story.id) !== id
     );
 
-    if (next.length === stories.length) return false;
+    if (next.length === stories.length) {
+      return false;
+    }
 
     return saveCollection(
       STORAGE.stories,
@@ -825,17 +820,21 @@
     );
   }
 
-  /* =========================================
+  /* =======================================================
      FRIENDS
-  ========================================= */
+  ======================================================= */
 
   function getFriends() {
-    return isArray(read(STORAGE.friends, []));
+    return isArray(
+      read(STORAGE.friends, [])
+    );
   }
 
   function addFriend(friend) {
     const item = typeof friend === "string"
-      ? { name: cleanText(friend, 60) }
+      ? {
+          name: cleanText(friend, 60)
+        }
       : clone(friend || {});
 
     const name = cleanText(item.name, 60);
@@ -855,8 +854,11 @@
       ...item,
       id: item.id || makeId("friend"),
       name,
-      avatar: item.avatar || item.initial || name.charAt(0),
-      createdAt: item.createdAt || new Date().toISOString()
+      avatar: item.avatar ||
+        item.initial ||
+        name.charAt(0),
+      createdAt: item.createdAt ||
+        new Date().toISOString()
     };
 
     friends.unshift(newFriend);
@@ -873,7 +875,10 @@
     return clone(newFriend);
   }
 
-  function updateFriend(friendId, changes = {}) {
+  function updateFriend(
+    friendId,
+    changes = {}
+  ) {
     const id = String(friendId || "");
     const friends = getFriends();
 
@@ -905,7 +910,9 @@
       friend => String(friend.id) !== id
     );
 
-    if (next.length === friends.length) return false;
+    if (next.length === friends.length) {
+      return false;
+    }
 
     return saveCollection(
       STORAGE.friends,
@@ -915,9 +922,9 @@
     );
   }
 
-  /* =========================================
+  /* =======================================================
      PROFILE
-  ========================================= */
+  ======================================================= */
 
   function getProfile() {
     const profile = read(
@@ -946,24 +953,38 @@
     };
 
     if ("name" in profile) {
-      next.name = cleanText(profile.name, 60);
+      next.name = cleanText(
+        profile.name,
+        60
+      );
     }
 
     if ("bio" in profile) {
-      next.bio = cleanText(profile.bio, 240);
+      next.bio = cleanText(
+        profile.bio,
+        240
+      );
     }
 
     if ("location" in profile) {
-      next.location = cleanText(profile.location, 100);
+      next.location = cleanText(
+        profile.location,
+        100
+      );
     }
 
-    // Avatar and cover are image data/URLs.
     if ("avatar" in profile) {
-      next.avatar = cleanText(profile.avatar, 200000);
+      next.avatar = cleanText(
+        profile.avatar,
+        200000
+      );
     }
 
     if ("cover" in profile) {
-      next.cover = cleanText(profile.cover, 200000);
+      next.cover = cleanText(
+        profile.cover,
+        200000
+      );
     }
 
     if (!write(STORAGE.profile, next)) {
@@ -975,16 +996,17 @@
     return clone(next);
   }
 
-  /* =========================================
+  /* =======================================================
      MESSAGES AND CHATS
-  ========================================= */
+  ======================================================= */
 
   function getMessages() {
-    return isArray(read(STORAGE.messages, []))
-      .sort((a, b) =>
-        new Date(a.createdAt || a.time || 0) -
-        new Date(b.createdAt || b.time || 0)
-      );
+    return isArray(
+      read(STORAGE.messages, [])
+    ).sort((a, b) =>
+      new Date(a.createdAt || a.time || 0) -
+      new Date(b.createdAt || b.time || 0)
+    );
   }
 
   function getChats() {
@@ -1003,7 +1025,9 @@
     });
 
     messages.forEach(message => {
-      const chatId = String(message.chatId || "general");
+      const chatId = String(
+        message.chatId || "general"
+      );
 
       if (!chatsById.has(chatId)) {
         chatsById.set(chatId, {
@@ -1018,7 +1042,8 @@
       const chat = chatsById.get(chatId);
 
       const exists = chat.messages.some(
-        item => String(item.id) === String(message.id)
+        item => String(item.id) ===
+          String(message.id)
       );
 
       if (!exists) {
@@ -1026,7 +1051,9 @@
           ...message,
           text: message.text || "",
           fromMe: Boolean(message.fromMe),
-          time: message.time || message.createdAt || Date.now()
+          time: message.time ||
+            message.createdAt ||
+            Date.now()
         });
       }
     });
@@ -1056,13 +1083,21 @@
     const chat = {
       id: makeId("chat"),
       userId: friend.id || "",
-      name: cleanText(friend.name || "साथी", 60),
-      avatar: friend.avatar || friend.initial || "",
+      name: cleanText(
+        friend.name || "साथी",
+        60
+      ),
+      avatar: friend.avatar ||
+        friend.initial ||
+        "",
       messages: [],
       createdAt: new Date().toISOString()
     };
 
-    const stored = isArray(read(STORAGE.chats, []));
+    const stored = isArray(
+      read(STORAGE.chats, [])
+    );
+
     stored.unshift(chat);
 
     if (!saveCollection(
@@ -1077,7 +1112,11 @@
     return chat.id;
   }
 
-  function sendMessage(chatId, message, options = {}) {
+  function sendMessage(
+    chatId,
+    message,
+    options = {}
+  ) {
     const id = String(chatId || "");
 
     const text = typeof message === "object"
@@ -1111,29 +1150,38 @@
     return clone(item);
   }
 
-  /* =========================================
+  /* =======================================================
      NOTIFICATIONS
-  ========================================= */
+  ======================================================= */
 
   function getNotifications() {
-    return isArray(read(STORAGE.notifications, []))
-      .sort((a, b) =>
-        new Date(b.createdAt || b.time || 0) -
-        new Date(a.createdAt || a.time || 0)
-      );
+    return isArray(
+      read(STORAGE.notifications, [])
+    ).sort((a, b) =>
+      new Date(b.createdAt || b.time || 0) -
+      new Date(a.createdAt || a.time || 0)
+    );
   }
 
   function addNotification(notification = {}) {
-    if (!notification || typeof notification !== "object") {
+    if (
+      !notification ||
+      typeof notification !== "object"
+    ) {
       return false;
     }
 
     const item = {
       ...clone(notification),
-      id: notification.id || makeId("notification"),
-      text: cleanText(notification.text, 500),
+      id: notification.id ||
+        makeId("notification"),
+      text: cleanText(
+        notification.text,
+        500
+      ),
       read: Boolean(notification.read),
-      createdAt: notification.createdAt || new Date().toISOString(),
+      createdAt: notification.createdAt ||
+        new Date().toISOString(),
       time: notification.time || Date.now()
     };
 
@@ -1155,10 +1203,12 @@
   }
 
   function markNotificationsRead() {
-    const notifications = getNotifications().map(item => ({
-      ...item,
-      read: true
-    }));
+    const notifications = getNotifications().map(
+      item => ({
+        ...item,
+        read: true
+      })
+    );
 
     return saveCollection(
       STORAGE.notifications,
@@ -1173,12 +1223,14 @@
     ).length;
   }
 
-  /* =========================================
+  /* =======================================================
      SAVED POSTS
-  ========================================= */
+  ======================================================= */
 
   function getSavedPosts() {
-    return isArray(read(STORAGE.saved, []));
+    return isArray(
+      read(STORAGE.saved, [])
+    );
   }
 
   function savePost(postId) {
@@ -1188,7 +1240,9 @@
 
     const saved = getSavedPosts();
 
-    if (saved.some(item => String(item) === id)) {
+    if (
+      saved.some(item => String(item) === id)
+    ) {
       return true;
     }
 
@@ -1210,7 +1264,9 @@
       item => String(item) !== id
     );
 
-    if (next.length === saved.length) return false;
+    if (next.length === saved.length) {
+      return false;
+    }
 
     return saveCollection(
       STORAGE.saved,
@@ -1234,21 +1290,18 @@
       : (savePost(id), true);
   }
 
-  /* =========================================
+  /* =======================================================
      INITIALIZATION
-  ========================================= */
+  ======================================================= */
 
   function initialize() {
     if (initialized) return true;
 
     initialized = true;
 
-    const migrations = migrateLegacyData();
-
     global.dispatchEvent(
       new CustomEvent("ksk:data-ready", {
         detail: {
-          migrations,
           timestamp: Date.now()
         }
       })
@@ -1257,9 +1310,9 @@
     return true;
   }
 
-  /* =========================================
+  /* =======================================================
      PUBLIC API
-  ========================================= */
+  ======================================================= */
 
   const api = Object.freeze({
     initialize,
@@ -1316,7 +1369,6 @@
     toggleSavedPost,
 
     // Utilities
-    migrateLegacyData,
     makeId
   });
 
