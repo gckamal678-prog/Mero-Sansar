@@ -1,3 +1,4 @@
+
 "use strict";
 
 /* =========================================================
@@ -21,7 +22,6 @@
     dark: "#0b1220"
   });
 
-  let initialized = false;
   let savingTheme = false;
 
   function normalizeTheme(theme) {
@@ -183,26 +183,14 @@
   }
 
   /* =======================================================
-     INITIALIZE
+     INITIALIZE THEME
+     Called by app.js during application startup.
   ======================================================= */
 
   function initializeTheme() {
     const selected = getTheme();
 
     return applyTheme(selected, false);
-  }
-
-  function initialize() {
-    if (initialized) return;
-
-    initialized = true;
-
-    global.addEventListener(
-      "ksk:settings-change",
-      handleSettingsChange
-    );
-
-    initializeTheme();
   }
 
   /* =======================================================
@@ -215,14 +203,13 @@
     setTheme,
     toggleTheme,
     initializeTheme,
-    initialize,
     THEME_COLORS
   });
 
-  /*
-   * Register the settings listener immediately.
-   * This also supports settings changes after initialization.
-   */
+  /* =======================================================
+     REGISTER SETTINGS LISTENER — ONCE
+     Registered when this module loads.
+  ======================================================= */
 
   global.addEventListener(
     "ksk:settings-change",
