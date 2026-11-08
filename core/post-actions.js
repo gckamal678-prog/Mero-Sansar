@@ -14,6 +14,9 @@
  *
  * LIKE / REACTION:
  * Owned by core/reactions.js
+ *
+ * REFRESH:
+ * Owned by core/data-refresh.js
  * =========================================================
  */
 
@@ -30,7 +33,8 @@
 
   let app = {
     isEnglish: () => false,
-    translate: (key, fallback = "") => fallback || key,
+    translate: (key, fallback = "") =>
+      fallback || key,
     toast: () => {},
     refreshCurrentPage: () => {}
   };
@@ -44,13 +48,16 @@
       return UTILS().escapeHTML(String(value));
     }
 
-    return String(value ?? "").replace(/[&<>"']/g, char => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;"
-    })[char]);
+    return String(value ?? "").replace(
+      /[&<>"']/g,
+      char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[char]
+    );
   }
 
   function isEnglish() {
@@ -85,7 +92,10 @@
   function isReady() {
     if (initialized) return true;
 
-    console.error("KSKPostActions is not initialized.");
+    console.error(
+      "KSKPostActions is not initialized."
+    );
+
     return false;
   }
 
@@ -138,8 +148,12 @@
   function isPostSaved(id) {
     const saved = DATA()?.getSavedPosts?.() || [];
 
-    return Array.isArray(saved) &&
-      saved.some(item => String(item) === String(id));
+    return (
+      Array.isArray(saved) &&
+      saved.some(
+        item => String(item) === String(id)
+      )
+    );
   }
 
   function toggleSave(id) {
@@ -191,7 +205,11 @@
       );
     }
 
-    app.refreshCurrentPage();
+    /*
+     * No manual refresh here.
+     * KSKData emits ksk:data-change.
+     * KSKDataRefresh handles the affected page.
+     */
 
     return true;
   }
@@ -279,6 +297,7 @@
         );
 
         textarea?.focus();
+
         return;
       }
 
@@ -297,8 +316,11 @@
         return;
       }
 
+      /*
+       * Data change event already handles refresh.
+       */
+
       closeModal();
-      app.refreshCurrentPage();
 
       toast(
         isEnglish()
@@ -398,8 +420,11 @@
       return false;
     }
 
+    /*
+     * Data change event already handles refresh.
+     */
+
     closeModal();
-    app.refreshCurrentPage();
 
     toast(
       isEnglish()
@@ -435,6 +460,7 @@
       event.stopImmediatePropagation();
 
       toggleSave(saveButton.dataset.postId);
+
       return;
     }
   }
@@ -446,18 +472,26 @@
   function handleClick(target) {
     if (!isReady()) return false;
 
-    if (!target || typeof target.closest !== "function") {
+    if (
+      !target ||
+      typeof target.closest !== "function"
+    ) {
       return false;
     }
 
-    const postMenu = target.closest("[data-post-menu]");
+    const postMenu = target.closest(
+      "[data-post-menu]"
+    );
 
     if (postMenu) {
       openPostMenu(postMenu.dataset.postMenu);
+
       return true;
     }
 
-    const editButton = target.closest("[data-edit-post]");
+    const editButton = target.closest(
+      "[data-edit-post]"
+    );
 
     if (editButton) {
       const id = editButton.dataset.editPost;
@@ -468,10 +502,13 @@
       return true;
     }
 
-    const deleteButton = target.closest("[data-delete-post]");
+    const deleteButton = target.closest(
+      "[data-delete-post]"
+    );
 
     if (deleteButton) {
       deletePost(deleteButton.dataset.deletePost);
+
       return true;
     }
 
