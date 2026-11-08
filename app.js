@@ -324,7 +324,6 @@
     TOAST()?.initialize?.();
 
     THEME()?.initializeTheme?.();
-    SETTINGS_PAGE()?.initialize?.();
 
     KSKPostActions()?.initialize?.({
       isEnglish,
