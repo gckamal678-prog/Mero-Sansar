@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -5,9 +6,7 @@
  * KSK — DATA CHANGE & REFRESH CONTROLLER
  *
  * RESPONSIBILITY:
- * - Listen to data-change notifications through KSKApp.
- * - Determine which page needs refreshing.
- * - Avoid unnecessary page and media re-rendering.
+ * - Refresh only the page affected by data changes.
  *
  * DATA STORAGE:
  * - Owned by core/data.js
@@ -15,11 +14,9 @@
  * PAGE RENDERING:
  * - Owned by core/navigation.js and pages/*.js
  *
- * FEED / STORIES:
+ * HOME FEED / STORIES:
  * - Owned by pages/home.js
- *
- * MEDIA:
- * - Owned by core/media-ui.js and core/profile-media.js
+ * - Home render functions refresh their own media.
  * =========================================================
  */
 
@@ -31,10 +28,6 @@
   let initialized = false;
   let actions = {};
 
-  /* =======================================================
-     CURRENT PAGE
-  ======================================================= */
-
   function getCurrentPage() {
     const state = global.KSKState?.getState?.();
 
@@ -42,10 +35,6 @@
       state?.currentPage || "home"
     ).toLowerCase();
   }
-
-  /* =======================================================
-     COLLECTION CHECKS
-  ======================================================= */
 
   function getCollectionName(collection) {
     return String(collection || "").toLowerCase();
@@ -96,50 +85,20 @@
     );
   }
 
-  /* =======================================================
-     REFRESH HELPERS
-  ======================================================= */
-
   function refreshHomeFeed() {
     actions.renderFeed?.();
-
-    /*
-     * Home page is not rendered through
-     * navigation.refreshCurrentPage().
-     *
-     * Therefore media refresh is handled here.
-     */
-
-    actions.refreshMedia?.();
-
     return true;
   }
 
   function refreshHomeStories() {
     actions.renderStories?.();
-
-    actions.refreshMedia?.();
-
     return true;
   }
 
   function refreshOtherPage() {
     actions.refreshCurrentPage?.();
-
-    /*
-     * Navigation already refreshes:
-     * - KSKMediaUI
-     * - KSKProfileMediaUI
-     *
-     * Do not refresh them again here.
-     */
-
     return true;
   }
-
-  /* =======================================================
-     DATA CHANGE HANDLER
-  ======================================================= */
 
   function handleDataChange(event) {
     const collection = event?.detail?.collection || "";
@@ -150,8 +109,6 @@
     }
 
     const currentPage = getCurrentPage();
-
-    /* POSTS */
 
     if (isPostsCollection(name)) {
       if (currentPage === "home") {
@@ -168,8 +125,6 @@
       return true;
     }
 
-    /* STORIES */
-
     if (isStoriesCollection(name)) {
       if (currentPage === "home") {
         return refreshHomeStories();
@@ -177,8 +132,6 @@
 
       return true;
     }
-
-    /* FRIENDS */
 
     if (isFriendsCollection(name)) {
       if (currentPage === "friends") {
@@ -188,8 +141,6 @@
       return true;
     }
 
-    /* MESSAGES AND CHATS */
-
     if (isMessagesCollection(name)) {
       if (currentPage === "messages") {
         return refreshOtherPage();
@@ -197,8 +148,6 @@
 
       return true;
     }
-
-    /* PROFILE */
 
     if (isProfileCollection(name)) {
       if (currentPage === "profile") {
@@ -208,8 +157,6 @@
       return true;
     }
 
-    /* SAVED POSTS */
-
     if (isSavedCollection(name)) {
       if (currentPage === "saved") {
         return refreshOtherPage();
@@ -217,8 +164,6 @@
 
       return true;
     }
-
-    /* NOTIFICATIONS */
 
     if (isNotificationsCollection(name)) {
       if (currentPage === "notifications") {
@@ -230,10 +175,6 @@
 
     return false;
   }
-
-  /* =======================================================
-     INITIALIZATION
-  ======================================================= */
 
   function initialize(options = {}) {
     if (initialized) return true;
@@ -250,20 +191,12 @@
         options.renderFeed,
 
       renderStories:
-        options.renderStories,
-
-      refreshMedia:
-        options.refreshMedia
+        options.renderStories
     };
 
     initialized = true;
-
     return true;
   }
-
-  /* =======================================================
-     PUBLIC API
-  ======================================================= */
 
   global.KSKDataRefresh = Object.freeze({
     initialize,
