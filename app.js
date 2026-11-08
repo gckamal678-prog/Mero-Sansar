@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -478,76 +477,6 @@
   }
 
   /* =======================================================
-     GLOBAL CLICK EVENTS
-  ======================================================= */
-
-  function bindGlobalClickEvents() {
-    document.addEventListener("click", event => {
-      const target = event.target;
-
-      if (!target?.closest) return;
-
-      /*
-       * Media UI and Profile Media UI use capture phase.
-       * Their controls are intercepted before this handler.
-       */
-
-      const viewStoryButton = target.closest(
-        "[data-story-view]"
-      );
-
-      if (viewStoryButton) {
-        viewStory(viewStoryButton.dataset.storyView);
-        return;
-      }
-
-      const postAction = target.closest(
-        "[data-post-action]"
-      );
-
-      if (postAction) {
-        const action = postAction.dataset.postAction;
-
-        /*
-         * Like / Reaction is intercepted in capture phase
-         * by core/reactions.js.
-         *
-         * Save / Unsave is intercepted in capture phase
-         * by core/post-actions.js.
-         *
-         * The app controller handles only Comment and Share.
-         */
-        if (action === "comment" || action === "share") {
-          handlePostAction(
-            action,
-            postAction.dataset.postId
-          );
-        }
-
-        return;
-      }
-
-      if (global.KSKPostActions?.handleClick(target)) {
-        return;
-      }
-
-      if (target.closest("[data-add-friend-open]")) {
-        openAddFriend();
-        return;
-      }
-
-      if (target.closest("[data-edit-profile]")) {
-        PROFILE_MEDIA()?.openEditor?.();
-        return;
-      }
-
-      if (target.closest("[data-open-settings]")) {
-        openSettings();
-      }
-    });
-  }
-
-  /* =======================================================
      DATA CHANGE HANDLING
   ======================================================= */
 
@@ -590,111 +519,18 @@
   }
 
   /* =======================================================
-     EVENT BINDING
-  ======================================================= */
-
-  function bindEvents() {
-    NAV()?.initializeNavigation?.(document);
-
-    global.addEventListener(
-      "ksk:open-composer",
-      openPostComposer
-    );
-
-    global.addEventListener(
-      "ksk:language-change",
-      () => {
-        refreshCurrentPage();
-        renderStories();
-        renderFeed();
-      }
-    );
-
-    global.addEventListener(
-      "ksk:settings-change",
-      event => {
-        const changedSettings = event.detail?.settings;
-
-        document.body.classList.toggle(
-          "ksk-compact-mode",
-          Boolean(changedSettings?.compactMode)
-        );
-      }
-    );
-
-    global.addEventListener(
-      "ksk:data-change",
-      handleDataChange
-    );
-
-    /*
-     * KSKMediaUI captures #openComposer and #quickText
-     * in the document capture phase.
-     * Keep the optional legacy quick-photo delegate.
-     */
-
-    els.quickPhoto?.addEventListener(
-      "click",
-      event => {
-        event.preventDefault();
-        openPostComposer();
-      }
-    );
-
-    els.quickVideo?.addEventListener(
-      "click",
-      () => {
-        toast(
-          isEnglish()
-            ? "Video sharing is not available yet."
-            : "भिडियो सुविधा अहिले उपलब्ध छैन।",
-          "info"
-        );
-      }
-    );
-
-    els.searchToggle?.addEventListener(
-      "click",
-      toggleSearch
-    );
-
-    els.searchInput?.addEventListener(
-      "input",
-      event => {
-        search(event.target.value);
-      }
-    );
-
-    els.notificationsToggle?.addEventListener(
-      "click",
-      () => {
-        NAV()?.navigate?.("notifications");
-      }
-    );
-
-    els.closeSettings?.addEventListener(
-      "click",
-      closeSettings
-    );
-
-    els.settingsModal?.addEventListener(
-      "click",
-      event => {
-        if (event.target === els.settingsModal) {
-          closeSettings();
-        }
-      }
-    );
-
-    bindGlobalClickEvents();
-  }
-
-  /* =======================================================
      INITIALIZATION
   ======================================================= */
 
   function initialize() {
     if (initialized) return;
+
+    if (typeof global.KSKAppEvents?.initialize !== "function") {
+      console.error(
+        "KSKAppEvents is unavailable. Check index.html script order."
+      );
+      return;
+    }
 
     initialized = true;
 
@@ -715,7 +551,51 @@
       refreshCurrentPage
     });
 
-    bindEvents();
+    global.KSKAppEvents.initialize({
+      navigation: NAV(),
+      elements: els,
+      onOpenComposer: openPostComposer,
+      onLanguageChange: () => {
+        refreshCurrentPage();
+        renderStories();
+        renderFeed();
+      },
+      onSettingsChange: event => {
+        const changedSettings = event.detail?.settings;
+
+        document.body.classList.toggle(
+          "ksk-compact-mode",
+          Boolean(changedSettings?.compactMode)
+        );
+      },
+      onDataChange: handleDataChange,
+      onQuickPhoto: event => {
+        event.preventDefault();
+        openPostComposer();
+      },
+      onQuickVideo: () => {
+        toast(
+          isEnglish()
+            ? "Video sharing is not available yet."
+            : "भिडियो सुविधा अहिले उपलब्ध छैन।",
+          "info"
+        );
+      },
+      onSearchToggle: toggleSearch,
+      onSearch: value => search(value),
+      onNotifications: () => {
+        NAV()?.navigate?.("notifications");
+      },
+      onCloseSettings: closeSettings,
+      onStoryView: viewStory,
+      onPostAction: handlePostAction,
+      onPostActionsClick: target =>
+        global.KSKPostActions?.handleClick(target),
+      onAddFriend: openAddFriend,
+      onEditProfile: () =>
+        PROFILE_MEDIA()?.openEditor?.(),
+      onOpenSettings: openSettings
+    });
 
     renderStories();
     renderFeed();
