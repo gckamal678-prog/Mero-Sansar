@@ -4,6 +4,7 @@
 /*
  * =========================================================
  * KSK — DATA CHANGE & REFRESH CONTROLLER
+ * Mero-Sansar
  *
  * RESPONSIBILITY:
  * - Refresh only the page affected by data changes.
@@ -16,7 +17,6 @@
  *
  * HOME FEED / STORIES:
  * - Owned by pages/home.js
- * - Home render functions refresh their own media.
  * =========================================================
  */
 
@@ -28,6 +28,10 @@
   let initialized = false;
   let actions = {};
 
+  /* =======================================================
+     CURRENT PAGE
+  ======================================================= */
+
   function getCurrentPage() {
     const state = global.KSKState?.getState?.();
 
@@ -35,6 +39,10 @@
       state?.currentPage || "home"
     ).toLowerCase();
   }
+
+  /* =======================================================
+     COLLECTION HELPERS
+  ======================================================= */
 
   function getCollectionName(collection) {
     return String(collection || "").toLowerCase();
@@ -85,23 +93,44 @@
     );
   }
 
+  /* =======================================================
+     REFRESH ACTIONS
+  ======================================================= */
+
   function refreshHomeFeed() {
-    actions.renderFeed?.();
-    return true;
+    if (typeof actions.renderFeed !== "function") {
+      return false;
+    }
+
+    return actions.renderFeed() !== false;
   }
 
   function refreshHomeStories() {
-    actions.renderStories?.();
-    return true;
+    if (typeof actions.renderStories !== "function") {
+      return false;
+    }
+
+    return actions.renderStories() !== false;
   }
 
   function refreshOtherPage() {
-    actions.refreshCurrentPage?.();
-    return true;
+    if (
+      typeof actions.refreshCurrentPage !== "function"
+    ) {
+      return false;
+    }
+
+    return actions.refreshCurrentPage() !== false;
   }
 
+  /* =======================================================
+     DATA CHANGE HANDLER
+  ======================================================= */
+
   function handleDataChange(event) {
-    const collection = event?.detail?.collection || "";
+    const collection =
+      event?.detail?.collection || "";
+
     const name = getCollectionName(collection);
 
     if (!shouldRefreshForCollection(name)) {
@@ -109,6 +138,13 @@
     }
 
     const currentPage = getCurrentPage();
+
+    /* ---------------------------------------------------
+       POSTS
+       Home     : Feed only
+       Profile  : Current page
+       Saved    : Current page
+    --------------------------------------------------- */
 
     if (isPostsCollection(name)) {
       if (currentPage === "home") {
@@ -125,6 +161,11 @@
       return true;
     }
 
+    /* ---------------------------------------------------
+       STORIES
+       Home only : Stories only
+    --------------------------------------------------- */
+
     if (isStoriesCollection(name)) {
       if (currentPage === "home") {
         return refreshHomeStories();
@@ -132,6 +173,10 @@
 
       return true;
     }
+
+    /* ---------------------------------------------------
+       FRIENDS
+    --------------------------------------------------- */
 
     if (isFriendsCollection(name)) {
       if (currentPage === "friends") {
@@ -141,6 +186,10 @@
       return true;
     }
 
+    /* ---------------------------------------------------
+       MESSAGES / CHATS
+    --------------------------------------------------- */
+
     if (isMessagesCollection(name)) {
       if (currentPage === "messages") {
         return refreshOtherPage();
@@ -148,6 +197,10 @@
 
       return true;
     }
+
+    /* ---------------------------------------------------
+       PROFILE
+    --------------------------------------------------- */
 
     if (isProfileCollection(name)) {
       if (currentPage === "profile") {
@@ -157,13 +210,33 @@
       return true;
     }
 
+    /* ---------------------------------------------------
+       SAVED POSTS
+       Home     : Feed refresh updates Save button
+       Profile  : Profile refresh updates Save button
+       Saved    : Saved list refreshes
+    --------------------------------------------------- */
+
     if (isSavedCollection(name)) {
+      if (
+        currentPage === "home" ||
+        currentPage === "profile"
+      ) {
+        return refreshHomeFeedOrCurrentPage(
+          currentPage
+        );
+      }
+
       if (currentPage === "saved") {
         return refreshOtherPage();
       }
 
       return true;
     }
+
+    /* ---------------------------------------------------
+       NOTIFICATIONS
+    --------------------------------------------------- */
 
     if (isNotificationsCollection(name)) {
       if (currentPage === "notifications") {
@@ -175,6 +248,26 @@
 
     return false;
   }
+
+  /* =======================================================
+     SAVED POST REFRESH
+  ======================================================= */
+
+  function refreshHomeFeedOrCurrentPage(page) {
+    if (page === "home") {
+      return refreshHomeFeed();
+    }
+
+    if (page === "profile") {
+      return refreshOtherPage();
+    }
+
+    return false;
+  }
+
+  /* =======================================================
+     INITIALIZATION
+  ======================================================= */
 
   function initialize(options = {}) {
     if (initialized) return true;
@@ -195,8 +288,13 @@
     };
 
     initialized = true;
+
     return true;
   }
+
+  /* =======================================================
+     PUBLIC API
+  ======================================================= */
 
   global.KSKDataRefresh = Object.freeze({
     initialize,
