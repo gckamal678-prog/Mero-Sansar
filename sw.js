@@ -3,7 +3,7 @@
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v4
+   Version: v5
 
    Features:
    - Complete application precache
@@ -14,7 +14,7 @@
    - GitHub Pages subdirectory support
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v4";
+const CACHE_NAME = "hamro-sansar-v5";
 const CACHE_PREFIX = "hamro-sansar-";
 
 /* =========================================================
@@ -24,12 +24,13 @@ const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
 
-  /* Main files */
+    /* Main files */
   "./index.html",
   "./app.css",
   "./app.js",
-"./core/app-events.js",
-"./manifest.json",
+  "./core/app-events.js",
+  "./core/data-refresh.js",
+  "./manifest.json",
   "./Nepal.jpg",
 
   /* Design system */
