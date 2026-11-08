@@ -14,7 +14,6 @@
  * MEDIA         : KSKMediaUI
  * PROFILE MEDIA : KSKProfileMediaUI
  * COMMENTS      : KSKComments
- * MODAL         : KSKModal
  * TOAST         : KSKToast
  *
  * This file integrates the application.
@@ -37,7 +36,6 @@
   const THEME = () => global.KSKTheme;
   const LANG = () => global.KSKLanguage;
   const NAV = () => global.KSKNavigation;
-  const MODAL = () => global.KSKModal;
   const TOAST = () => global.KSKToast;
   const MEDIA_UI = () => global.KSKMediaUI;
   const PROFILE_MEDIA = () => global.KSKProfileMediaUI;
@@ -71,22 +69,8 @@
   }
 
   /* =======================================================
-     COMMON HELPERS
+     LANGUAGE HELPERS
   ======================================================= */
-
-  function escapeHTML(value = "") {
-    if (global.KSKUtils?.escapeHTML) {
-      return global.KSKUtils.escapeHTML(value);
-    }
-
-    return String(value).replace(/[&<>"']/g, char => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;"
-    })[char]);
-  }
 
   function language() {
     return LANG()?.getLanguage?.() || "ne";
@@ -119,28 +103,8 @@
   }
 
   /* =======================================================
-     DATE AND PROFILE HELPERS
+     PROFILE ACCESS
   ======================================================= */
-
-  function formatDate(value) {
-    if (global.KSKUtils?.formatDateTime) {
-      return global.KSKUtils.formatDateTime(value);
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "";
-    }
-
-    return date.toLocaleString(
-      isEnglish() ? "en-US" : "ne-NP",
-      {
-        dateStyle: "medium",
-        timeStyle: "short"
-      }
-    );
-  }
 
   function profile() {
     return DATA()?.getProfile?.() || {
@@ -153,56 +117,6 @@
       avatarMediaId: "",
       coverMediaId: ""
     };
-  }
-
-  function initial(value) {
-    return String(value || "").trim().charAt(0) ||
-      (isEnglish() ? "U" : "स");
-  }
-
-  function isImageSource(value) {
-    if (typeof value !== "string") return false;
-
-    const source = value.trim();
-
-    return (
-      /^https?:\/\//i.test(source) ||
-      /^data:image\//i.test(source) ||
-      /^blob:/i.test(source)
-    );
-  }
-
-  function avatarHTML(name, avatar = "", size = "") {
-    const image = isImageSource(avatar);
-
-    const content = image
-      ? `<img src="${escapeHTML(avatar)}" alt="" loading="lazy">`
-      : escapeHTML(initial(name));
-
-    return `
-      <div class="avatar ${escapeHTML(size)}">
-        ${content}
-      </div>
-    `;
-  }
-
-  /* =======================================================
-     MODAL
-  ======================================================= */
-
-  function openModal(options) {
-    if (!MODAL()?.openModal) {
-      toast(
-        isEnglish()
-          ? "This feature is unavailable."
-          : "यो सुविधा अहिले उपलब्ध छैन।",
-        "error"
-      );
-
-      return null;
-    }
-
-    return MODAL().openModal(options);
   }
 
   /* =======================================================
@@ -281,55 +195,6 @@
     );
 
     return false;
-  }
-
-  /*
-   * Legacy viewer fallback.
-   * Normally KSKMediaUI handles Story clicks.
-   */
-
-  function viewStory(id) {
-    const stories = DATA()?.getStories?.(true) || [];
-
-    const story = stories.find(
-      item => String(item.id) === String(id)
-    );
-
-    if (!story) return;
-
-    const content = `
-      <div class="story-view-content">
-
-        ${avatarHTML(story.author)}
-
-        <h3>
-          ${escapeHTML(story.author || "सदस्य")}
-        </h3>
-
-        <p class="post-time">
-          ${escapeHTML(formatDate(story.createdAt))}
-        </p>
-
-        <div class="post-content">
-          ${escapeHTML(story.text || "")}
-        </div>
-
-      </div>
-    `;
-
-    openModal({
-      title: "Story",
-      content,
-
-      footer: `
-        <button
-          class="btn btn-secondary"
-          type="button"
-          data-modal-close>
-          ${translate("close", "बन्द गर्नुहोस्")}
-        </button>
-      `
-    });
   }
 
   /* =======================================================
@@ -521,12 +386,15 @@
     global.KSKAppEvents.initialize({
       navigation: NAV(),
       elements: els,
+
       onOpenComposer: openPostComposer,
+
       onLanguageChange: () => {
         refreshCurrentPage();
         renderStories();
         renderFeed();
       },
+
       onSettingsChange: event => {
         const changedSettings = event.detail?.settings;
 
@@ -535,12 +403,15 @@
           Boolean(changedSettings?.compactMode)
         );
       },
+
       onDataChange: event =>
         DATA_REFRESH()?.handleDataChange?.(event),
+
       onQuickPhoto: event => {
         event.preventDefault();
         openPostComposer();
       },
+
       onQuickVideo: () => {
         toast(
           isEnglish()
@@ -549,19 +420,27 @@
           "info"
         );
       },
+
       onSearchToggle: toggleSearch,
+
       onSearch: value => search(value),
+
       onNotifications: () => {
         NAV()?.navigate?.("notifications");
       },
+
       onCloseSettings: closeSettings,
-      onStoryView: viewStory,
+
       onPostAction: handlePostAction,
+
       onPostActionsClick: target =>
         global.KSKPostActions?.handleClick(target),
+
       onAddFriend: openAddFriend,
+
       onEditProfile: () =>
         PROFILE_MEDIA()?.openEditor?.(),
+
       onOpenSettings: openSettings
     });
 
