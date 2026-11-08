@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -6,7 +7,7 @@
  * Single Data Layer Architecture
  *
  * DATA          : KSKData
- * SETTINGS      : KSKSettings / KSKSettingsUI
+ * SETTINGS      : KSKSettings / KSKSettingsPage
  * THEME         : KSKTheme
  * LANGUAGE      : KSKLanguage
  * NAVIGATION    : KSKNavigation
@@ -32,7 +33,8 @@
 
   const DATA = () => global.KSKData;
   const SETTINGS = () => global.KSKSettings;
-  const SETTINGS_UI = () => global.KSKSettingsUI;
+  const SETTINGS_PAGE = () => global.KSKSettingsPage;
+  const PROFILE_PAGE = () => global.KSKProfilePage;
   const THEME = () => global.KSKTheme;
   const LANG = () => global.KSKLanguage;
   const NAV = () => global.KSKNavigation;
@@ -108,17 +110,8 @@
      PROFILE ACCESS
   ======================================================= */
 
-  function profile() {
-    return DATA()?.getProfile?.() || {
-      id: "",
-      name: "",
-      bio: "",
-      location: "",
-      avatar: "",
-      cover: "",
-      avatarMediaId: "",
-      coverMediaId: ""
-    };
+  function getProfile() {
+    return PROFILE_PAGE()?.getProfile?.() || {};
   }
 
   /* =======================================================
@@ -138,11 +131,15 @@
   ======================================================= */
 
   function refreshNavigation() {
-    NAV()?.refreshNavigation?.();
+    return NAV()?.refreshNavigation?.() ?? false;
   }
 
   function refreshCurrentPage() {
-    NAV()?.refreshCurrentPage?.();
+    return NAV()?.refreshCurrentPage?.() ?? false;
+  }
+
+  function navigate(page, options = {}) {
+    return NAV()?.navigate?.(page, options) ?? false;
   }
 
   /* =======================================================
@@ -263,44 +260,35 @@
   }
 
   /* =======================================================
-     SETTINGS
+     SETTINGS DELEGATES
   ======================================================= */
 
   function openSettings() {
-    const settingsPage = global.KSKSettingsPage;
+    const settingsPage = SETTINGS_PAGE();
 
     if (typeof settingsPage?.open === "function") {
       return settingsPage.open();
     }
 
-    const settingsUI = SETTINGS_UI();
+    toast(
+      isEnglish()
+        ? "Settings are not ready. Please reload the app."
+        : "सेटिङ तयार भएको छैन। कृपया एप पुनः खोल्नुहोस्।",
+      "error"
+    );
 
-    if (!settingsUI?.open) {
-      toast(
-        isEnglish()
-          ? "Settings are not ready. Please reload the app."
-          : "सेटिङ तयार भएको छैन। कृपया एप पुनः खोल्नुहोस्।",
-        "error"
-      );
-
-      return false;
-    }
-
-    return settingsUI.open();
+    return false;
   }
 
   function closeSettings() {
-    if (SETTINGS_UI()?.close) {
-      SETTINGS_UI().close();
-      return;
+    const settingsPage = SETTINGS_PAGE();
+
+    if (typeof settingsPage?.close === "function") {
+      return settingsPage.close();
     }
 
-    els.settingsModal?.classList.add("hidden");
-
-    els.settingsModal?.setAttribute(
-      "aria-hidden",
-      "true"
-    );
+    console.error("KSKSettingsPage is unavailable. Check script order.");
+    return false;
   }
 
   /* =======================================================
@@ -341,7 +329,7 @@
     SETTINGS()?.initialize?.();
     THEME()?.initializeTheme?.();
     LANG()?.initialize?.();
-    SETTINGS_UI()?.initialize?.();
+    SETTINGS_PAGE()?.initialize?.();
 
     KSKPostActions()?.initialize?.({
       isEnglish,
@@ -397,7 +385,7 @@
       },
 
       onNotifications: () => {
-        NAV()?.navigate?.("notifications");
+        navigate("notifications");
       },
 
       onCloseSettings: closeSettings
@@ -409,12 +397,7 @@
       onPostActionsClick: target =>
         global.KSKPostActions?.handleClick(target),
 
-      onAddFriend: openAddFriend,
-
-      onEditProfile: () =>
-        PROFILE_MEDIA()?.openEditor?.(),
-
-      onOpenSettings: openSettings
+      onAddFriend: openAddFriend
     });
 
     renderStories();
@@ -469,7 +452,9 @@
 
     getChats,
 
-    getProfile: profile,
+    getProfile,
+
+    navigate,
 
     search,
 
