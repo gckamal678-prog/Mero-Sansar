@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -916,12 +915,6 @@
         throw new Error("प्रोफाइल अपडेट गर्न सकिएन।");
       }
 
-      await updateProfileDisplay();
-
-      global.KSKApp?.refreshCurrentPage?.();
-
-      await updateProfileDisplay();
-
       toast(
         type === "avatar"
           ? t("प्रोफाइल फोटो परिवर्तन भयो।", "Profile photo updated.")
@@ -1079,10 +1072,6 @@
 
         closeModal();
 
-        global.KSKApp?.refreshCurrentPage?.();
-
-        await updateProfileDisplay();
-
         toast(
           t("प्रोफाइल सफलतापूर्वक अपडेट भयो।", "Profile updated successfully."),
           "success"
@@ -1236,16 +1225,18 @@
     );
 
     global.addEventListener(
-      "ksk:navigate",
-      updateProfileDisplay
-    );
-
-    global.addEventListener(
       "ksk:data-change",
       event => {
 
-        if (event.detail?.collection === "profile") {
-          updateProfileDisplay();
+        if (event.detail?.collection !== "profile") {
+          return;
+        }
+
+        const currentPage =
+          global.KSKApp?.getCurrentPage?.() || "home";
+
+        if (currentPage !== "profile") {
+          updateFooterAvatar();
         }
       }
     );
