@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -243,11 +242,9 @@
     storiesList.innerHTML = addStory + storyItems;
 
     /*
-     * Media UI loads the actual photo thumbnails.
-     * Text-only stories keep their text preview.
+     * Media UI observes #storiesList and loads
+     * photo thumbnails when its content changes.
      */
-
-    global.KSKMediaUI?.refresh?.();
 
     return true;
   }
@@ -281,7 +278,10 @@
       filtered.length > 0
     );
 
-    global.KSKMediaUI?.refresh?.();
+    /*
+     * Media UI observes #feedList and loads
+     * post photos when its content changes.
+     */
 
     return true;
   }
