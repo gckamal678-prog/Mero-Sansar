@@ -4,9 +4,9 @@
  * =========================================================
  * KSK — APPLICATION EVENT CONTROLLER
  *
- * This module owns application-wide DOM and window events.
- * Feature-specific capture-phase events remain in their
- * respective feature modules.
+ * This module owns application-wide Window and Element events.
+ * Search events belong to KSKSearch.
+ * Delegated UI actions belong to KSKUIActions.
  * =========================================================
  */
 
@@ -40,10 +40,6 @@
       return false;
     }
 
-    /*
-     * Keep navigation initialization before app-level
-     * bubble listeners, matching the previous event order.
-     */
     navigation?.initializeNavigation?.(doc);
 
     win.addEventListener(
@@ -66,12 +62,6 @@
       event => callHandler(options, "onDataChange", event)
     );
 
-    /*
-     * Feature modules such as Media UI, Profile Media,
-     * Reactions and Post Actions retain their own capture
-     * phase listeners. These handlers remain in bubble phase.
-     */
-
     elements.quickPhoto?.addEventListener(
       "click",
       event => callHandler(options, "onQuickPhoto", event)
@@ -80,16 +70,6 @@
     elements.quickVideo?.addEventListener(
       "click",
       event => callHandler(options, "onQuickVideo", event)
-    );
-
-    elements.searchToggle?.addEventListener(
-      "click",
-      event => callHandler(options, "onSearchToggle", event)
-    );
-
-    elements.searchInput?.addEventListener(
-      "input",
-      event => callHandler(options, "onSearch", event.target.value, event)
     );
 
     elements.notificationsToggle?.addEventListener(
@@ -110,53 +90,6 @@
         }
       }
     );
-
-    doc.addEventListener("click", event => {
-      const target = event.target;
-
-      if (!target?.closest) return;
-
-      const postAction = target.closest("[data-post-action]");
-
-      if (postAction) {
-        const action = postAction.dataset.postAction;
-
-        /*
-         * Like / Reaction and Save / Unsave are intercepted
-         * in capture phase by their feature modules.
-         * The app-level router handles Comment and Share.
-         */
-        if (action === "comment" || action === "share") {
-          callHandler(
-            options,
-            "onPostAction",
-            action,
-            postAction.dataset.postId,
-            event
-          );
-        }
-
-        return;
-      }
-
-      if (callHandler(options, "onPostActionsClick", target)) {
-        return;
-      }
-
-      if (target.closest("[data-add-friend-open]")) {
-        callHandler(options, "onAddFriend", event);
-        return;
-      }
-
-      if (target.closest("[data-edit-profile]")) {
-        callHandler(options, "onEditProfile", event);
-        return;
-      }
-
-      if (target.closest("[data-open-settings]")) {
-        callHandler(options, "onOpenSettings", event);
-      }
-    });
 
     initialized = true;
 
