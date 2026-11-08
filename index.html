@@ -10,6 +10,39 @@
   <meta name="description" content="हाम्रो संसार — साथी जोडौँ, कुरा गरौँ ।">
   <meta name="color-scheme" content="light dark">
 
+<!-- Apply saved theme before stylesheets load -->
+<script>
+  (function () {
+    "use strict";
+
+    try {
+      var saved =
+        localStorage.getItem("ksk_app_settings") ||
+        localStorage.getItem("ksk_app_settings_old");
+
+      var settings = saved ? JSON.parse(saved) : {};
+      var theme = settings.theme === "dark" ? "dark" : "light";
+      var root = document.documentElement;
+
+      root.dataset.theme = theme;
+      root.style.colorScheme = theme;
+
+      var themeColor = document.querySelector(
+        'meta[name="theme-color"]'
+      );
+
+      if (themeColor) {
+        themeColor.setAttribute(
+          "content",
+          theme === "dark" ? "#0b1220" : "#2563eb"
+        );
+      }
+    } catch (error) {
+      document.documentElement.dataset.theme = "light";
+    }
+  })();
+</script>
+
   <title>हाम्रो संसार</title>
 
   <!-- Fonts -->
