@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -52,12 +53,42 @@
     return JSON.parse(JSON.stringify(value));
   }
 
-  function isPlainObject(value) {
-    return Boolean(
-      value &&
-      typeof value === "object" &&
-      !Array.isArray(value)
-    );
+  function read(key, fallback) {
+    try {
+      const raw = global.localStorage.getItem(key);
+
+      if (raw === null) {
+        return clone(fallback);
+      }
+
+      const value = JSON.parse(raw);
+
+      return value === null
+        ? clone(fallback)
+        : value;
+    } catch (error) {
+      console.error("KSK data read failed:", error);
+      return clone(fallback);
+    }
+  }
+
+  function write(key, value) {
+    try {
+      global.localStorage.setItem(
+        key,
+        JSON.stringify(value)
+      );
+
+      return true;
+    } catch (error) {
+      console.error("KSK data save failed:", error);
+
+      global.KSKToast?.error(
+        "डाटा सुरक्षित गर्न सकिएन। भण्डारण क्षमता जाँच गर्नुहोस्।"
+      );
+
+      return false;
+    }
   }
 
   function makeId(prefix = "item") {
@@ -78,231 +109,7 @@
     return Array.isArray(value) ? value : [];
   }
 
-  /*
-   * Validate and normalize every stored collection.
-   * Unknown fields are preserved for backward compatibility.
-   * Invalid collection containers become safe empty collections.
-   */
-  function normalizeCollection(key, value) {
-
-    if (key === STORAGE.profile) {
-      if (!isPlainObject(value)) {
-        return { ...DEFAULT_PROFILE };
-      }
-
-      return {
-        ...DEFAULT_PROFILE,
-        ...value,
-        name: cleanText(value.name, 60),
-        bio: cleanText(value.bio, 240),
-        location: cleanText(value.location, 100),
-        avatar: cleanText(value.avatar, 200000),
-        cover: cleanText(value.cover, 200000)
-      };
-    }
-
-    if (key === STORAGE.saved) {
-      if (!Array.isArray(value)) return [];
-
-      return [...new Set(value
-        .map(item => {
-          if (
-            typeof item === "string" ||
-            typeof item === "number"
-          ) {
-            return String(item).trim();
-          }
-
-          if (isPlainObject(item)) {
-            return String(item.id || "").trim();
-          }
-
-          return "";
-        })
-        .filter(Boolean))];
-    }
-
-    if (!Array.isArray(value)) return [];
-
-    return value
-      .filter(item => isPlainObject(item))
-      .map(source => {
-
-        const item = { ...source };
-
-        if (key === STORAGE.posts) {
-
-          item.id = cleanText(item.id, 160) ||
-            makeId("legacy-post");
-
-          item.text = cleanText(item.text, 10000);
-
-          item.comments = Array.isArray(item.comments)
-            ? item.comments
-                .filter(isPlainObject)
-                .map(comment => ({
-                  ...comment,
-                  id: cleanText(comment.id, 160) ||
-                    makeId("legacy-comment"),
-                  postId: String(item.id),
-                  parentId: comment.parentId
-                    ? String(comment.parentId)
-                    : null,
-                  text: cleanText(comment.text, 3000)
-                }))
-            : [];
-
-        } else if (key === STORAGE.stories) {
-
-          item.id = cleanText(item.id, 160) ||
-            makeId("legacy-story");
-
-        } else if (key === STORAGE.friends) {
-
-          item.id = cleanText(item.id, 160) ||
-            makeId("legacy-friend");
-
-          item.name = cleanText(item.name, 60);
-
-          item.avatar = cleanText(
-            item.avatar || item.initial || "",
-            200000
-          );
-
-        } else if (key === STORAGE.messages) {
-
-          item.id = cleanText(item.id, 160) ||
-            makeId("legacy-message");
-
-          item.chatId = cleanText(
-            item.chatId || "general",
-            160
-          );
-
-          item.text = cleanText(item.text, 2000);
-
-        } else if (key === STORAGE.chats) {
-
-          item.id = cleanText(item.id, 160) ||
-            makeId("legacy-chat");
-
-          item.userId = cleanText(item.userId, 160);
-
-          item.name = cleanText(
-            item.name || "सन्देश",
-            60
-          );
-
-          item.messages = Array.isArray(item.messages)
-            ? item.messages.filter(isPlainObject)
-            : [];
-
-        } else if (key === STORAGE.notifications) {
-
-          item.id = cleanText(item.id, 160) ||
-            makeId("legacy-notification");
-
-          item.text = cleanText(item.text, 500);
-        }
-
-        return item;
-      });
-  }
-
-  function read(key, fallback) {
-
-    try {
-
-      const raw = global.localStorage.getItem(key);
-
-      if (raw === null) {
-        return clone(fallback);
-      }
-
-      const value = JSON.parse(raw);
-
-      if (value === null) {
-        return clone(fallback);
-      }
-
-      const normalized = normalizeCollection(
-        key,
-        value
-      );
-
-      /*
-       * Persist repairs so malformed legacy records
-       * do not repeatedly break rendering.
-       */
-
-      if (
-        JSON.stringify(normalized) !==
-        JSON.stringify(value)
-      ) {
-
-        try {
-
-          global.localStorage.setItem(
-            key,
-            JSON.stringify(normalized)
-          );
-
-        } catch (repairError) {
-
-          console.warn(
-            "KSK data normalization could not be persisted:",
-            key,
-            repairError
-          );
-        }
-      }
-
-      return normalized;
-
-    } catch (error) {
-
-      console.error(
-        "KSK data read failed:",
-        error
-      );
-
-      return clone(fallback);
-    }
-  }
-
-  function write(key, value) {
-
-    try {
-
-      const normalized = normalizeCollection(
-        key,
-        value
-      );
-
-      global.localStorage.setItem(
-        key,
-        JSON.stringify(normalized)
-      );
-
-      return true;
-
-    } catch (error) {
-
-      console.error(
-        "KSK data save failed:",
-        error
-      );
-
-      global.KSKToast?.error(
-        "डाटा सुरक्षित गर्न सकिएन। भण्डारण क्षमता जाँच गर्नुहोस्।"
-      );
-
-      return false;
-    }
-  }
-
   function emit(collection, action, item = null) {
-
     const detail = {
       collection,
       action,
@@ -311,13 +118,9 @@
     };
 
     listeners.forEach(listener => {
-
       try {
-
         listener(detail);
-
       } catch (error) {
-
         console.error(
           "KSK data listener failed:",
           error
@@ -332,7 +135,6 @@
     );
 
     if (global.KSKState?.setState) {
-
       global.KSKState.setState(
         {
           lastDataChange: {
@@ -349,9 +151,7 @@
   }
 
   function subscribe(listener) {
-
     if (typeof listener !== "function") {
-
       throw new TypeError(
         "KSKData subscriber must be a function."
       );
@@ -368,7 +168,6 @@
     action,
     item
   ) {
-
     const saved = write(key, collection);
 
     if (saved) {
@@ -379,7 +178,6 @@
   }
 
   function sortNewest(items) {
-
     return items.sort((a, b) =>
       new Date(b.createdAt || 0) -
       new Date(a.createdAt || 0)
@@ -391,14 +189,12 @@
   ======================================================= */
 
   function getPosts() {
-
     return sortNewest(
       isArray(read(STORAGE.posts, []))
     );
   }
 
   function getPost(postId) {
-
     const id = String(postId || "");
 
     const post = getPosts().find(
@@ -409,7 +205,6 @@
   }
 
   function addPost(post = {}) {
-
     if (!post || typeof post !== "object") {
       return false;
     }
@@ -419,8 +214,7 @@
       id: post.id || makeId("post"),
       text: cleanText(post.text, 10000),
       comments: isArray(post.comments),
-      createdAt: post.createdAt ||
-        new Date().toISOString()
+      createdAt: post.createdAt || new Date().toISOString()
     };
 
     if (
@@ -432,7 +226,6 @@
     }
 
     const posts = getPosts();
-
     posts.unshift(item);
 
     if (!saveCollection(
@@ -448,7 +241,6 @@
   }
 
   function updatePost(postId, changes = {}) {
-
     const id = String(postId || "");
 
     if (
@@ -479,7 +271,6 @@
         "text"
       )
     ) {
-
       updated.text = cleanText(
         changes.text,
         10000
@@ -492,13 +283,10 @@
         "comments"
       )
     ) {
-
       updated.comments = isArray(
         posts[index].comments
       );
-
     } else {
-
       updated.comments = isArray(
         changes.comments
       );
@@ -515,7 +303,6 @@
   }
 
   function deletePost(postId) {
-
     const id = String(postId || "");
     const posts = getPosts();
 
@@ -541,7 +328,6 @@
   ======================================================= */
 
   function getComments(postId) {
-
     const post = getPost(postId);
 
     if (!post) return [];
@@ -552,7 +338,6 @@
   }
 
   function getComment(postId, commentId) {
-
     const comments = getComments(postId);
     const id = String(commentId || "");
 
@@ -568,7 +353,6 @@
     comment = {},
     options = {}
   ) {
-
     const id = String(postId || "");
     const post = getPost(id);
 
@@ -593,7 +377,6 @@
     );
 
     if (parentId) {
-
       const parentExists = comments.some(
         item => String(item.id) === parentId
       );
@@ -604,54 +387,42 @@
     const mentions = isArray(
       options.mentions || comment.mentions
     ).map(mention => ({
-
       id: cleanText(mention?.id, 120),
       name: cleanText(mention?.name, 60)
-
     })).filter(mention => mention.name);
 
     const item = {
-
       id: comment.id || makeId("comment"),
       postId: id,
       parentId: parentId || null,
-
       replyTo: cleanText(
         options.replyTo || comment.replyTo,
         60
       ),
-
       author: cleanText(
         comment.author || "सदस्य",
         60
       ),
-
       authorId: cleanText(
         comment.authorId,
         120
       ),
-
       authorInitial: cleanText(
         comment.authorInitial ||
         comment.author?.charAt?.(0) ||
         "स",
         4
       ),
-
       avatar: cleanText(
         comment.avatar,
         200000
       ),
-
       text,
       mentions,
-
       likes: Number(comment.likes || 0),
       liked: Boolean(comment.liked),
-
       createdAt: comment.createdAt ||
         new Date().toISOString(),
-
       editedAt: null
     };
 
@@ -678,7 +449,6 @@
     postId,
     updatedPost
   ) {
-
     const posts = getPosts();
 
     const index = posts.findIndex(
@@ -697,7 +467,6 @@
     commentId,
     changes = {}
   ) {
-
     const id = String(postId || "");
     const post = getPost(id);
 
@@ -731,7 +500,6 @@
         "text"
       )
     ) {
-
       updatedComment.text = cleanText(
         changes.text,
         3000
@@ -756,7 +524,6 @@
   }
 
   function deleteComment(postId, commentId) {
-
     const id = String(postId || "");
     const targetId = String(commentId || "");
     const post = getPost(id);
@@ -776,17 +543,14 @@
     let changed = true;
 
     while (changed) {
-
       changed = false;
 
       comments.forEach(item => {
-
         if (
           item.parentId &&
           idsToDelete.has(String(item.parentId)) &&
           !idsToDelete.has(String(item.id))
         ) {
-
           idsToDelete.add(String(item.id));
           changed = true;
         }
@@ -817,7 +581,6 @@
     postId,
     commentId
   ) {
-
     const post = getPost(postId);
 
     if (!post) return false;
@@ -838,7 +601,6 @@
     };
 
     if (!liked && comment.myReaction) {
-
       reactionCounts[comment.myReaction] = Math.max(
         0,
         Number(
@@ -848,16 +610,12 @@
     }
 
     comments[index] = {
-
       ...comment,
       liked,
-
       myReaction: liked
         ? (comment.myReaction || "")
         : "",
-
       reactionCounts,
-
       likes: Math.max(
         0,
         Number(comment.likes || 0) +
@@ -883,7 +641,6 @@
     commentId,
     emoji
   ) {
-
     const allowedReactions = [
       "🌹",
       "😘",
@@ -924,7 +681,6 @@
     );
 
     if (previousReaction === emoji) {
-
       reactionCounts[emoji] = Math.max(
         0,
         Number(reactionCounts[emoji] || 0) - 1
@@ -939,11 +695,8 @@
         reactionCounts,
         likes
       };
-
     } else {
-
       if (previousReaction) {
-
         reactionCounts[previousReaction] = Math.max(
           0,
           Number(
@@ -990,67 +743,15 @@
      STORIES
   ======================================================= */
 
-  /*
-   * Permanently remove expired and invalid-expiry stories.
-   * No write/event is triggered when nothing needs cleanup.
-   */
-
-  function pruneExpiredStories() {
-
-    const now = Date.now();
-
-    const stories = isArray(
-      read(STORAGE.stories, [])
-    );
-
-    const activeStories = stories.filter(story => {
-
-      if (!story.expiresAt) return true;
-
-      const expiry = new Date(
-        story.expiresAt
-      ).getTime();
-
-      return Number.isFinite(expiry) &&
-        expiry > now;
-    });
-
-    if (activeStories.length === stories.length) {
-      return false;
-    }
-
-    return saveCollection(
-      STORAGE.stories,
-      activeStories,
-      "expire",
-      {
-        removedCount:
-          stories.length - activeStories.length
-      }
-    );
-  }
-
   function getStories(includeExpired = false) {
-
-    if (!includeExpired) {
-      pruneExpiredStories();
-    }
-
     const now = Date.now();
 
     return isArray(read(STORAGE.stories, []))
-      .filter(story => {
-
+  .filter(story => {
         if (includeExpired) return true;
 
-        if (!story.expiresAt) return true;
-
-        const expiry = new Date(
-          story.expiresAt
-        ).getTime();
-
-        return Number.isFinite(expiry) &&
-          expiry > now;
+        return !story.expiresAt ||
+          new Date(story.expiresAt).getTime() > now;
       })
       .sort((a, b) =>
         new Date(b.createdAt || 0) -
@@ -1059,7 +760,6 @@
   }
 
   function addStory(story = {}) {
-
     if (!story || typeof story !== "object") {
       return false;
     }
@@ -1067,14 +767,10 @@
     const now = Date.now();
 
     const item = {
-
       ...clone(story),
-
       id: story.id || makeId("story"),
-
       createdAt: story.createdAt ||
         new Date(now).toISOString(),
-
       expiresAt: story.expiresAt ||
         new Date(
           now + 24 * 60 * 60 * 1000
@@ -1089,11 +785,7 @@
       return false;
     }
 
-    // Remove expired Stories before adding a new one.
-    pruneExpiredStories();
-
     const stories = getStories(true);
-
     stories.unshift(item);
 
     if (!saveCollection(
@@ -1109,11 +801,7 @@
   }
 
   function deleteStory(storyId) {
-
     const id = String(storyId || "");
-
-    pruneExpiredStories();
-
     const stories = getStories(true);
 
     const next = stories.filter(
@@ -1137,14 +825,12 @@
   ======================================================= */
 
   function getFriends() {
-
     return isArray(
       read(STORAGE.friends, [])
     );
   }
 
   function addFriend(friend) {
-
     const item = typeof friend === "string"
       ? {
           name: cleanText(friend, 60)
@@ -1165,17 +851,12 @@
     if (duplicate) return false;
 
     const newFriend = {
-
       ...item,
-
       id: item.id || makeId("friend"),
-
       name,
-
       avatar: item.avatar ||
         item.initial ||
         name.charAt(0),
-
       createdAt: item.createdAt ||
         new Date().toISOString()
     };
@@ -1198,7 +879,6 @@
     friendId,
     changes = {}
   ) {
-
     const id = String(friendId || "");
     const friends = getFriends();
 
@@ -1223,7 +903,6 @@
   }
 
   function removeFriend(friendId) {
-
     const id = String(friendId || "");
     const friends = getFriends();
 
@@ -1248,7 +927,6 @@
   ======================================================= */
 
   function getProfile() {
-
     const profile = read(
       STORAGE.profile,
       DEFAULT_PROFILE
@@ -1263,7 +941,6 @@
   }
 
   function saveProfile(profile = {}) {
-
     if (!profile || typeof profile !== "object") {
       return false;
     }
@@ -1324,7 +1001,6 @@
   ======================================================= */
 
   function getMessages() {
-
     return isArray(
       read(STORAGE.messages, [])
     ).sort((a, b) =>
@@ -1334,17 +1010,14 @@
   }
 
   function getChats() {
-
     const storedChats = isArray(
       read(STORAGE.chats, [])
     );
 
     const messages = getMessages();
-
     const chatsById = new Map();
 
     storedChats.forEach(chat => {
-
       chatsById.set(String(chat.id), {
         ...chat,
         messages: isArray(chat.messages)
@@ -1352,21 +1025,17 @@
     });
 
     messages.forEach(message => {
-
       const chatId = String(
         message.chatId || "general"
       );
 
       if (!chatsById.has(chatId)) {
-
         chatsById.set(chatId, {
-
           id: chatId,
           userId: message.userId || "",
           name: message.sender || "सन्देश",
           avatar: message.avatar || "",
           messages: []
-
         });
       }
 
@@ -1378,14 +1047,10 @@
       );
 
       if (!exists) {
-
         chat.messages.push({
-
           ...message,
-
           text: message.text || "",
           fromMe: Boolean(message.fromMe),
-
           time: message.time ||
             message.createdAt ||
             Date.now()
@@ -1393,52 +1058,16 @@
       }
     });
 
-    /*
-     * Legacy migration:
-     * Older versions could store messages without a chat record.
-     * Persist the reconstructed chat shell once so the old
-     * conversation remains usable and future sends can validate it.
-     */
-
-    const reconstructedChats = [
-      ...chatsById.values()
-    ];
-
-    const knownChatIds = new Set(
-      storedChats.map(chat => String(chat.id))
-    );
-
-    const missingChats = reconstructedChats
-      .filter(chat =>
-        !knownChatIds.has(String(chat.id))
-      )
-      .map(chat => ({
-        ...chat,
-        messages: []
-      }));
-
-    if (missingChats.length) {
-
-      write(
-        STORAGE.chats,
-        [...storedChats, ...missingChats]
-      );
-    }
-
-    return reconstructedChats.map(chat => ({
-
+    return [...chatsById.values()].map(chat => ({
       ...chat,
-
       messages: chat.messages.sort((a, b) =>
         new Date(a.time || a.createdAt || 0) -
         new Date(b.time || b.createdAt || 0)
       )
-
     }));
   }
 
   function createChat(friend = {}) {
-
     if (!friend || typeof friend !== "object") {
       return false;
     }
@@ -1452,22 +1081,16 @@
     if (existing) return existing.id;
 
     const chat = {
-
       id: makeId("chat"),
-
       userId: friend.id || "",
-
       name: cleanText(
         friend.name || "साथी",
         60
       ),
-
       avatar: friend.avatar ||
         friend.initial ||
         "",
-
       messages: [],
-
       createdAt: new Date().toISOString()
     };
 
@@ -1494,61 +1117,25 @@
     message,
     options = {}
   ) {
-
     const id = String(chatId || "");
 
-    options = isPlainObject(options)
-      ? options
-      : {};
-
-    const text = message && typeof message === "object"
+    const text = typeof message === "object"
       ? cleanText(message.text, 2000)
       : cleanText(message, 2000);
 
     if (!id || !text) return false;
 
-    /*
-     * A message may only be stored inside an existing chat.
-     * This prevents accidental orphan messages.
-     */
-
-    const storedChats = isArray(
-      read(STORAGE.chats, [])
-    );
-
-    const chatExists = storedChats.some(
-      chat => String(chat.id) === id
-    );
-
-    if (!chatExists) {
-
-      console.warn(
-        "KSK message rejected: chat does not exist.",
-        id
-      );
-
-      return false;
-    }
-
     const item = {
-
       id: makeId("message"),
-
       chatId: id,
-
       sender: options.sender || "",
-
       text,
-
       fromMe: options.fromMe !== false,
-
       createdAt: new Date().toISOString(),
-
       time: Date.now()
     };
 
     const messages = getMessages();
-
     messages.push(item);
 
     if (!saveCollection(
@@ -1568,7 +1155,6 @@
   ======================================================= */
 
   function getNotifications() {
-
     return isArray(
       read(STORAGE.notifications, [])
     ).sort((a, b) =>
@@ -1578,7 +1164,6 @@
   }
 
   function addNotification(notification = {}) {
-
     if (
       !notification ||
       typeof notification !== "object"
@@ -1587,29 +1172,22 @@
     }
 
     const item = {
-
       ...clone(notification),
-
       id: notification.id ||
         makeId("notification"),
-
       text: cleanText(
         notification.text,
         500
       ),
-
       read: Boolean(notification.read),
-
       createdAt: notification.createdAt ||
         new Date().toISOString(),
-
       time: notification.time || Date.now()
     };
 
     if (!item.text) return false;
 
     const notifications = getNotifications();
-
     notifications.unshift(item);
 
     if (!saveCollection(
@@ -1625,7 +1203,6 @@
   }
 
   function markNotificationsRead() {
-
     const notifications = getNotifications().map(
       item => ({
         ...item,
@@ -1641,7 +1218,6 @@
   }
 
   function getUnreadNotificationCount() {
-
     return getNotifications().filter(
       item => !item.read
     ).length;
@@ -1652,14 +1228,12 @@
   ======================================================= */
 
   function getSavedPosts() {
-
     return isArray(
       read(STORAGE.saved, [])
     );
   }
 
   function savePost(postId) {
-
     const id = String(postId || "");
 
     if (!id) return false;
@@ -1683,7 +1257,6 @@
   }
 
   function unsavePost(postId) {
-
     const id = String(postId || "");
     const saved = getSavedPosts();
 
@@ -1704,38 +1277,34 @@
   }
 
   function toggleSavedPost(postId) {
+  const id = String(postId || "");
 
-    const id = String(postId || "");
+  if (!id) return false;
 
-    if (!id) return false;
+  const exists = getSavedPosts().some(
+    item => String(item) === id
+  );
 
-    const exists = getSavedPosts().some(
-      item => String(item) === id
-    );
-
-    if (exists) {
-      unsavePost(id);
-    } else {
-      savePost(id);
-    }
-
-    return getSavedPosts().some(
-      item => String(item) === id
-    );
+  if (exists) {
+    unsavePost(id);
+  } else {
+    savePost(id);
   }
+
+  // सफलतापछि मात्र होइन, वास्तविक storage अवस्था जाँच्ने
+  return getSavedPosts().some(
+    item => String(item) === id
+  );
+}
 
   /* =======================================================
      INITIALIZATION
   ======================================================= */
 
   function initialize() {
-
     if (initialized) return true;
 
     initialized = true;
-
-    // Clean expired Stories immediately when the data layer starts.
-    pruneExpiredStories();
 
     global.dispatchEvent(
       new CustomEvent("ksk:data-ready", {
@@ -1753,7 +1322,6 @@
   ======================================================= */
 
   const api = Object.freeze({
-
     initialize,
     subscribe,
 
@@ -1814,15 +1382,12 @@
   global.KSKData = api;
 
   if (document.readyState === "loading") {
-
     document.addEventListener(
       "DOMContentLoaded",
       initialize,
       { once: true }
     );
-
   } else {
-
     initialize();
   }
 
