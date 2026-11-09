@@ -8,6 +8,7 @@
  *
  * RESPONSIBILITY:
  * - Refresh only the page affected by data changes.
+ * - Avoid unnecessary Home Feed rendering.
  *
  * DATA STORAGE:
  * - Owned by core/data.js
@@ -124,12 +125,78 @@
   }
 
   /* =======================================================
+     COMMENT COUNT UPDATE
+     Update only the affected post card.
+  ======================================================= */
+
+  function refreshPostCommentCount(postId) {
+    const id = String(postId || "");
+
+    if (!id) return false;
+
+    const document = global.document;
+
+    if (!document) return false;
+
+    const cards = document.querySelectorAll(
+      ".post-card[data-post-id]"
+    );
+
+    let card = null;
+
+    for (const item of cards) {
+      if (
+        String(item.getAttribute("data-post-id")) === id
+      ) {
+        card = item;
+        break;
+      }
+    }
+
+    if (!card) return false;
+
+    const button = card.querySelector(
+      '[data-post-action="comment"]'
+    );
+
+    if (!button) return false;
+
+    const post = global.KSKData?.getPost?.(id);
+
+    if (!post) return false;
+
+    const count = Array.isArray(post.comments)
+      ? post.comments.length
+      : 0;
+
+    /*
+     * Preserve the existing language and label.
+     * Replace only the trailing comment count.
+     */
+
+    const currentText = button.textContent || "";
+
+    const label = currentText
+      .replace(/\s*\(\d+\)\s*$/, "")
+      .trim();
+
+    button.textContent = count
+      ? `${label} (${count})`
+      : label;
+
+    return true;
+  }
+
+  /* =======================================================
      DATA CHANGE HANDLER
   ======================================================= */
 
   function handleDataChange(event) {
-    const collection =
-      event?.detail?.collection || "";
+    const detail = event?.detail || {};
+
+    const collection = detail.collection || "";
+    const action = String(detail.action || "");
+    const item = detail.item || {};
 
     const name = getCollectionName(collection);
 
@@ -141,13 +208,75 @@
 
     /* ---------------------------------------------------
        POSTS
-       Home     : Feed only
-       Profile  : Current page
-       Saved    : Current page
+
+       Home:
+       - Comment add/reply: Update count only.
+       - Comment update/like/reaction: No feed refresh.
+       - Other post changes: Refresh feed.
+
+       Profile / Saved:
+       - Refresh current page.
     --------------------------------------------------- */
 
     if (isPostsCollection(name)) {
+
       if (currentPage === "home") {
+
+        /*
+         * Adding a comment or reply changes only
+         * the comment count displayed on the card.
+         */
+
+        if (
+          action === "comment-add" ||
+          action === "reply-add"
+        ) {
+          const updated = refreshPostCommentCount(
+            item.postId
+          );
+
+          /*
+           * If the post card is not mounted,
+           * safely fall back to the full feed refresh.
+           */
+
+          return updated
+            ? true
+            : refreshHomeFeed();
+        }
+
+        /*
+         * Editing, liking or reacting to a comment
+         * does not change the post card.
+         *
+         * The comments modal handles its own rendering.
+         */
+
+        if (
+          action === "comment-update" ||
+          action === "comment-like" ||
+          action === "comment-reaction"
+        ) {
+          return true;
+        }
+
+        /*
+         * Comment deletion currently does not include
+         * postId in its event item.
+         *
+         * Keep the safe full refresh until that event
+         * provides the affected post ID.
+         */
+
+        if (action === "comment-delete") {
+          return refreshHomeFeed();
+        }
+
+        /*
+         * All other post changes retain
+         * the existing refresh behavior.
+         */
+
         return refreshHomeFeed();
       }
 
@@ -163,7 +292,7 @@
 
     /* ---------------------------------------------------
        STORIES
-       Home only : Stories only
+       Home only: Stories only
     --------------------------------------------------- */
 
     if (isStoriesCollection(name)) {
@@ -212,9 +341,15 @@
 
     /* ---------------------------------------------------
        SAVED POSTS
-       Home     : Feed refresh updates Save button
-       Profile  : Profile refresh updates Save button
-       Saved    : Saved list refreshes
+
+       Home:
+       - Refresh feed to update Save button.
+
+       Profile:
+       - Refresh current page.
+
+       Saved:
+       - Refresh saved list.
     --------------------------------------------------- */
 
     if (isSavedCollection(name)) {
