@@ -96,23 +96,43 @@
   }
 
   /*
-   * Update application state.
+   * UPDATE APPLICATION STATE
+   *
    * Preference changes are forwarded to KSKSettings.
+   *
+   * IMPORTANT:
+   * State changes are accepted only after
+   * successful settings persistence.
    */
 
-  function setState(updates = {}, changeName = "state-change") {
-    if (!isObject(updates)) return false;
+  function setState(
+    updates = {},
+    changeName = "state-change"
+  ) {
+    if (!isObject(updates)) {
+      return false;
+    }
 
     let changed = false;
 
     const preferenceUpdates = {};
 
-    if (Object.prototype.hasOwnProperty.call(updates, "theme")) {
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "theme"
+      )
+    ) {
       preferenceUpdates.theme =
         updates.theme === "dark" ? "dark" : "light";
     }
 
-    if (Object.prototype.hasOwnProperty.call(updates, "language")) {
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "language"
+      )
+    ) {
       preferenceUpdates.language =
         updates.language === "en" ? "en" : "ne";
     }
@@ -139,8 +159,18 @@
       }
     }
 
+    /*
+     * PERSISTENT SETTINGS UPDATE
+     *
+     * Do not report success unless KSKSettings
+     * confirms that settings were saved.
+     */
+
     if (Object.keys(preferenceUpdates).length) {
-      if (!global.KSKSettings?.updateSettings) {
+      if (
+        typeof global.KSKSettings?.updateSettings !==
+        "function"
+      ) {
         console.error(
           "KSKState: KSKSettings is not available."
         );
@@ -148,12 +178,45 @@
         return false;
       }
 
-      global.KSKSettings.updateSettings(
-        preferenceUpdates
-      );
+      let settingsResult;
+
+      try {
+        settingsResult =
+          global.KSKSettings.updateSettings(
+            preferenceUpdates
+          );
+      } catch (error) {
+        console.error(
+          "KSKState: Settings update failed.",
+          error
+        );
+
+        return false;
+      }
+
+      /*
+       * KSKSettings.updateSettings()
+       * returns false when persistence fails.
+       * Successful updates return settings object.
+       */
+
+      if (
+        settingsResult === false ||
+        !isObject(settingsResult)
+      ) {
+        console.error(
+          "KSKState: Settings were not saved. State update cancelled."
+        );
+
+        return false;
+      }
 
       changed = true;
     }
+
+    /*
+     * TEMPORARY APPLICATION STATE
+     */
 
     if (
       Object.prototype.hasOwnProperty.call(
@@ -199,12 +262,18 @@
       changed = true;
     }
 
-    if (!changed) return false;
+    if (!changed) {
+      return false;
+    }
 
     notify(changeName);
 
     return true;
   }
+
+  /*
+   * SUBSCRIBE TO STATE CHANGES
+   */
 
   function subscribe(listener) {
     if (typeof listener !== "function") {
@@ -220,8 +289,17 @@
     };
   }
 
+  /*
+   * THEME
+   */
+
   function setTheme(value) {
-    if (!global.KSKSettings?.updateSetting) return false;
+    if (
+      typeof global.KSKSettings?.updateSetting !==
+      "function"
+    ) {
+      return false;
+    }
 
     return global.KSKSettings.updateSetting(
       "theme",
@@ -229,8 +307,17 @@
     );
   }
 
+  /*
+   * LANGUAGE
+   */
+
   function setLanguage(value) {
-    if (!global.KSKSettings?.updateSetting) return false;
+    if (
+      typeof global.KSKSettings?.updateSetting !==
+      "function"
+    ) {
+      return false;
+    }
 
     return global.KSKSettings.updateSetting(
       "language",
@@ -238,20 +325,35 @@
     );
   }
 
-  function setCurrentPage(page) {
-    return setState({
-      currentPage: page
-    }, "page-change");
-  }
+  /*
+   * PAGE
+   */
 
-  function setSearchQuery(query) {
-    return setState({
-      searchQuery: query
-    }, "search-change");
+  function setCurrentPage(page) {
+    return setState(
+      {
+        currentPage: page
+      },
+      "page-change"
+    );
   }
 
   /*
-   * Resets temporary application state only.
+   * SEARCH
+   */
+
+  function setSearchQuery(query) {
+    return setState(
+      {
+        searchQuery: query
+      },
+      "search-change"
+    );
+  }
+
+  /*
+   * RESET TEMPORARY APPLICATION STATE
+   *
    * Saved user preferences remain unchanged.
    */
 
@@ -264,6 +366,10 @@
 
     return getState();
   }
+
+  /*
+   * PUBLIC API
+   */
 
   global.KSKState = Object.freeze({
     get state() {
