@@ -391,50 +391,133 @@
   <!-- MAIN APPLICATION -->
   <script src="app.js"></script>
 
-  <!-- SERVICE WORKER REGISTRATION -->
-  <script>
-    (function () {
-      "use strict";
+<!-- SERVICE WORKER REGISTRATION + UPDATE DETECTION -->
+<script>
+(function () {
+  "use strict";
 
-      if (!("serviceWorker" in navigator)) {
-        console.warn(
-          "Service Worker is not supported by this browser."
-        );
+  if (!("serviceWorker" in navigator)) {
+    console.warn("Service Worker is not supported.");
+    return;
+  }
+
+  var hadController = !!navigator.serviceWorker.controller;
+  var reloadPromptShown = false;
+
+  /*
+   * नयाँ Service Worker ले नियन्त्रण लिएपछि
+   * पुरानो पेज Reload गर्ने विकल्प दिने।
+   */
+  navigator.serviceWorker.addEventListener(
+    "controllerchange",
+    function () {
+      if (!hadController || reloadPromptShown) {
         return;
       }
 
-      window.addEventListener("load", function () {
+      reloadPromptShown = true;
 
-        navigator.serviceWorker.register("./sw.js", {
-          scope: "./"
-        })
-        .then(function (registration) {
+      var shouldReload = window.confirm(
+        "हाम्रो संसारको नयाँ संस्करण उपलब्ध भयो।\n\n" +
+        "नयाँ संस्करण प्रयोग गर्न अहिले Reload गर्ने?"
+      );
 
-          console.info(
-            "Hamro Sansar Service Worker registered.",
-            registration.scope
+      if (shouldReload) {
+        window.location.reload();
+      } else {
+        console.info(
+          "नयाँ संस्करण सक्रिय भयो। पेज पछि Reload गर्न सकिन्छ।"
+        );
+      }
+    }
+  );
+
+  window.addEventListener("load", function () {
+
+    navigator.serviceWorker.register("./sw.js", {
+      scope: "./"
+    })
+
+    .then(function (registration) {
+
+      console.info(
+        "Hamro Sansar Service Worker registered:",
+        registration.scope
+      );
+
+      /*
+       * नयाँ Worker फेला परेमा Update Detection।
+       */
+      registration.addEventListener(
+        "updatefound",
+        function () {
+
+          var newWorker = registration.installing;
+
+          if (!newWorker) {
+            return;
+          }
+
+          console.info("नयाँ Service Worker भेटियो।");
+
+          newWorker.addEventListener(
+            "statechange",
+            function () {
+
+              console.info(
+                "Service Worker state:",
+                newWorker.state
+              );
+
+              if (
+                newWorker.state === "installed" &&
+                navigator.serviceWorker.controller
+              ) {
+                console.info(
+                  "नयाँ संस्करण Install भयो।"
+                );
+              }
+
+            }
           );
 
-          registration.update().catch(function (error) {
-            console.warn(
-              "Service Worker update check failed:",
-              error
-            );
-          });
+        }
+      );
 
-        })
-        .catch(function (error) {
+      /*
+       * GitHub Pages बाट नयाँ संस्करण जाँच।
+       */
+      registration.update().then(function () {
 
-          console.error(
-            "Service Worker registration failed:",
-            error
-          );
+        console.info(
+          "Service Worker update check completed."
+        );
 
-        });
+      }).catch(function (error) {
 
-      }, { once: true });
-    })();
-  </script>
+        console.warn(
+          "Service Worker update check failed:",
+          error
+        );
+
+      });
+
+    })
+
+    .catch(function (error) {
+
+      console.error(
+        "Service Worker registration failed:",
+        error
+      );
+
+    });
+
+  }, { once: true });
+
+})();
+</script>
+
 
 </body>
 </html>
