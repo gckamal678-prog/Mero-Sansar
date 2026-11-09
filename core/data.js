@@ -746,8 +746,8 @@
   function getStories(includeExpired = false) {
     const now = Date.now();
 
-    return read(STORAGE.stories, [])
-      .filter(story => {
+    return isArray(read(STORAGE.stories, []))
+  .filter(story => {
         if (includeExpired) return true;
 
         return !story.expiresAt ||
