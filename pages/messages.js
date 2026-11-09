@@ -471,51 +471,6 @@
   }
 
   /* =======================================================
-     SEND MESSAGE
-  ======================================================= */
-
-  function sendMessage(event) {
-    event?.preventDefault?.();
-
-    if (!activeChatId) return false;
-
-    const form = event?.target ||
-      document.getElementById("kskMessageForm");
-
-    const input = form?.querySelector("#kskMessageInput");
-
-    const message = input?.value.trim();
-
-    if (!message) return false;
-
-    const result = DATA()?.sendMessage?.(
-      activeChatId,
-      message,
-      {
-        sender: displayName(),
-        fromMe: true
-      }
-    );
-
-    if (!result) {
-      showToast(
-        isEnglish()
-          ? "Message could not be sent."
-          : "सन्देश पठाउन सकिएन।",
-        "error"
-      );
-
-      return false;
-    }
-
-    document
-      .getElementById("kskMessageInput")
-      ?.focus();
-
-    return true;
-  }
-
-  /* =======================================================
      CLICK EVENTS
   ======================================================= */
 
