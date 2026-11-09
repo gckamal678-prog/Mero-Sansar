@@ -1202,27 +1202,31 @@
     return clone(item);
   }
 
-  function markNotificationsRead() {
-    const notifications = getNotifications().map(
-      item => ({
-        ...item,
-        read: true
-      })
-    );
+  function markNotificationsRead(options = {}) {
+  const notifications = getNotifications();
 
-    return saveCollection(
-      STORAGE.notifications,
-      notifications,
-      "mark-read"
-    );
+  // सबै सूचना पहिले नै पढिएको भए फेरि लेख्नुपर्दैन।
+  if (!notifications.some(item => !item.read)) {
+    return true;
   }
 
-  function getUnreadNotificationCount() {
-    return getNotifications().filter(
-      item => !item.read
-    ).length;
+  const updated = notifications.map(item => ({
+    ...item,
+    read: true
+  }));
+
+  // Navigation आफैँले पेज Refresh गर्ने भएकाले
+  // त्यस्तो अवस्थामा अर्को Event नपठाउने।
+  if (options?.silent === true) {
+    return write(STORAGE.notifications, updated);
   }
 
+  return saveCollection(
+    STORAGE.notifications,
+    updated,
+    "mark-read"
+  );
+}
   /* =======================================================
      SAVED POSTS
   ======================================================= */
