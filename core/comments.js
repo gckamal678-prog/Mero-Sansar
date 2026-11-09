@@ -787,66 +787,119 @@
   }
 
   function removeComment(commentId) {
-    if (deletingComment) return;
+  if (deletingComment) return;
 
-    const confirmed = global.confirm(
-      t(
-        "यो टिप्पणी र यसका सबै जवाफ मेटाउने हो?",
-        "Delete this comment and all its replies?"
-      )
+  const confirmed = global.confirm(
+    t(
+      "यो टिप्पणी र यसका सबै जवाफ मेटाउने हो?",
+      "Delete this comment and all its replies?"
+    )
+  );
+
+  if (!confirmed) return;
+
+  deletingComment = true;
+
+  try {
+    /*
+     * Collect the selected comment and all descendant
+     * reply IDs before deleting them.
+     *
+     * This prevents stale reply/edit targets.
+     */
+    const deletedIds = new Set([
+      String(commentId)
+    ]);
+
+    const commentsBeforeDelete = getComments();
+
+    let foundDescendant = true;
+
+    while (foundDescendant) {
+      foundDescendant = false;
+
+      commentsBeforeDelete.forEach(comment => {
+        const currentId = String(comment.id);
+        const parentId = String(comment.parentId || "");
+
+        if (
+          parentId &&
+          deletedIds.has(parentId) &&
+          !deletedIds.has(currentId)
+        ) {
+          deletedIds.add(currentId);
+          foundDescendant = true;
+        }
+      });
+    }
+
+    // Delete the comment and its replies.
+    const result = data()?.deleteComment?.(
+      activePostId,
+      commentId
     );
 
-    if (!confirmed) return;
-
-    deletingComment = true;
-
-    try {
-      const result = data()?.deleteComment?.(
-        activePostId,
-        commentId
-      );
-
-      if (!result) {
-        toast(
-          t(
-            "टिप्पणी मेटाउन सकिएन।",
-            "Could not delete comment."
-          ),
-          "error"
-        );
-        return;
-      }
-
-      if (String(replyTarget) === String(commentId)) {
-        replyTarget = null;
-      }
-
-      if (String(editTarget) === String(commentId)) {
-        editTarget = null;
-      }
-
-      toast(
-        t("टिप्पणी मेटाइयो।", "Comment deleted."),
-        "success"
-      );
-
-      renderModal();
-
-    } catch (error) {
-      console.error("KSK comment delete failed:", error);
-
+    if (!result) {
       toast(
         t(
-          "टिप्पणी मेटाउँदा समस्या आयो।",
-          "An error occurred while deleting the comment."
+          "टिप्पणी मेटाउन सकिएन।",
+          "Could not delete comment."
         ),
         "error"
       );
-
-    } finally {
-      deletingComment = false;
+      return;
     }
+
+    /*
+     * Clear reply target if it belongs to
+     * the deleted comment or any deleted reply.
+     */
+    if (
+      replyTarget !== null &&
+      deletedIds.has(String(replyTarget))
+    ) {
+      replyTarget = null;
+    }
+
+    /*
+     * Clear edit target if it belongs to
+     * the deleted comment or any deleted reply.
+     */
+    if (
+      editTarget !== null &&
+      deletedIds.has(String(editTarget))
+    ) {
+      editTarget = null;
+    }
+
+    toast(
+      t(
+        "टिप्पणी मेटाइयो।",
+        "Comment deleted."
+      ),
+      "success"
+    );
+
+    renderModal();
+
+  } catch (error) {
+    console.error(
+      "KSK comment delete failed:",
+      error
+    );
+
+    toast(
+      t(
+        "टिप्पणी मेटाउँदा समस्या आयो।",
+        "An error occurred while deleting the comment."
+      ),
+      "error"
+    );
+
+  } finally {
+    deletingComment = false;
   }
+}
 
   /* =========================================
      MODAL EVENT BINDING
