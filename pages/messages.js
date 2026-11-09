@@ -415,36 +415,49 @@
   }
 
   /* =======================================================
-     OPEN FRIEND CHAT
+     SEND MESSAGE
   ======================================================= */
 
-  function openFriendChat(friendId) {
-    const id = String(friendId || "");
+  function sendMessage(event) {
+    event?.preventDefault?.();
 
-    if (!id) return false;
+    if (!activeChatId) return false;
 
-    const friend = getFriends().find(item =>
-      String(item.id) === id
+    const form = event?.target ||
+      document.getElementById("kskMessageForm");
+
+    const input = form?.querySelector("#kskMessageInput");
+
+    const message = input?.value.trim();
+
+    if (!message) return false;
+
+    const result = DATA()?.sendMessage?.(
+      activeChatId,
+      message,
+      {
+        sender: displayName(),
+        fromMe: true
+      }
     );
 
-    if (!friend) return false;
-
-    const chatId = DATA()?.createChat?.(friend);
-
-    if (!chatId) {
+    if (!result) {
       showToast(
         isEnglish()
-          ? "Could not open conversation."
-          : "कुराकानी खोल्न सकिएन।",
+          ? "Message could not be sent."
+          : "सन्देश पठाउन सकिएन।",
         "error"
       );
 
       return false;
     }
 
-    return openChat(chatId);
-  }
+    document
+      .getElementById("kskMessageInput")
+      ?.focus();
 
+    return true;
+  }
   /* =======================================================
      CLOSE CHAT
   ======================================================= */
