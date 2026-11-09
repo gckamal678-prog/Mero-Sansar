@@ -3,43 +3,41 @@
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v7
+   Version: v8
 
-   Features:
-   - Complete application precache
+   FEATURES:
+   - Individual file caching
+   - Automatic asset discovery from index.html
    - Offline application support
    - Network-first strategy
-   - Offline navigation fallback
-   - Automatic cache version cleanup
+   - Old cache fallback during installation
+   - Safe cache migration
+   - Automatic old cache cleanup
    - GitHub Pages subdirectory support
+   - Runtime caching
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v7";
+const CACHE_NAME = "hamro-sansar-v8";
 const CACHE_PREFIX = "hamro-sansar-";
 
 /* =========================================================
-   APPLICATION FILES
-   Only existing project files are included.
+   KNOWN APPLICATION FILES
+
+   These are supplementary files.
+   Files referenced by index.html are discovered
+   automatically during installation.
 ========================================================= */
 
 const APP_FILES = [
 
-    /* Main files */
   "./index.html",
   "./app.css",
   "./core/comments.css",
   "./app.js",
-  "./core/app-events.js",
-  "./core/search.js",
-  "./core/ui-actions.js",
-  "./core/data-refresh.js",
   "./manifest.json",
   "./Nepal.jpg",
 
-  /* Design system */
-  "./core/design-system.css",
-
-  /* Core systems */
+  /* Core */
   "./core/state.js",
   "./core/settings.js",
   "./core/theme.js",
@@ -51,13 +49,13 @@ const APP_FILES = [
   "./core/data.js",
   "./core/navigation.js",
 
-  /* Post features */
+  /* Features */
   "./core/post-actions.js",
   "./core/comments.js",
   "./core/reactions.js",
   "./core/share.js",
 
-  /* UI modules */
+  /* UI */
   "./core/settings-ui.js",
   "./core/media-ui.js",
   "./core/profile-media.js",
@@ -69,19 +67,257 @@ const APP_FILES = [
   "./components/post-card.js",
 
   /* Pages */
-  /* Pages */
-"./pages/home.js",
-"./pages/friends.js",
-"./pages/messages.js",
+  "./pages/home.js",
+  "./pages/friends.js",
+  "./pages/messages.js",
   "./pages/profile.js",
   "./pages/notifications.js",
   "./pages/saved.js",
-  "./pages/settings.js"
+  "./pages/settings.js",
+
+  /* Application systems */
+  "./core/app-events.js",
+  "./core/search.js",
+  "./core/ui-actions.js",
+  "./core/data-refresh.js",
+
+  /* Design */
+  "./core/design-system.css"
 
 ];
 
 /* =========================================================
+   HELPERS
+========================================================= */
+
+function getAppURL(path) {
+
+  return new URL(
+    path,
+    self.registration.scope
+  );
+
+}
+
+function isAppURL(url) {
+
+  const scope = new URL(
+    self.registration.scope
+  );
+
+  return (
+    url.origin === scope.origin &&
+    url.pathname.startsWith(scope.pathname)
+  );
+
+}
+
+/* =========================================================
+   AUTOMATIC ASSET DISCOVERY
+
+   Read local CSS, JS, image and manifest references
+   directly from index.html.
+
+   Newly added script/link files in index.html
+   do not need manual addition to APP_FILES.
+========================================================= */
+
+function discoverAssets(html) {
+
+  const discovered = new Set();
+
+  const pattern =
+    /\b(?:src|href)\s*=\s*["']([^"']+)["']/gi;
+
+  let match;
+
+  while ((match = pattern.exec(html)) !== null) {
+
+    const value = match[1].trim();
+
+    if (
+      !value ||
+      value.startsWith("#") ||
+      /^(data:|blob:|javascript:|mailto:|tel:)/i.test(value)
+    ) {
+      continue;
+    }
+
+    try {
+
+      const url = new URL(
+        value,
+        self.registration.scope
+      );
+
+      if (
+        isAppURL(url) &&
+        !url.pathname.endsWith("/")
+      ) {
+
+        discovered.add(url.href);
+
+      }
+
+    } catch (error) {
+
+      console.warn(
+        "Invalid application asset:",
+        value
+      );
+
+    }
+
+  }
+
+  return Array.from(discovered);
+
+}
+
+/* =========================================================
+   OLD CACHE FALLBACK
+
+   If a new file cannot be downloaded,
+   try retrieving it from an older application cache.
+========================================================= */
+
+async function getOldCachedFile(url, oldCacheNames) {
+
+  for (const name of oldCacheNames) {
+
+    try {
+
+      const oldCache = await caches.open(name);
+
+      const response = await oldCache.match(url);
+
+      if (response) {
+
+        return response;
+
+      }
+
+    } catch (error) {
+
+      console.warn(
+        "Old cache lookup failed:",
+        name,
+        error
+      );
+
+    }
+
+  }
+
+  return null;
+
+}
+
+/* =========================================================
+   CACHE SINGLE FILE
+
+   Each file is handled independently.
+
+   One missing optional file will not cancel
+   the complete installation.
+========================================================= */
+
+async function cacheSingleFile(
+  cache,
+  url,
+  oldCacheNames
+) {
+
+  try {
+
+    const response = await fetch(
+      new Request(url, {
+        method: "GET",
+        cache: "reload",
+        credentials: "same-origin"
+      })
+    );
+
+    if (
+      !response.ok ||
+      response.type !== "basic"
+    ) {
+
+      throw new Error(
+        "Invalid response: " + response.status
+      );
+
+    }
+
+    await cache.put(
+      url,
+      response.clone()
+    );
+
+    return true;
+
+  } catch (networkError) {
+
+    console.warn(
+      "Network caching failed:",
+      url
+    );
+
+    /* Try old cache */
+
+    const oldResponse = await getOldCachedFile(
+      url,
+      oldCacheNames
+    );
+
+    if (oldResponse) {
+
+      try {
+
+        await cache.put(
+          url,
+          oldResponse.clone()
+        );
+
+        console.info(
+          "Restored from old cache:",
+          url
+        );
+
+        return true;
+
+      } catch (cacheError) {
+
+        console.error(
+          "Old cache restoration failed:",
+          url,
+          cacheError
+        );
+
+      }
+
+    }
+
+    console.warn(
+      "File unavailable for offline use:",
+      url
+    );
+
+    return false;
+
+  }
+
+}
+
+/* =========================================================
    INSTALL
+
+   1. Read old cache names.
+   2. Download index.html first.
+   3. Discover referenced application files.
+   4. Cache files individually.
+   5. Preserve old cache as fallback.
+   6. Activate only when index.html is available.
 ========================================================= */
 
 self.addEventListener("install", event => {
@@ -90,25 +326,114 @@ self.addEventListener("install", event => {
 
     (async () => {
 
-      const cache = await caches.open(CACHE_NAME);
+      const cache = await caches.open(
+        CACHE_NAME
+      );
+
+      const cacheNames = await caches.keys();
+
+      const oldCacheNames = cacheNames.filter(
+        name =>
+          name.startsWith(CACHE_PREFIX) &&
+          name !== CACHE_NAME
+      );
+
+      const indexURL = getAppURL(
+        "./index.html"
+      ).href;
+
+      /* Cache main application first */
+
+      const indexReady = await cacheSingleFile(
+        cache,
+        indexURL,
+        oldCacheNames
+      );
+
+      if (!indexReady) {
+
+        throw new Error(
+          "Installation stopped: index.html is unavailable."
+        );
+
+      }
+
+      /* Read cached HTML */
+
+      const indexResponse = await cache.match(
+        indexURL
+      );
+
+      const html = await indexResponse.text();
+
+      /* Discover new assets automatically */
+
+      const discoveredFiles = discoverAssets(
+        html
+      );
+
+      /* Combine known and discovered files */
+
+      const allFiles = new Set([
+
+        ...APP_FILES.map(
+          path => getAppURL(path).href
+        ),
+
+        ...discoveredFiles
+
+      ]);
+
+      /* index.html is already cached */
+
+      allFiles.delete(indexURL);
+
+      let successCount = 1;
+      let failedCount = 0;
+
+      /* Cache every file independently */
+
+      const results = await Promise.all(
+
+        Array.from(allFiles).map(async url => {
+
+          const success = await cacheSingleFile(
+            cache,
+            url,
+            oldCacheNames
+          );
+
+          if (success) {
+
+            successCount++;
+
+          } else {
+
+            failedCount++;
+
+          }
+
+          return success;
+
+        })
+
+      );
+
+      console.info(
+        "Hamro Sansar: Installation completed.",
+        {
+          total: allFiles.size + 1,
+          cached: successCount,
+          failed: failedCount
+        }
+      );
 
       /*
-       * Download all required application files.
-       * Installation fails if a required file is missing.
-       */
-
-      await cache.addAll(APP_FILES);
-
-      /*
-       * Activate the new version without waiting
-       * for all old tabs to close.
+       * Do not delete old cache here.
+       * Old cache is needed until activation.
        */
 
       await self.skipWaiting();
-
-      console.info(
-        "Hamro Sansar: Application files cached."
-      );
 
     })()
 
@@ -118,6 +443,9 @@ self.addEventListener("install", event => {
 
 /* =========================================================
    ACTIVATE
+
+   Remove old application caches only after
+   the new installation has completed.
 ========================================================= */
 
 self.addEventListener("activate", event => {
@@ -130,36 +458,33 @@ self.addEventListener("activate", event => {
 
       await Promise.all(
 
-        cacheNames.map(cacheName => {
-
-          /*
-           * Delete only old Hamro Sansar caches.
-           * Do not delete other applications' caches.
-           */
+        cacheNames.map(async name => {
 
           if (
-            cacheName.startsWith(CACHE_PREFIX) &&
-            cacheName !== CACHE_NAME
+            name.startsWith(CACHE_PREFIX) &&
+            name !== CACHE_NAME
           ) {
 
-            return caches.delete(cacheName);
+            const deleted = await caches.delete(
+              name
+            );
+
+            console.info(
+              "Old application cache removed:",
+              name,
+              deleted
+            );
 
           }
-
-          return Promise.resolve(false);
 
         })
 
       );
 
-      /*
-       * Take control of already-open application tabs.
-       */
-
       await self.clients.claim();
 
       console.info(
-        "Hamro Sansar: Service Worker activated."
+        "Hamro Sansar: Service Worker v8 activated."
       );
 
     })()
@@ -170,31 +495,32 @@ self.addEventListener("activate", event => {
 
 /* =========================================================
    FETCH
+
    NETWORK FIRST + CACHE FALLBACK
+
+   - Online: Get latest resource.
+   - Offline: Use cached resource.
+   - Navigation: Use cached index.html as fallback.
+   - External websites: Do not intercept.
 ========================================================= */
 
 self.addEventListener("fetch", event => {
 
   const request = event.request;
 
-  /* Only handle GET requests. */
+  /* Only GET requests */
 
   if (request.method !== "GET") {
+
     return;
+
   }
 
   const url = new URL(request.url);
 
-  const appScope = new URL(self.registration.scope);
+  /* Ignore external websites */
 
-  /*
-   * Do not intercept external websites.
-   */
-
-  if (
-    url.origin !== appScope.origin ||
-    !url.pathname.startsWith(appScope.pathname)
-  ) {
+  if (!isAppURL(url)) {
 
     return;
 
@@ -204,32 +530,38 @@ self.addEventListener("fetch", event => {
 
     (async () => {
 
-      const cache = await caches.open(CACHE_NAME);
+      const cache = await caches.open(
+        CACHE_NAME
+      );
 
       try {
 
-        /*
-         * Try the latest online version first.
-         */
+        /* Try network first */
 
-        const response = await fetch(request);
+        const response = await fetch(
+          request
+        );
 
-        if (response && response.ok) {
+        /* Cache successful same-origin responses */
 
-          /*
-           * Cache successful same-origin responses.
-           */
+        if (
+          response.ok &&
+          response.type === "basic"
+        ) {
 
-          const responseType = response.type;
-
-          if (
-            responseType === "basic" ||
-            responseType === "default"
-          ) {
+          try {
 
             await cache.put(
               request,
               response.clone()
+            );
+
+          } catch (cacheError) {
+
+            console.warn(
+              "Runtime cache update failed:",
+              request.url,
+              cacheError
             );
 
           }
@@ -238,19 +570,18 @@ self.addEventListener("fetch", event => {
 
         return response;
 
-      } catch (error) {
-
-        /*
-         * Internet unavailable:
-         * Use the previously cached file.
-         */
+      } catch (networkError) {
 
         console.warn(
-          "Offline: Loading cached resource.",
+          "Offline: Network unavailable.",
           request.url
         );
 
-        const cachedResponse = await cache.match(request);
+        /* Exact cached request */
+
+        const cachedResponse = await cache.match(
+          request
+        );
 
         if (cachedResponse) {
 
@@ -258,18 +589,16 @@ self.addEventListener("fetch", event => {
 
         }
 
-        /*
-         * If a page is requested while offline,
-         * return the cached application shell.
-         */
+        /* Offline navigation fallback */
 
         if (request.mode === "navigate") {
 
+          const indexURL = getAppURL(
+            "./index.html"
+          ).href;
+
           const offlinePage = await cache.match(
-            new URL(
-              "./index.html",
-              self.registration.scope
-            ).href
+            indexURL
           );
 
           if (offlinePage) {
@@ -280,9 +609,7 @@ self.addEventListener("fetch", event => {
 
         }
 
-        /*
-         * Resource is not available online or offline.
-         */
+        /* Resource unavailable */
 
         return new Response(
 
@@ -293,8 +620,13 @@ self.addEventListener("fetch", event => {
             statusText: "Service Unavailable",
 
             headers: {
-              "Content-Type": "text/plain; charset=utf-8",
-              "Cache-Control": "no-store"
+
+              "Content-Type":
+                "text/plain; charset=utf-8",
+
+              "Cache-Control":
+                "no-store"
+
             }
 
           }
@@ -311,15 +643,24 @@ self.addEventListener("fetch", event => {
 
 /* =========================================================
    MESSAGE
-   Allows the application to request immediate activation.
+
+   Allow application to request immediate activation.
 ========================================================= */
 
 self.addEventListener("message", event => {
 
-  if (event.data?.type === "SKIP_WAITING") {
+  if (
+    event.data?.type === "SKIP_WAITING"
+  ) {
 
-    self.skipWaiting();
+    event.waitUntil(
+      self.skipWaiting()
+    );
 
   }
 
 });
+
+/* =========================================================
+   END SERVICE WORKER
+========================================================= */
