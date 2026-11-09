@@ -1,5 +1,3 @@
-File: "core/data.js"
-
 "use strict";
 
 /*
