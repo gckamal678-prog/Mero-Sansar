@@ -508,8 +508,6 @@
       return false;
     }
 
-    refreshPage();
-
     document
       .getElementById("kskMessageInput")
       ?.focus();
