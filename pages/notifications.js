@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -206,14 +205,14 @@
      MARK AS READ
   ======================================================= */
 
-  function markAllAsRead() {
+  function markAllAsRead(options = {}) {
     if (
       typeof DATA()?.markNotificationsRead !== "function"
     ) {
       return false;
     }
 
-    return DATA().markNotificationsRead();
+    return DATA().markNotificationsRead(options);
   }
 
   /* =======================================================
@@ -227,7 +226,7 @@
       return;
     }
 
-    markAllAsRead();
+    markAllAsRead({ silent: true });
   }
 
   /* =======================================================
