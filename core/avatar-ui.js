@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -512,18 +511,32 @@
      DOM OBSERVER
   ======================================================= */
 
+  function hasAvatarContent(node) {
+    if (node.nodeType !== 1) {
+      return false;
+    }
+
+    const selector =
+      ".post-card[data-post-id], .ksk-comment[data-comment-id]";
+
+    return (
+      node.matches(selector) ||
+      Boolean(node.querySelector(selector))
+    );
+  }
+
   function observeDOM() {
     if (observer || !document.body) return;
 
     observer = new MutationObserver(records => {
       for (const record of records) {
-        if (
-          record.type === "childList" &&
-          (
-            record.addedNodes.length ||
-            record.removedNodes.length
-          )
-        ) {
+        if (record.type !== "childList") continue;
+
+        const hasNewAvatarContent = [
+          ...record.addedNodes
+        ].some(hasAvatarContent);
+
+        if (hasNewAvatarContent) {
           refresh();
           return;
         }
@@ -555,7 +568,21 @@
 
     global.addEventListener(
       "ksk:data-change",
-      refresh
+      event => {
+        const collection = String(
+          event.detail?.collection || ""
+        ).toLowerCase();
+
+        const needsAvatarRefresh = [
+          "posts",
+          "profile",
+          "friends"
+        ].some(name => collection.includes(name));
+
+        if (needsAvatarRefresh) {
+          refresh();
+        }
+      }
     );
 
     global.addEventListener(
