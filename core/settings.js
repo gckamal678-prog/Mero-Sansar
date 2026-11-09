@@ -1,3 +1,4 @@
+
 "use strict";
 
 /* =========================================================
@@ -73,10 +74,6 @@
     }
   });
 
-  /* =======================================================
-     HELPERS
-  ======================================================= */
-
   const listeners = new Set();
 
   const hasOwn = (object, key) =>
@@ -133,6 +130,29 @@
       clone(DEFAULT_SETTINGS),
       source
     );
+
+    /*
+     * SAFETY FIX:
+     * Restore every nested settings group from defaults
+     * before accessing its child properties.
+     *
+     * This prevents crashes when stored/imported data
+     * contains null, arrays, or invalid group values.
+     * Valid individual settings are preserved.
+     */
+
+    [
+      "notificationPreferences",
+      "privacy",
+      "profilePreferences",
+      "chat",
+      "data"
+    ].forEach(key => {
+      result[key] = mergeObjects(
+        clone(DEFAULT_SETTINGS[key]),
+        source[key]
+      );
+    });
 
     result.theme =
       source.theme === "dark" ? "dark" : "light";
