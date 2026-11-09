@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -23,11 +22,6 @@
  * - KSKNavigation
  * - KSKToast
  * - KSKApp
- *
- * app.js:
- * - Does not own message rendering.
- * - Does not own message sending.
- * - Does not own active chat state.
  * =========================================================
  */
 
@@ -74,11 +68,15 @@
   }
 
   function getChats() {
-    return DATA()?.getChats?.() || [];
+    const chats = DATA()?.getChats?.();
+
+    return Array.isArray(chats) ? chats : [];
   }
 
   function getFriends() {
-    return DATA()?.getFriends?.() || [];
+    const friends = DATA()?.getFriends?.();
+
+    return Array.isArray(friends) ? friends : [];
   }
 
   function getProfile() {
@@ -129,7 +127,9 @@
   ======================================================= */
 
   function renderAvatar(chat = {}) {
-    if (typeof global.KSKUserCard?.renderAvatar === "function") {
+    if (
+      typeof global.KSKUserCard?.renderAvatar === "function"
+    ) {
       return global.KSKUserCard.renderAvatar({
         name: chat.name || "साथी",
         avatar: chat.avatar || "",
@@ -329,10 +329,6 @@
   ======================================================= */
 
   function render(options = {}) {
-    /*
-     * Compatibility with the existing app.js.
-     * A valid supplied chat ID can restore the view.
-     */
 
     if (options.activeChatId && !activeChatId) {
       activeChatId = String(options.activeChatId);
@@ -390,12 +386,14 @@
     if (
       typeof global.KSKApp?.refreshCurrentPage === "function"
     ) {
-      global.KSKApp.refreshCurrentPage();
+      return global.KSKApp.refreshCurrentPage();
     }
+
+    return false;
   }
 
   /* =======================================================
-     OPEN CHAT
+     OPEN EXISTING CHAT
   ======================================================= */
 
   function openChat(chatId) {
@@ -407,11 +405,110 @@
       String(item.id) === id
     );
 
-    if (!chat) return false;
+    if (!chat) {
+      showToast(
+        isEnglish()
+          ? "Conversation not found."
+          : "कुराकानी भेटिएन।",
+        "warning"
+      );
+
+      return false;
+    }
 
     activeChatId = id;
 
     return navigateToMessages();
+  }
+
+  /* =======================================================
+     OPEN FRIEND CHAT
+
+     FIX:
+     Previously this function was missing.
+     It is now properly defined and exported.
+  ======================================================= */
+
+  function openFriendChat(friendId) {
+    const id = String(friendId || "").trim();
+
+    if (!id) {
+      showToast(
+        isEnglish()
+          ? "Invalid friend."
+          : "अमान्य साथी।",
+        "warning"
+      );
+
+      return false;
+    }
+
+    const friend = getFriends().find(item =>
+      String(item.id || "") === id
+    );
+
+    if (!friend) {
+      showToast(
+        isEnglish()
+          ? "Friend not found."
+          : "साथी भेटिएन।",
+        "warning"
+      );
+
+      return false;
+    }
+
+    const data = DATA();
+
+    if (typeof data?.createChat !== "function") {
+      showToast(
+        isEnglish()
+          ? "Chat service is unavailable."
+          : "Chat सेवा उपलब्ध छैन।",
+        "error"
+      );
+
+      return false;
+    }
+
+    /*
+     * createChat() returns:
+     * - Existing chat ID if chat already exists.
+     * - New chat ID if a chat is created.
+     * - false if creation fails.
+     */
+
+    const chatId = data.createChat(friend);
+
+    if (!chatId) {
+      showToast(
+        isEnglish()
+          ? "Could not open this conversation."
+          : "कुराकानी खोल्न सकिएन।",
+        "error"
+      );
+
+      return false;
+    }
+
+    activeChatId = String(chatId);
+
+    const navigated = navigateToMessages();
+
+    if (!navigated) {
+      activeChatId = null;
+
+      showToast(
+        isEnglish()
+          ? "Could not open Messages page."
+          : "सन्देश पेज खोल्न सकिएन।",
+        "error"
+      );
+
+      return false;
+    }
+
+    return true;
   }
 
   /* =======================================================
@@ -426,7 +523,9 @@
     const form = event?.target ||
       document.getElementById("kskMessageForm");
 
-    const input = form?.querySelector("#kskMessageInput");
+    const input = form?.querySelector(
+      "#kskMessageInput"
+    );
 
     const message = input?.value.trim();
 
@@ -458,6 +557,7 @@
 
     return true;
   }
+
   /* =======================================================
      CLOSE CHAT
   ======================================================= */
@@ -471,23 +571,27 @@
   }
 
   /* =======================================================
-     CLICK EVENTS
+     EVENT HELPERS
   ======================================================= */
 
   function stopEvent(event) {
     event.preventDefault();
-
     event.stopPropagation();
-
     event.stopImmediatePropagation();
   }
+
+  /* =======================================================
+     CLICK EVENTS
+  ======================================================= */
 
   function handleClick(event) {
     const target = event.target;
 
     if (!target?.closest) return;
 
-    const openChatButton = target.closest("[data-open-chat]");
+    const openChatButton = target.closest(
+      "[data-open-chat]"
+    );
 
     if (openChatButton) {
       stopEvent(event);
@@ -497,7 +601,9 @@
       return;
     }
 
-    const backButton = target.closest("[data-back-messages]");
+    const backButton = target.closest(
+      "[data-back-messages]"
+    );
 
     if (backButton) {
       stopEvent(event);
@@ -507,12 +613,16 @@
       return;
     }
 
-    const friendButton = target.closest("[data-message-friend]");
+    const friendButton = target.closest(
+      "[data-message-friend]"
+    );
 
     if (friendButton) {
       stopEvent(event);
 
-      openFriendChat(friendButton.dataset.messageFriend);
+      openFriendChat(
+        friendButton.dataset.messageFriend
+      );
     }
   }
 
@@ -555,6 +665,10 @@
 
   function initialize() {
     if (initialized) return true;
+
+    if (!global.document?.addEventListener) {
+      return false;
+    }
 
     initialized = true;
 
