@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -7,17 +6,21 @@
  * Mero-Sansar
  *
  * RESPONSIBILITY:
- * - Refresh only the page affected by data changes.
+ * - Refresh only the affected page or component.
  * - Avoid unnecessary Home Feed rendering.
+ * - Update only the affected post comment count.
+ * - Refresh comment and reply avatars after rendering.
+ *
+ * DEPENDENCIES:
+ * - KSKState
+ * - KSKData
+ * - KSKAvatarUI
+ *
+ * PAGE RENDERING:
+ * - Owned by app.js and pages/*.js
  *
  * DATA STORAGE:
  * - Owned by core/data.js
- *
- * PAGE RENDERING:
- * - Owned by core/navigation.js and pages/*.js
- *
- * HOME FEED / STORIES:
- * - Owned by pages/home.js
  * =========================================================
  */
 
@@ -125,8 +128,50 @@
   }
 
   /* =======================================================
+     AVATAR REFRESH
+
+     Comment modal renders synchronously after data change.
+     requestAnimationFrame ensures that the new comment DOM
+     exists before KSKAvatarUI tries to resolve its avatar.
+  ======================================================= */
+
+  function refreshAvatarUI() {
+    try {
+      if (
+        typeof global.KSKAvatarUI?.refresh === "function"
+      ) {
+        global.KSKAvatarUI.refresh();
+        return true;
+      }
+    } catch (error) {
+      console.warn(
+        "KSKDataRefresh: Avatar refresh failed.",
+        error
+      );
+    }
+
+    return false;
+  }
+
+  function queueAvatarRefresh() {
+    const run = () => {
+      refreshAvatarUI();
+    };
+
+    if (
+      typeof global.requestAnimationFrame === "function"
+    ) {
+      global.requestAnimationFrame(run);
+    } else {
+      Promise.resolve().then(run);
+    }
+  }
+
+  /* =======================================================
      COMMENT COUNT UPDATE
+
      Update only the affected post card.
+     Do not render the complete Home Feed.
   ======================================================= */
 
   function refreshPostCommentCount(postId) {
@@ -170,8 +215,8 @@
       : 0;
 
     /*
-     * Preserve the existing language and label.
-     * Replace only the trailing comment count.
+     * Keep the original icon and language label.
+     * Replace only the trailing count.
      */
 
     const currentText = button.textContent || "";
@@ -185,6 +230,146 @@
       : label;
 
     return true;
+  }
+
+  /* =======================================================
+     FIND POST ID FROM COMMENT DOM
+
+     The current delete event contains:
+       item.id
+       item.deletedIds
+
+     It does not contain postId.
+
+     The comment DOM still exists when the data-change
+     event fires. Each rendered comment has a reaction
+     button containing data-post-id.
+
+     Use that information before the modal is re-rendered.
+  ======================================================= */
+
+  function findPostIdFromCommentDOM(item = {}) {
+    const document = global.document;
+
+    if (!document) return "";
+
+    /*
+     * Future-compatible direct postId support.
+     */
+
+    if (item.postId) {
+      return String(item.postId);
+    }
+
+    const ids = new Set();
+
+    if (item.id) {
+      ids.add(String(item.id));
+    }
+
+    if (Array.isArray(item.deletedIds)) {
+      item.deletedIds.forEach(id => {
+        if (id !== null && id !== undefined) {
+          ids.add(String(id));
+        }
+      });
+    }
+
+    if (!ids.size) return "";
+
+    const comments = document.querySelectorAll(
+      ".ksk-comment[data-comment-id]"
+    );
+
+    for (const comment of comments) {
+      const commentId = String(
+        comment.dataset.commentId || ""
+      );
+
+      if (!ids.has(commentId)) continue;
+
+      /*
+       * Each comment has a reaction button carrying
+       * the post ID.
+       */
+
+      const postElement = comment.querySelector(
+        "[data-post-id]"
+      );
+
+      if (postElement?.dataset?.postId) {
+        return String(postElement.dataset.postId);
+      }
+
+      /*
+       * Fallback: look inside the comments panel.
+       */
+
+      const panel = comment.closest(
+        ".ksk-comments-panel"
+      );
+
+      const panelPost = panel?.querySelector(
+        "[data-post-id]"
+      );
+
+      if (panelPost?.dataset?.postId) {
+        return String(panelPost.dataset.postId);
+      }
+    }
+
+    return "";
+  }
+
+  /* =======================================================
+     UPDATE VISIBLE COMMENT COUNTS
+
+     Last-resort fallback when a deleted comment's
+     post ID cannot be identified.
+
+     This updates existing cards only.
+     It does not re-render the feed.
+  ======================================================= */
+
+  function refreshVisiblePostCommentCounts() {
+    const document = global.document;
+
+    if (!document) return false;
+
+    const cards = document.querySelectorAll(
+      ".post-card[data-post-id]"
+    );
+
+    let updated = false;
+
+    cards.forEach(card => {
+      const id = String(
+        card.getAttribute("data-post-id") || ""
+      );
+
+      if (!id) return;
+
+      if (refreshPostCommentCount(id)) {
+        updated = true;
+      }
+    });
+
+    return updated;
+  }
+
+  /* =======================================================
+     COMMENT ACTION HELPERS
+  ======================================================= */
+
+  function isCommentAction(action) {
+    return (
+      action === "comment-add" ||
+      action === "reply-add" ||
+      action === "comment-update" ||
+      action === "comment-delete" ||
+      action === "comment-like" ||
+      action === "comment-reaction"
+    );
   }
 
   /* =======================================================
@@ -208,36 +393,44 @@
 
     /* ---------------------------------------------------
        POSTS
-
-       Home:
-       - Comment add/reply: Update count only.
-       - Comment update/like/reaction: No feed refresh.
-       - Other post changes: Refresh feed.
-
-       Profile / Saved:
-       - Refresh current page.
     --------------------------------------------------- */
 
     if (isPostsCollection(name)) {
 
+      /*
+       * Comment and reply changes:
+       * Refresh avatar UI after the modal has rendered.
+       */
+
+      if (isCommentAction(action)) {
+        queueAvatarRefresh();
+      }
+
+      /* -----------------------------------------------
+         HOME PAGE
+      ----------------------------------------------- */
+
       if (currentPage === "home") {
 
         /*
-         * Adding a comment or reply changes only
-         * the comment count displayed on the card.
+         * COMMENT ADD / REPLY ADD
+         *
+         * Only update the related post count.
          */
 
         if (
           action === "comment-add" ||
           action === "reply-add"
         ) {
+          const postId = item.postId || "";
+
           const updated = refreshPostCommentCount(
-            item.postId
+            postId
           );
 
           /*
-           * If the post card is not mounted,
-           * safely fall back to the full feed refresh.
+           * If the card is not mounted, use the
+           * safe full feed refresh.
            */
 
           return updated
@@ -246,10 +439,54 @@
         }
 
         /*
-         * Editing, liking or reacting to a comment
-         * does not change the post card.
+         * COMMENT DELETE
          *
-         * The comments modal handles its own rendering.
+         * Find the affected post ID from the existing
+         * comment DOM before the modal is re-rendered.
+         */
+
+        if (action === "comment-delete") {
+
+          const postId = findPostIdFromCommentDOM(
+            item
+          );
+
+          if (postId) {
+            const updated = refreshPostCommentCount(
+              postId
+            );
+
+            if (updated) {
+              return true;
+            }
+
+            /*
+             * A valid post ID exists, but its card
+             * is not currently mounted.
+             */
+
+            return refreshHomeFeed();
+          }
+
+          /*
+           * No post ID found:
+           * Update visible counts without rendering
+           * the complete Home Feed.
+           */
+
+          const updated =
+            refreshVisiblePostCommentCounts();
+
+          return updated
+            ? true
+            : refreshHomeFeed();
+        }
+
+        /*
+         * COMMENT UPDATE / LIKE / REACTION
+         *
+         * The comment modal owns its own rendering.
+         * No Home Feed rendering is required.
          */
 
         if (
@@ -261,24 +498,16 @@
         }
 
         /*
-         * Comment deletion currently does not include
-         * postId in its event item.
-         *
-         * Keep the safe full refresh until that event
-         * provides the affected post ID.
-         */
-
-        if (action === "comment-delete") {
-          return refreshHomeFeed();
-        }
-
-        /*
-         * All other post changes retain
-         * the existing refresh behavior.
+         * Other post changes:
+         * Keep existing behavior.
          */
 
         return refreshHomeFeed();
       }
+
+      /* -----------------------------------------------
+         PROFILE / SAVED PAGE
+      ----------------------------------------------- */
 
       if (
         currentPage === "profile" ||
@@ -292,7 +521,6 @@
 
     /* ---------------------------------------------------
        STORIES
-       Home only: Stories only
     --------------------------------------------------- */
 
     if (isStoriesCollection(name)) {
@@ -311,6 +539,12 @@
       if (currentPage === "friends") {
         return refreshOtherPage();
       }
+
+      /*
+       * Friend avatars may have changed.
+       */
+
+      queueAvatarRefresh();
 
       return true;
     }
@@ -332,6 +566,13 @@
     --------------------------------------------------- */
 
     if (isProfileCollection(name)) {
+
+      /*
+       * Profile photo may have changed.
+       */
+
+      queueAvatarRefresh();
+
       if (currentPage === "profile") {
         return refreshOtherPage();
       }
@@ -341,18 +582,10 @@
 
     /* ---------------------------------------------------
        SAVED POSTS
-
-       Home:
-       - Refresh feed to update Save button.
-
-       Profile:
-       - Refresh current page.
-
-       Saved:
-       - Refresh saved list.
     --------------------------------------------------- */
 
     if (isSavedCollection(name)) {
+
       if (
         currentPage === "home" ||
         currentPage === "profile"
@@ -419,7 +652,13 @@
         options.renderFeed,
 
       renderStories:
-        options.renderStories
+        options.renderStories,
+
+      refreshMedia:
+        options.refreshMedia,
+
+      refreshProfileMedia:
+        options.refreshProfileMedia
     };
 
     initialized = true;
@@ -434,7 +673,12 @@
   global.KSKDataRefresh = Object.freeze({
     initialize,
     handleDataChange,
-    shouldRefreshForCollection
+    shouldRefreshForCollection,
+
+    refreshPostCommentCount,
+    refreshVisiblePostCommentCounts,
+
+    refreshAvatarUI
   });
 
 })(window);
