@@ -1277,18 +1277,25 @@
   }
 
   function toggleSavedPost(postId) {
-    const id = String(postId || "");
+  const id = String(postId || "");
 
-    if (!id) return false;
+  if (!id) return false;
 
-    const exists = getSavedPosts().some(
-      item => String(item) === id
-    );
+  const exists = getSavedPosts().some(
+    item => String(item) === id
+  );
 
-    return exists
-      ? (unsavePost(id), false)
-      : (savePost(id), true);
+  if (exists) {
+    unsavePost(id);
+  } else {
+    savePost(id);
   }
+
+  // सफलतापछि मात्र होइन, वास्तविक storage अवस्था जाँच्ने
+  return getSavedPosts().some(
+    item => String(item) === id
+  );
+}
 
   /* =======================================================
      INITIALIZATION
