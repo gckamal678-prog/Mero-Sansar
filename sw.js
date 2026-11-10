@@ -3,7 +3,7 @@
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v10
+   Version: v11
 
    RELEASE SAFETY:
    - New cache contains only current-version files.
@@ -13,7 +13,7 @@
    - Updates activate only after user approval.
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v10";
+const CACHE_NAME = "hamro-sansar-v11";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -22,9 +22,9 @@ const APP_FILES = [
   "./core/comments.css",
   "./app.js",
   "./manifest.json",
-"./icon.png",
-"./icon-192.png",
-"./icon-512.png",
+  "./icon.png",
+  "./icon-192.png",
+  "./icon-512.png",
   "./Nepal.jpg",
 
   "./core/state.js",
@@ -60,10 +60,15 @@ const APP_FILES = [
   "./pages/saved.js",
   "./pages/settings.js",
 
+  /* CORE APP EVENTS */
   "./core/app-events.js",
   "./core/search.js",
   "./core/ui-actions.js",
   "./core/data-refresh.js",
+
+  /* PWA + OFFLINE STATUS */
+  "./core/pwa-install.js",
+  "./core/network-status.js",
 
   "./core/design-system.css"
 ];
@@ -175,13 +180,6 @@ async function fetchAndCache(cache, url) {
 
 /* =========================================================
    INSTALL
-
-   1. Fetch current index.html.
-   2. Discover its local assets.
-   3. Combine discovered and required files.
-   4. Cache every required file.
-   5. Cancel installation if any required file fails.
-   6. Never mix old and new release files.
 ========================================================= */
 
 self.addEventListener("install", event => {
@@ -265,7 +263,7 @@ self.addEventListener("install", event => {
         }
 
         console.info(
-          "Hamro Sansar v10 app shell cached:",
+          "Hamro Sansar v11 app shell cached:",
           allFiles.size + 1,
           "files"
         );
@@ -304,9 +302,6 @@ self.addEventListener("install", event => {
 
 /* =========================================================
    ACTIVATE
-
-   Old caches are removed only after the new worker
-   has completed installation and has been activated.
 ========================================================= */
 
 self.addEventListener("activate", event => {
@@ -339,7 +334,7 @@ self.addEventListener("activate", event => {
       await self.clients.claim();
 
       console.info(
-        "Hamro Sansar Service Worker v10 activated."
+        "Hamro Sansar Service Worker v11 activated."
       );
 
     })()
@@ -569,5 +564,5 @@ self.addEventListener("message", event => {
 });
 
 /* =========================================================
-   END — HAMRO SANSAR SERVICE WORKER v9
+   END — HAMRO SANSAR SERVICE WORKER v11
 ========================================================= */
