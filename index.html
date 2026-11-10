@@ -58,8 +58,14 @@
   <link rel="stylesheet" href="app.css">
   <link rel="stylesheet" href="core/comments.css">
   
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
+  <!-- PWA CONFIGURATION -->
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.json">
+
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="हाम्रो संसार">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 </head>
 
 <body>
@@ -391,7 +397,8 @@
   <!-- MAIN APPLICATION -->
   <script src="app.js"></script>
 
-<!-- SERVICE WORKER REGISTRATION + UPDATE DETECTION -->
+
+<!-- SERVICE WORKER REGISTRATION + SAFE UPDATE DETECTION -->
 <script>
 (function () {
   "use strict";
@@ -401,33 +408,35 @@
     return;
   }
 
-  var hadController = !!navigator.serviceWorker.controller;
-  var reloadPromptShown = false;
+  var updatePromptShown = false;
+  var reloadAfterUpdate = false;
 
-  /*
-   * नयाँ Service Worker ले नियन्त्रण लिएपछि
-   * पुरानो पेज Reload गर्ने विकल्प दिने।
-   */
+  function requestUpdateActivation(worker) {
+    if (!worker || updatePromptShown) {
+      return;
+    }
+
+    updatePromptShown = true;
+
+    var shouldUpdate = window.confirm(
+      "हाम्रो संसारको नयाँ संस्करण तयार छ।\n\n" +
+      "नयाँ संस्करण प्रयोग गर्न अहिले Reload गर्ने?"
+    );
+
+    if (shouldUpdate) {
+      reloadAfterUpdate = true;
+      worker.postMessage({ type: "SKIP_WAITING" });
+    } else {
+      updatePromptShown = false;
+    }
+  }
+
   navigator.serviceWorker.addEventListener(
     "controllerchange",
     function () {
-      if (!hadController || reloadPromptShown) {
-        return;
-      }
-
-      reloadPromptShown = true;
-
-      var shouldReload = window.confirm(
-        "हाम्रो संसारको नयाँ संस्करण उपलब्ध भयो।\n\n" +
-        "नयाँ संस्करण प्रयोग गर्न अहिले Reload गर्ने?"
-      );
-
-      if (shouldReload) {
+      if (reloadAfterUpdate) {
+        reloadAfterUpdate = false;
         window.location.reload();
-      } else {
-        console.info(
-          "नयाँ संस्करण सक्रिय भयो। पेज पछि Reload गर्न सकिन्छ।"
-        );
       }
     }
   );
@@ -436,75 +445,71 @@
 
     navigator.serviceWorker.register("./sw.js", {
       scope: "./"
-    })
-
-    .then(function (registration) {
+    }).then(function (registration) {
 
       console.info(
         "Hamro Sansar Service Worker registered:",
         registration.scope
       );
 
-      /*
-       * नयाँ Worker फेला परेमा Update Detection।
-       */
-      registration.addEventListener(
-        "updatefound",
-        function () {
+      function monitorWorker(worker) {
+        if (!worker) {
+          return;
+        }
 
-          var newWorker = registration.installing;
+        var installHandled = false;
 
-          if (!newWorker) {
+        function checkWorkerState() {
+          if (
+            worker.state !== "installed" ||
+            installHandled
+          ) {
             return;
           }
 
-          console.info("नयाँ Service Worker भेटियो।");
+          installHandled = true;
 
-          newWorker.addEventListener(
-            "statechange",
-            function () {
+          if (registration.active) {
+            requestUpdateActivation(worker);
+          } else {
+            /* First install: no older app version to protect. */
+            worker.postMessage({
+              type: "SKIP_WAITING"
+            });
+          }
+        }
 
-              console.info(
-                "Service Worker state:",
-                newWorker.state
-              );
+        worker.addEventListener(
+          "statechange",
+          checkWorkerState
+        );
 
-              if (
-                newWorker.state === "installed" &&
-                navigator.serviceWorker.controller
-              ) {
-                console.info(
-                  "नयाँ संस्करण Install भयो।"
-                );
-              }
+        checkWorkerState();
+      }
 
-            }
-          );
+      /* Check an update that was already waiting. */
+      if (
+        registration.waiting &&
+        registration.active
+      ) {
+        requestUpdateActivation(registration.waiting);
+      }
 
+      registration.addEventListener(
+        "updatefound",
+        function () {
+          monitorWorker(registration.installing);
         }
       );
 
-      /*
-       * GitHub Pages बाट नयाँ संस्करण जाँच।
-       */
-      registration.update().then(function () {
-
-        console.info(
-          "Service Worker update check completed."
-        );
-
-      }).catch(function (error) {
-
+      registration.update().catch(function (error) {
         console.warn(
           "Service Worker update check failed:",
           error
         );
-
       });
 
-    })
-
-    .catch(function (error) {
+    }).catch(function (error) {
 
       console.error(
         "Service Worker registration failed:",
@@ -514,6 +519,9 @@
     });
 
   }, { once: true });
+
+})();
+</script>
 
 })();
 </script>
