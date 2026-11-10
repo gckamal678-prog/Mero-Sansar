@@ -3,41 +3,30 @@
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v8
+   Version: v9
 
-   FEATURES:
-   - Individual file caching
-   - Automatic asset discovery from index.html
-   - Offline application support
-   - Network-first strategy
-   - Old cache fallback during installation
-   - Safe cache migration
-   - Automatic old cache cleanup
-   - GitHub Pages subdirectory support
-   - Runtime caching
+   RELEASE SAFETY:
+   - New cache contains only current-version files.
+   - Old cache files are never copied into new cache.
+   - Missing required assets cancel installation.
+   - Old cache stays until new worker activates.
+   - Updates activate only after user approval.
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v8";
+const CACHE_NAME = "hamro-sansar-v9";
 const CACHE_PREFIX = "hamro-sansar-";
 
-/* =========================================================
-   KNOWN APPLICATION FILES
-
-   These are supplementary files.
-   Files referenced by index.html are discovered
-   automatically during installation.
-========================================================= */
-
 const APP_FILES = [
-
   "./index.html",
   "./app.css",
   "./core/comments.css",
   "./app.js",
   "./manifest.json",
+  "./icon.svg",
+  "./icon-192.svg",
+  "./icon-512.svg",
   "./Nepal.jpg",
 
-  /* Core */
   "./core/state.js",
   "./core/settings.js",
   "./core/theme.js",
@@ -49,24 +38,20 @@ const APP_FILES = [
   "./core/data.js",
   "./core/navigation.js",
 
-  /* Features */
   "./core/post-actions.js",
   "./core/comments.js",
   "./core/reactions.js",
   "./core/share.js",
 
-  /* UI */
   "./core/settings-ui.js",
   "./core/media-ui.js",
   "./core/profile-media.js",
   "./core/avatar-ui.js",
 
-  /* Components */
   "./components/user-card.js",
   "./components/message-item.js",
   "./components/post-card.js",
 
-  /* Pages */
   "./pages/home.js",
   "./pages/friends.js",
   "./pages/messages.js",
@@ -75,32 +60,26 @@ const APP_FILES = [
   "./pages/saved.js",
   "./pages/settings.js",
 
-  /* Application systems */
   "./core/app-events.js",
   "./core/search.js",
   "./core/ui-actions.js",
   "./core/data-refresh.js",
 
-  /* Design */
   "./core/design-system.css"
-
 ];
 
 /* =========================================================
-   HELPERS
+   URL HELPERS
 ========================================================= */
 
 function getAppURL(path) {
-
   return new URL(
     path,
     self.registration.scope
   );
-
 }
 
 function isAppURL(url) {
-
   const scope = new URL(
     self.registration.scope
   );
@@ -109,21 +88,13 @@ function isAppURL(url) {
     url.origin === scope.origin &&
     url.pathname.startsWith(scope.pathname)
   );
-
 }
 
 /* =========================================================
    AUTOMATIC ASSET DISCOVERY
-
-   Read local CSS, JS, image and manifest references
-   directly from index.html.
-
-   Newly added script/link files in index.html
-   do not need manual addition to APP_FILES.
 ========================================================= */
 
 function discoverAssets(html) {
-
   const discovered = new Set();
 
   const pattern =
@@ -132,7 +103,6 @@ function discoverAssets(html) {
   let match;
 
   while ((match = pattern.exec(html)) !== null) {
-
     const value = match[1].trim();
 
     if (
@@ -144,7 +114,6 @@ function discoverAssets(html) {
     }
 
     try {
-
       const url = new URL(
         value,
         self.registration.scope
@@ -154,170 +123,65 @@ function discoverAssets(html) {
         isAppURL(url) &&
         !url.pathname.endsWith("/")
       ) {
-
         discovered.add(url.href);
-
       }
 
     } catch (error) {
-
       console.warn(
-        "Invalid application asset:",
-        value
+        "Invalid application asset reference:",
+        value,
+        error
       );
-
     }
-
   }
 
   return Array.from(discovered);
-
 }
 
 /* =========================================================
-   OLD CACHE FALLBACK
-
-   If a new file cannot be downloaded,
-   try retrieving it from an older application cache.
+   FETCH AND CACHE
 ========================================================= */
 
-async function getOldCachedFile(url, oldCacheNames) {
+async function fetchAndCache(cache, url) {
+  const response = await fetch(
+    new Request(url, {
+      method: "GET",
+      cache: "reload",
+      credentials: "same-origin"
+    })
+  );
 
-  for (const name of oldCacheNames) {
-
-    try {
-
-      const oldCache = await caches.open(name);
-
-      const response = await oldCache.match(url);
-
-      if (response) {
-
-        return response;
-
-      }
-
-    } catch (error) {
-
-      console.warn(
-        "Old cache lookup failed:",
-        name,
-        error
-      );
-
-    }
-
+  if (
+    !response.ok ||
+    response.type !== "basic" ||
+    response.status !== 200
+  ) {
+    throw new Error(
+      "Required asset could not be cached: " +
+      url +
+      " (HTTP " +
+      response.status +
+      ")"
+    );
   }
 
-  return null;
+  await cache.put(
+    url,
+    response.clone()
+  );
 
-}
-
-/* =========================================================
-   CACHE SINGLE FILE
-
-   Each file is handled independently.
-
-   One missing optional file will not cancel
-   the complete installation.
-========================================================= */
-
-async function cacheSingleFile(
-  cache,
-  url,
-  oldCacheNames
-) {
-
-  try {
-
-    const response = await fetch(
-      new Request(url, {
-        method: "GET",
-        cache: "reload",
-        credentials: "same-origin"
-      })
-    );
-
-    if (
-      !response.ok ||
-      response.type !== "basic"
-    ) {
-
-      throw new Error(
-        "Invalid response: " + response.status
-      );
-
-    }
-
-    await cache.put(
-      url,
-      response.clone()
-    );
-
-    return true;
-
-  } catch (networkError) {
-
-    console.warn(
-      "Network caching failed:",
-      url
-    );
-
-    /* Try old cache */
-
-    const oldResponse = await getOldCachedFile(
-      url,
-      oldCacheNames
-    );
-
-    if (oldResponse) {
-
-      try {
-
-        await cache.put(
-          url,
-          oldResponse.clone()
-        );
-
-        console.info(
-          "Restored from old cache:",
-          url
-        );
-
-        return true;
-
-      } catch (cacheError) {
-
-        console.error(
-          "Old cache restoration failed:",
-          url,
-          cacheError
-        );
-
-      }
-
-    }
-
-    console.warn(
-      "File unavailable for offline use:",
-      url
-    );
-
-    return false;
-
-  }
-
+  return response;
 }
 
 /* =========================================================
    INSTALL
 
-   1. Read old cache names.
-   2. Download index.html first.
-   3. Discover referenced application files.
-   4. Cache files individually.
-   5. Preserve old cache as fallback.
-   6. Activate only when index.html is available.
+   1. Fetch current index.html.
+   2. Discover its local assets.
+   3. Combine discovered and required files.
+   4. Cache every required file.
+   5. Cancel installation if any required file fails.
+   6. Never mix old and new release files.
 ========================================================= */
 
 self.addEventListener("install", event => {
@@ -330,110 +194,107 @@ self.addEventListener("install", event => {
         CACHE_NAME
       );
 
-      const cacheNames = await caches.keys();
+      try {
 
-      const oldCacheNames = cacheNames.filter(
-        name =>
-          name.startsWith(CACHE_PREFIX) &&
-          name !== CACHE_NAME
-      );
+        const indexURL = getAppURL(
+          "./index.html"
+        ).href;
 
-      const indexURL = getAppURL(
-        "./index.html"
-      ).href;
-
-      /* Cache main application first */
-
-      const indexReady = await cacheSingleFile(
-        cache,
-        indexURL,
-        oldCacheNames
-      );
-
-      if (!indexReady) {
-
-        throw new Error(
-          "Installation stopped: index.html is unavailable."
+        const indexResponse = await fetchAndCache(
+          cache,
+          indexURL
         );
 
-      }
+        const html = await indexResponse
+          .clone()
+          .text();
 
-      /* Read cached HTML */
+        const allFiles = new Set([
 
-      const indexResponse = await cache.match(
-        indexURL
-      );
+          ...APP_FILES.map(
+            path => getAppURL(path).href
+          ),
 
-      const html = await indexResponse.text();
+          ...discoverAssets(html)
 
-      /* Discover new assets automatically */
+        ]);
 
-      const discoveredFiles = discoverAssets(
-        html
-      );
+        allFiles.delete(indexURL);
 
-      /* Combine known and discovered files */
+        const failures = (await Promise.all(
 
-      const allFiles = new Set([
+          Array.from(allFiles).map(
+            async url => {
 
-        ...APP_FILES.map(
-          path => getAppURL(path).href
-        ),
+              try {
 
-        ...discoveredFiles
+                await fetchAndCache(
+                  cache,
+                  url
+                );
 
-      ]);
+                return null;
 
-      /* index.html is already cached */
+              } catch (error) {
 
-      allFiles.delete(indexURL);
+                return {
+                  url,
+                  reason: error
+                };
 
-      let successCount = 1;
-      let failedCount = 0;
+              }
 
-      /* Cache every file independently */
+            }
+          )
 
-      const results = await Promise.all(
+        )).filter(Boolean);
 
-        Array.from(allFiles).map(async url => {
+        if (failures.length) {
 
-          const success = await cacheSingleFile(
-            cache,
-            url,
-            oldCacheNames
+          console.error(
+            "PWA installation cancelled; incomplete app shell:",
+            failures
           );
 
-          if (success) {
+          throw new Error(
+            "PWA installation cancelled because " +
+            failures.length +
+            " app asset(s) could not be cached."
+          );
 
-            successCount++;
-
-          } else {
-
-            failedCount++;
-
-          }
-
-          return success;
-
-        })
-
-      );
-
-      console.info(
-        "Hamro Sansar: Installation completed.",
-        {
-          total: allFiles.size + 1,
-          cached: successCount,
-          failed: failedCount
         }
-      );
 
-      /*
-       * Do not delete old cache here.
-       * Old cache is needed until activation.
-       */
+        console.info(
+          "Hamro Sansar v9 app shell cached:",
+          allFiles.size + 1,
+          "files"
+        );
 
-      await self.skipWaiting();
+        /*
+         * Do not call skipWaiting here.
+         * The page will request activation after approval.
+         */
+
+      } catch (error) {
+
+        try {
+
+          await caches.delete(
+            CACHE_NAME
+          );
+
+        } catch (cleanupError) {
+
+          console.error(
+            "Failed to remove incomplete app cache:",
+            cleanupError
+          );
+
+        }
+
+        throw error;
+
+      }
 
     })()
 
@@ -444,8 +305,8 @@ self.addEventListener("install", event => {
 /* =========================================================
    ACTIVATE
 
-   Remove old application caches only after
-   the new installation has completed.
+   Old caches are removed only after the new worker
+   has completed installation and has been activated.
 ========================================================= */
 
 self.addEventListener("activate", event => {
@@ -465,14 +326,8 @@ self.addEventListener("activate", event => {
             name !== CACHE_NAME
           ) {
 
-            const deleted = await caches.delete(
+            await caches.delete(
               name
-            );
-
-            console.info(
-              "Old application cache removed:",
-              name,
-              deleted
             );
 
           }
@@ -484,7 +339,7 @@ self.addEventListener("activate", event => {
       await self.clients.claim();
 
       console.info(
-        "Hamro Sansar: Service Worker v8 activated."
+        "Hamro Sansar Service Worker v9 activated."
       );
 
     })()
@@ -494,36 +349,175 @@ self.addEventListener("activate", event => {
 });
 
 /* =========================================================
-   FETCH
+   NAVIGATION REQUEST
+   NETWORK FIRST + OFFLINE INDEX FALLBACK
+========================================================= */
 
-   NETWORK FIRST + CACHE FALLBACK
+async function handleNavigationRequest(
+  request,
+  cache
+) {
 
-   - Online: Get latest resource.
-   - Offline: Use cached resource.
-   - Navigation: Use cached index.html as fallback.
-   - External websites: Do not intercept.
+  try {
+
+    const response = await fetch(
+      request
+    );
+
+    if (
+      response.ok &&
+      response.type === "basic" &&
+      response.status === 200
+    ) {
+
+      try {
+
+        await cache.put(
+          request,
+          response.clone()
+        );
+
+      } catch (cacheError) {
+
+        console.warn(
+          "Navigation cache update failed:",
+          cacheError
+        );
+
+      }
+
+    }
+
+    return response;
+
+  } catch (error) {
+
+    const exactMatch = await cache.match(
+      request
+    );
+
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    const indexMatch = await cache.match(
+      getAppURL("./index.html").href
+    );
+
+    if (indexMatch) {
+      return indexMatch;
+    }
+
+    return offlineResponse();
+
+  }
+
+}
+
+/* =========================================================
+   STATIC ASSET REQUEST
+   CACHE FIRST + NETWORK FALLBACK
+========================================================= */
+
+async function handleAssetRequest(
+  request,
+  cache
+) {
+
+  const cached = await cache.match(
+    request
+  );
+
+  if (cached) {
+    return cached;
+  }
+
+  try {
+
+    const response = await fetch(
+      request
+    );
+
+    if (
+      response.ok &&
+      response.type === "basic" &&
+      response.status === 200
+    ) {
+
+      try {
+
+        await cache.put(
+          request,
+          response.clone()
+        );
+
+      } catch (cacheError) {
+
+        console.warn(
+          "Asset cache update failed:",
+          request.url,
+          cacheError
+        );
+
+      }
+
+    }
+
+    return response;
+
+  } catch (error) {
+
+    return offlineResponse();
+
+  }
+
+}
+
+/* =========================================================
+   OFFLINE RESPONSE
+========================================================= */
+
+function offlineResponse() {
+
+  return new Response(
+
+    "यो सामग्री अहिले उपलब्ध छैन। इन्टरनेट जडान जाँच गर्नुहोस्।",
+
+    {
+      status: 503,
+      statusText: "Service Unavailable",
+
+      headers: {
+        "Content-Type":
+          "text/plain; charset=utf-8",
+
+        "Cache-Control":
+          "no-store"
+      }
+    }
+
+  );
+
+}
+
+/* =========================================================
+   FETCH HANDLER
 ========================================================= */
 
 self.addEventListener("fetch", event => {
 
   const request = event.request;
 
-  /* Only GET requests */
-
   if (request.method !== "GET") {
-
     return;
-
   }
 
-  const url = new URL(request.url);
-
-  /* Ignore external websites */
+  const url = new URL(
+    request.url
+  );
 
   if (!isAppURL(url)) {
-
     return;
-
   }
 
   event.respondWith(
@@ -534,106 +528,19 @@ self.addEventListener("fetch", event => {
         CACHE_NAME
       );
 
-      try {
+      if (request.mode === "navigate") {
 
-        /* Try network first */
-
-        const response = await fetch(
-          request
-        );
-
-        /* Cache successful same-origin responses */
-
-        if (
-          response.ok &&
-          response.type === "basic"
-        ) {
-
-          try {
-
-            await cache.put(
-              request,
-              response.clone()
-            );
-
-          } catch (cacheError) {
-
-            console.warn(
-              "Runtime cache update failed:",
-              request.url,
-              cacheError
-            );
-
-          }
-
-        }
-
-        return response;
-
-      } catch (networkError) {
-
-        console.warn(
-          "Offline: Network unavailable.",
-          request.url
-        );
-
-        /* Exact cached request */
-
-        const cachedResponse = await cache.match(
-          request
-        );
-
-        if (cachedResponse) {
-
-          return cachedResponse;
-
-        }
-
-        /* Offline navigation fallback */
-
-        if (request.mode === "navigate") {
-
-          const indexURL = getAppURL(
-            "./index.html"
-          ).href;
-
-          const offlinePage = await cache.match(
-            indexURL
-          );
-
-          if (offlinePage) {
-
-            return offlinePage;
-
-          }
-
-        }
-
-        /* Resource unavailable */
-
-        return new Response(
-
-          "यो सामग्री अहिले उपलब्ध छैन। इन्टरनेट जडान जाँच गर्नुहोस्।",
-
-          {
-            status: 503,
-            statusText: "Service Unavailable",
-
-            headers: {
-
-              "Content-Type":
-                "text/plain; charset=utf-8",
-
-              "Cache-Control":
-                "no-store"
-
-            }
-
-          }
-
+        return handleNavigationRequest(
+          request,
+          cache
         );
 
       }
+
+      return handleAssetRequest(
+        request,
+        cache
+      );
 
     })()
 
@@ -642,15 +549,15 @@ self.addEventListener("fetch", event => {
 });
 
 /* =========================================================
-   MESSAGE
-
-   Allow application to request immediate activation.
+   MESSAGE HANDLER
+   Explicit update activation only.
 ========================================================= */
 
 self.addEventListener("message", event => {
 
   if (
-    event.data?.type === "SKIP_WAITING"
+    event.data &&
+    event.data.type === "SKIP_WAITING"
   ) {
 
     event.waitUntil(
@@ -662,5 +569,5 @@ self.addEventListener("message", event => {
 });
 
 /* =========================================================
-   END SERVICE WORKER
+   END — HAMRO SANSAR SERVICE WORKER v9
 ========================================================= */
