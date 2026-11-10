@@ -13,6 +13,8 @@
    - Blocks javascript: URLs
    - Blocks dangerous HTML elements
    - Preserves existing Modal API
+   - Supports canvas-based image cropping
+   - Supports external form-associated submit buttons
 ========================================================= */
 
 (function (global) {
@@ -43,6 +45,7 @@
     "blockquote",
     "br",
     "button",
+    "canvas",
     "caption",
     "code",
     "div",
@@ -162,6 +165,7 @@
     "rows",
     "cols",
     "for",
+    "form",
     "colspan",
     "rowspan",
     "scope",
