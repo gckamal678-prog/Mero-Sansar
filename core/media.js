@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -308,13 +307,6 @@
     const key = String(id);
     const db = await openDatabase();
 
-    const oldURL = urlCache.get(key);
-
-    if (oldURL) {
-      URL.revokeObjectURL(oldURL);
-      urlCache.delete(key);
-    }
-
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(
         STORE_NAME,
@@ -323,7 +315,16 @@
 
       transaction.objectStore(STORE_NAME).delete(key);
 
-      transaction.oncomplete = () => resolve(true);
+      transaction.oncomplete = () => {
+        const oldURL = urlCache.get(key);
+
+        if (oldURL) {
+          URL.revokeObjectURL(oldURL);
+          urlCache.delete(key);
+        }
+
+        resolve(true);
+      };
 
       transaction.onerror = () => reject(
         transaction.error ||
@@ -354,11 +355,193 @@
     urlCache.clear();
   }
 
+  /*
+   * Check whether an image is still referenced anywhere.
+   * If data APIs are missing or fail, keep the image.
+   */
+
+  function hasMediaReference(mediaId) {
+    const data = global.KSKData;
+
+    if (!data) return true;
+
+    const getters = [
+      "getPosts",
+      "getStories",
+      "getProfile",
+      "getFriends",
+      "getMessages",
+      "getChats",
+      "getNotifications"
+    ];
+
+    const collections = [];
+
+    for (const name of getters) {
+      if (typeof data[name] !== "function") {
+        return true;
+      }
+
+      try {
+        const value = name === "getStories"
+          ? data[name](true)
+          : data[name]();
+
+        if (value === undefined || value === null) {
+          return true;
+        }
+
+        collections.push(value);
+
+      } catch (error) {
+        console.warn(
+          "KSK media reference check failed:",
+          name,
+          error
+        );
+
+        return true;
+      }
+    }
+
+    const seen = new Set();
+
+    function contains(value) {
+      if (value === mediaId) return true;
+
+      if (!value || typeof value !== "object") {
+        return false;
+      }
+
+      if (seen.has(value)) return false;
+
+      seen.add(value);
+
+      if (Array.isArray(value)) {
+        return value.some(contains);
+      }
+
+      return Object.keys(value).some(
+        key => contains(value[key])
+      );
+    }
+
+    return collections.some(contains);
+  }
+
+  /*
+   * Delete only orphaned KSK media.
+   */
+
+  async function cleanupOrphanedImage(mediaId) {
+    const key = String(mediaId || "").trim();
+
+    if (
+      !/^(?:ksk_media_|media_)[A-Za-z0-9_-]+$/.test(key)
+    ) {
+      return false;
+    }
+
+    if (hasMediaReference(key)) {
+      return false;
+    }
+
+    try {
+      return await deleteImage(key);
+
+    } catch (error) {
+      console.warn(
+        "KSK orphan media cleanup failed:",
+        error
+      );
+
+      return false;
+    }
+  }
+
+  /*
+   * Listen for Post, Story and Profile changes.
+   */
+
+  function handleDataChange(event) {
+    const detail = event?.detail || {};
+
+    const collection = String(
+      detail.collection || ""
+    ).toLowerCase();
+
+    const action = String(
+      detail.action || ""
+    ).toLowerCase();
+
+    const item = detail.item || {};
+
+    const mediaIds = [];
+
+    // Deleted Post or Story
+    if (
+      action === "delete" &&
+      (
+        collection.includes("posts") ||
+        collection.includes("stories")
+      )
+    ) {
+      mediaIds.push(item.mediaId);
+    }
+
+    // Replaced Profile Avatar or Cover
+    if (
+      collection === "profile" &&
+      action === "update"
+    ) {
+      mediaIds.push(
+        item.previousMedia?.avatarMediaId,
+        item.previousMedia?.coverMediaId
+      );
+    }
+
+    const uniqueIds = [...new Set(
+      mediaIds
+        .map(value => String(value || "").trim())
+        .filter(Boolean)
+    )];
+
+    if (!uniqueIds.length) return;
+
+    Promise.resolve().then(() => {
+      uniqueIds.forEach(mediaId => {
+        cleanupOrphanedImage(mediaId);
+      });
+    });
+  }
+
+  let dataChangeListenerBound = false;
+
+  function bindDataChangeListener() {
+    if (
+      global.addEventListener &&
+      !dataChangeListenerBound
+    ) {
+      global.addEventListener(
+        "ksk:data-change",
+        handleDataChange
+      );
+
+      dataChangeListenerBound = true;
+    }
+  }
+
   function initialize() {
+    bindDataChangeListener();
+
     return openDatabase()
       .then(() => true)
       .catch(error => {
-        console.error("KSK Media initialization failed:", error);
+        console.error(
+          "KSK Media initialization failed:",
+          error
+        );
+
         return false;
       });
   }
@@ -369,10 +552,13 @@
     getImage,
     getImageURL,
     deleteImage,
+    cleanupOrphanedImage,
     revokeImageURL,
     revokeAllImageURLs
   });
 
   global.KSKMedia = api;
+
+  bindDataChangeListener();
 
 })(window);
