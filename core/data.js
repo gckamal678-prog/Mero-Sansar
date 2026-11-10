@@ -38,22 +38,37 @@
     cover: ""
   });
 
+  const listeners = new Set();
+  let initialized = false;
+
   /* =======================================================
-     STORAGE HELPERS
+     HELPERS
   ======================================================= */
 
-  function read(key, fallback = []) {
+  function clone(value) {
+    if (value === undefined || value === null) {
+      return value;
+    }
+
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function read(key, fallback) {
     try {
       const raw = global.localStorage.getItem(key);
 
-      if (raw === null) return fallback;
+      if (raw === null) {
+        return clone(fallback);
+      }
 
-      const parsed = JSON.parse(raw);
+      const value = JSON.parse(raw);
 
-      return parsed ?? fallback;
+      return value === null
+        ? clone(fallback)
+        : value;
     } catch (error) {
-      console.warn("KSKData: Storage read failed:", key, error);
-      return fallback;
+      console.error("KSK data read failed:", error);
+      return clone(fallback);
     }
   }
 
@@ -66,139 +81,107 @@
 
       return true;
     } catch (error) {
-      console.error("KSKData: Storage write failed:", key, error);
+      console.error("KSK data save failed:", error);
+
+      global.KSKToast?.error(
+        "डाटा सुरक्षित गर्न सकिएन। भण्डारण क्षमता जाँच गर्नुहोस्।"
+      );
+
       return false;
     }
   }
 
-  function makeId(prefix = "id") {
-    const random = Math.random()
-      .toString(36)
-      .slice(2, 10);
+  function makeId(prefix = "item") {
+    const random = global.crypto?.randomUUID
+      ? global.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-    return `${prefix}_${Date.now()}_${random}`;
+    return `${prefix}_${random}`;
   }
 
-  function clone(value) {
-    if (value === undefined || value === null) {
-      return value;
-    }
-
-    try {
-      return JSON.parse(JSON.stringify(value));
-    } catch (error) {
-      return value;
-    }
+  function cleanText(value, maxLength = 5000) {
+    return String(value ?? "")
+      .trim()
+      .slice(0, maxLength);
   }
 
-  function asArray(value) {
+  function isArray(value) {
     return Array.isArray(value) ? value : [];
   }
 
-  function asString(value) {
-    return String(value ?? "").trim();
-  }
+  function emit(collection, action, item = null) {
+    const detail = {
+      collection,
+      action,
+      item: item ? clone(item) : null,
+      timestamp: Date.now()
+    };
 
-  function now() {
-    return new Date().toISOString();
-  }
+    listeners.forEach(listener => {
+      try {
+        listener(detail);
+      } catch (error) {
+        console.error(
+          "KSK data listener failed:",
+          error
+        );
+      }
+    });
 
-  /* =======================================================
-     DATA CHANGE EVENTS
-  ======================================================= */
+    global.dispatchEvent(
+      new CustomEvent("ksk:data-change", {
+        detail
+      })
+    );
 
-  function notify(collection, action, item = null) {
-    try {
-      global.dispatchEvent(
-        new CustomEvent("ksk:data-change", {
-          detail: {
+    if (global.KSKState?.setState) {
+      global.KSKState.setState(
+        {
+          lastDataChange: {
             collection,
             action,
-            item: clone(item),
-            timestamp: Date.now()
+            timestamp: detail.timestamp
           }
-        })
+        },
+        "data-change"
       );
-    } catch (error) {
-      console.warn("KSKData: Event dispatch failed:", error);
     }
+
+    return detail;
   }
 
-  /* =======================================================
-     INITIAL DATA
-  ======================================================= */
+  function subscribe(listener) {
+    if (typeof listener !== "function") {
+      throw new TypeError(
+        "KSKData subscriber must be a function."
+      );
+    }
 
-  let posts = [];
-  let stories = [];
-  let friends = [];
-  let messages = [];
-  let profile = {};
-  let saved = [];
-  let notifications = [];
-  let chats = [];
+    listeners.add(listener);
 
-  let initialized = false;
+    return () => listeners.delete(listener);
+  }
 
-  function initialize() {
-    if (initialized) return true;
+  function saveCollection(
+    key,
+    collection,
+    action,
+    item
+  ) {
+    const saved = write(key, collection);
 
-    posts = asArray(read(STORAGE.posts, []));
-    stories = asArray(read(STORAGE.stories, []));
-    friends = asArray(read(STORAGE.friends, []));
-    messages = asArray(read(STORAGE.messages, []));
-    profile = {
-      ...DEFAULT_PROFILE,
-      ...(read(STORAGE.profile, {}) || {})
-    };
-    saved = asArray(read(STORAGE.saved, []));
-    notifications = asArray(
-      read(STORAGE.notifications, [])
+    if (saved) {
+      emit(key, action, item);
+    }
+
+    return saved;
+  }
+
+  function sortNewest(items) {
+    return items.sort((a, b) =>
+      new Date(b.createdAt || 0) -
+      new Date(a.createdAt || 0)
     );
-    chats = asArray(read(STORAGE.chats, []));
-
-    initialized = true;
-
-    return true;
-  }
-
-  function ensureInitialized() {
-    if (!initialized) initialize();
-  }
-
-  /* =======================================================
-     PERSISTENCE
-  ======================================================= */
-
-  function persistPosts() {
-    return write(STORAGE.posts, posts);
-  }
-
-  function persistStories() {
-    return write(STORAGE.stories, stories);
-  }
-
-  function persistFriends() {
-    return write(STORAGE.friends, friends);
-  }
-
-  function persistMessages() {
-    return write(STORAGE.messages, messages);
-  }
-
-  function persistProfile() {
-    return write(STORAGE.profile, profile);
-  }
-
-  function persistSaved() {
-    return write(STORAGE.saved, saved);
-  }
-
-  function persistNotifications() {
-    return write(STORAGE.notifications, notifications);
-  }
-
-  function persistChats() {
-    return write(STORAGE.chats, chats);
   }
 
   /* =======================================================
@@ -206,534 +189,634 @@
   ======================================================= */
 
   function getPosts() {
-    ensureInitialized();
-    return clone(posts);
+    return sortNewest(
+      isArray(read(STORAGE.posts, []))
+    );
   }
 
   function getPost(postId) {
-    ensureInitialized();
+    const id = String(postId || "");
 
-    const id = asString(postId);
-
-    return clone(
-      posts.find(post => String(post.id) === id) || null
-    );
-  }
-
-  function addPost(data = {}) {
-    ensureInitialized();
-
-    const post = {
-      id: data.id || makeId("post"),
-      userId: data.userId || "me",
-      author: data.author || profile.name || "User",
-      avatar: data.avatar || profile.avatar || "",
-      text: asString(data.text),
-      image: data.image || "",
-      mediaId: data.mediaId || null,
-      createdAt: data.createdAt || now(),
-      likes: asArray(data.likes),
-      comments: asArray(data.comments),
-      shares: Number(data.shares || 0),
-      ...clone(data)
-    };
-
-    posts.unshift(post);
-
-    if (!persistPosts()) {
-      posts.shift();
-      return null;
-    }
-
-    notify("posts", "add", post);
-
-    return clone(post);
-  }
-
-  function updatePost(postId, updates = {}) {
-    ensureInitialized();
-
-    const id = asString(postId);
-    const index = posts.findIndex(
-      post => String(post.id) === id
-    );
-
-    if (index < 0) return null;
-
-    const previous = clone(posts[index]);
-
-    posts[index] = {
-      ...posts[index],
-      ...clone(updates),
-      id: posts[index].id
-    };
-
-    if (!persistPosts()) {
-      posts[index] = previous;
-      return null;
-    }
-
-    notify("posts", "update", posts[index]);
-
-    return clone(posts[index]);
-  }
-
-  function deletePost(postId) {
-    ensureInitialized();
-
-    const id = asString(postId);
-    const index = posts.findIndex(
-      post => String(post.id) === id
-    );
-
-    if (index < 0) return false;
-
-    const removed = posts[index];
-
-    posts.splice(index, 1);
-
-    if (!persistPosts()) {
-      posts.splice(index, 0, removed);
-      return false;
-    }
-
-    // Preserve media information for safe cleanup.
-    notify("posts", "delete", {
-      id: removed.id,
-      mediaId: removed.mediaId || null,
-      image: removed.image || ""
-    });
-
-    return true;
-  }
-
-  /* =======================================================
-     POST REACTIONS
-  ======================================================= */
-
-  function togglePostLike(postId, userId = "me") {
-    ensureInitialized();
-
-    const id = asString(postId);
-    const post = posts.find(
+    const post = getPosts().find(
       item => String(item.id) === id
     );
 
-    if (!post) return null;
+    return post ? clone(post) : null;
+  }
 
-    if (!Array.isArray(post.likes)) {
-      post.likes = [];
+  function addPost(post = {}) {
+    if (!post || typeof post !== "object") {
+      return false;
     }
 
-    const existing = post.likes.findIndex(
-      like => String(
-        typeof like === "object" ? like.userId : like
-      ) === String(userId)
+    const item = {
+      ...clone(post),
+      id: post.id || makeId("post"),
+      text: cleanText(post.text, 10000),
+      comments: isArray(post.comments),
+      createdAt: post.createdAt || new Date().toISOString()
+    };
+
+    if (
+      !item.text &&
+      !item.mediaId &&
+      !item.mediaData
+    ) {
+      return false;
+    }
+
+    const posts = getPosts();
+    posts.unshift(item);
+
+    if (!saveCollection(
+      STORAGE.posts,
+      posts,
+      "add",
+      item
+    )) {
+      return false;
+    }
+
+    return clone(item);
+  }
+
+  function updatePost(postId, changes = {}) {
+    const id = String(postId || "");
+
+    if (
+      !id ||
+      !changes ||
+      typeof changes !== "object"
+    ) {
+      return false;
+    }
+
+    const posts = getPosts();
+
+    const index = posts.findIndex(
+      post => String(post.id) === id
     );
 
-    if (existing >= 0) {
-      post.likes.splice(existing, 1);
-    } else {
-      post.likes.push({
-        userId,
-        createdAt: now()
-      });
+    if (index === -1) return false;
+
+    const updated = {
+      ...posts[index],
+      ...clone(changes),
+      id: posts[index].id
+    };
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        changes,
+        "text"
+      )
+    ) {
+      updated.text = cleanText(
+        changes.text,
+        10000
+      );
     }
 
-    if (!persistPosts()) return null;
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        changes,
+        "comments"
+      )
+    ) {
+      updated.comments = isArray(
+        posts[index].comments
+      );
+    } else {
+      updated.comments = isArray(
+        changes.comments
+      );
+    }
 
-    notify("posts", "like", {
-      postId: id,
-      likes: post.likes.length
-    });
+    posts[index] = updated;
 
-    return clone(post);
+    return saveCollection(
+      STORAGE.posts,
+      posts,
+      "update",
+      updated
+    );
+  }
+
+  function deletePost(postId) {
+    const id = String(postId || "");
+    const posts = getPosts();
+
+    const next = posts.filter(
+      post => String(post.id) !== id
+    );
+
+    if (next.length === posts.length) {
+      return false;
+    }
+
+    return saveCollection(
+      STORAGE.posts,
+      next,
+      "delete",
+      { id }
+    );
   }
 
   /* =======================================================
      COMMENTS
+     Flat comment structure with parentId.
   ======================================================= */
 
-  function addComment(postId, data = {}) {
-    ensureInitialized();
+  function getComments(postId) {
+    const post = getPost(postId);
 
-    const id = asString(postId);
-    const post = posts.find(
+    if (!post) return [];
+
+    return sortNewest(
+      isArray(post.comments)
+    );
+  }
+
+  function getComment(postId, commentId) {
+    const comments = getComments(postId);
+    const id = String(commentId || "");
+
+    const comment = comments.find(
       item => String(item.id) === id
     );
 
-    if (!post) return null;
-
-    if (!Array.isArray(post.comments)) {
-      post.comments = [];
-    }
-
-    const comment = {
-      id: data.id || makeId("comment"),
-      postId: id,
-      userId: data.userId || "me",
-      author: data.author || profile.name || "User",
-      avatar: data.avatar || profile.avatar || "",
-      text: asString(data.text),
-      createdAt: data.createdAt || now(),
-      likes: [],
-      replies: [],
-      ...clone(data)
-    };
-
-    post.comments.push(comment);
-
-    if (!persistPosts()) {
-      post.comments.pop();
-      return null;
-    }
-
-    notify("posts", "comment-add", {
-      postId: id,
-      comment
-    });
-
-    return clone(comment);
+    return comment ? clone(comment) : null;
   }
 
-  function updateComment(postId, commentId, updates = {}) {
-    ensureInitialized();
+  function addComment(
+    postId,
+    comment = {},
+    options = {}
+  ) {
+    const id = String(postId || "");
+    const post = getPost(id);
 
-    const post = posts.find(
-      item => String(item.id) === String(postId)
-    );
-
-    if (!post || !Array.isArray(post.comments)) {
-      return null;
+    if (
+      !post ||
+      !comment ||
+      typeof comment !== "object"
+    ) {
+      return false;
     }
 
-    const comment = post.comments.find(
+    const text = cleanText(comment.text, 3000);
+
+    if (!text) return false;
+
+    const comments = isArray(post.comments);
+
+    const parentId = String(
+      options.parentId ||
+      comment.parentId ||
+      ""
+    );
+
+    if (parentId) {
+      const parentExists = comments.some(
+        item => String(item.id) === parentId
+      );
+
+      if (!parentExists) return false;
+    }
+
+    const mentions = isArray(
+      options.mentions || comment.mentions
+    ).map(mention => ({
+      id: cleanText(mention?.id, 120),
+      name: cleanText(mention?.name, 60)
+    })).filter(mention => mention.name);
+
+    const item = {
+      id: comment.id || makeId("comment"),
+      postId: id,
+      parentId: parentId || null,
+      replyTo: cleanText(
+        options.replyTo || comment.replyTo,
+        60
+      ),
+      author: cleanText(
+        comment.author || "सदस्य",
+        60
+      ),
+      authorId: cleanText(
+        comment.authorId,
+        120
+      ),
+      authorInitial: cleanText(
+        comment.authorInitial ||
+        comment.author?.charAt?.(0) ||
+        "स",
+        4
+      ),
+      avatar: cleanText(
+        comment.avatar,
+        200000
+      ),
+      text,
+      mentions,
+      likes: Number(comment.likes || 0),
+      liked: Boolean(comment.liked),
+      createdAt: comment.createdAt ||
+        new Date().toISOString(),
+      editedAt: null
+    };
+
+    comments.push(item);
+
+    const updated = {
+      ...post,
+      comments
+    };
+
+    if (!saveCollection(
+      STORAGE.posts,
+      replacePostInList(id, updated),
+      parentId ? "reply-add" : "comment-add",
+      item
+    )) {
+      return false;
+    }
+
+    return clone(item);
+  }
+
+  function replacePostInList(
+    postId,
+    updatedPost
+  ) {
+    const posts = getPosts();
+
+    const index = posts.findIndex(
+      post => String(post.id) === String(postId)
+    );
+
+    if (index === -1) return posts;
+
+    posts[index] = updatedPost;
+
+    return posts;
+  }
+
+  function updateComment(
+    postId,
+    commentId,
+    changes = {}
+  ) {
+    const id = String(postId || "");
+    const post = getPost(id);
+
+    if (
+      !post ||
+      !changes ||
+      typeof changes !== "object"
+    ) {
+      return false;
+    }
+
+    const comments = isArray(post.comments);
+
+    const index = comments.findIndex(
       item => String(item.id) === String(commentId)
     );
 
-    if (!comment) return null;
+    if (index === -1) return false;
 
-    const previous = clone(comment);
+    const updatedComment = {
+      ...comments[index],
+      ...clone(changes),
+      id: comments[index].id,
+      postId: id,
+      editedAt: new Date().toISOString()
+    };
 
-    Object.assign(comment, clone(updates));
+    if (
+      Object.prototype.hasOwnProperty.call(
+        changes,
+        "text"
+      )
+    ) {
+      updatedComment.text = cleanText(
+        changes.text,
+        3000
+      );
 
-    if (!persistPosts()) {
-      Object.assign(comment, previous);
-      return null;
+      if (!updatedComment.text) return false;
     }
 
-    notify("posts", "comment-update", {
-      postId: String(postId),
-      commentId: String(commentId),
-      comment
-    });
+    comments[index] = updatedComment;
 
-    return clone(comment);
+    const updatedPost = {
+      ...post,
+      comments
+    };
+
+    return saveCollection(
+      STORAGE.posts,
+      replacePostInList(id, updatedPost),
+      "comment-update",
+      updatedComment
+    );
   }
 
   function deleteComment(postId, commentId) {
-    ensureInitialized();
+    const id = String(postId || "");
+    const targetId = String(commentId || "");
+    const post = getPost(id);
 
-    const post = posts.find(
-      item => String(item.id) === String(postId)
+    if (!post || !targetId) return false;
+
+    const comments = isArray(post.comments);
+
+    const exists = comments.some(
+      item => String(item.id) === targetId
     );
 
-    if (!post || !Array.isArray(post.comments)) {
-      return false;
-    }
+    if (!exists) return false;
 
-    const index = post.comments.findIndex(
-      item => String(item.id) === String(commentId)
-    );
+    const idsToDelete = new Set([targetId]);
 
-    if (index < 0) return false;
+    let changed = true;
 
-    const removed = post.comments.splice(index, 1)[0];
+    while (changed) {
+      changed = false;
 
-    if (!persistPosts()) {
-      post.comments.splice(index, 0, removed);
-      return false;
-    }
-
-    notify("posts", "comment-delete", {
-      postId: String(postId),
-      id: String(commentId),
-      deletedIds: [String(commentId)]
-    });
-
-    return true;
-  }
-
-  function addReply(postId, commentId, data = {}) {
-    ensureInitialized();
-
-    const post = posts.find(
-      item => String(item.id) === String(postId)
-    );
-
-    if (!post || !Array.isArray(post.comments)) {
-      return null;
-    }
-
-    const comment = post.comments.find(
-      item => String(item.id) === String(commentId)
-    );
-
-    if (!comment) return null;
-
-    if (!Array.isArray(comment.replies)) {
-      comment.replies = [];
-    }
-
-    const reply = {
-      id: data.id || makeId("reply"),
-      postId: String(postId),
-      commentId: String(commentId),
-      userId: data.userId || "me",
-      author: data.author || profile.name || "User",
-      avatar: data.avatar || profile.avatar || "",
-      text: asString(data.text),
-      createdAt: data.createdAt || now(),
-      likes: [],
-      ...clone(data)
-    };
-
-    comment.replies.push(reply);
-
-    if (!persistPosts()) {
-      comment.replies.pop();
-      return null;
-    }
-
-    notify("posts", "reply-add", {
-      postId: String(postId),
-      commentId: String(commentId),
-      reply
-    });
-
-    return clone(reply);
-  }
-
-  function deleteReply(postId, commentId, replyId) {
-    ensureInitialized();
-
-    const post = posts.find(
-      item => String(item.id) === String(postId)
-    );
-
-    if (!post || !Array.isArray(post.comments)) {
-      return false;
-    }
-
-    const comment = post.comments.find(
-      item => String(item.id) === String(commentId)
-    );
-
-    if (!comment || !Array.isArray(comment.replies)) {
-      return false;
-    }
-
-    const index = comment.replies.findIndex(
-      item => String(item.id) === String(replyId)
-    );
-
-    if (index < 0) return false;
-
-    const removed = comment.replies.splice(index, 1)[0];
-
-    if (!persistPosts()) {
-      comment.replies.splice(index, 0, removed);
-      return false;
-    }
-
-    notify("posts", "reply-delete", {
-      postId: String(postId),
-      commentId: String(commentId),
-      id: String(replyId),
-      deletedIds: [String(replyId)]
-    });
-
-    return true;
-  }
-
-  function toggleCommentLike(postId, commentId, userId = "me") {
-    ensureInitialized();
-
-    const post = posts.find(
-      item => String(item.id) === String(postId)
-    );
-
-    if (!post || !Array.isArray(post.comments)) {
-      return null;
-    }
-
-    const comment = post.comments.find(
-      item => String(item.id) === String(commentId)
-    );
-
-    if (!comment) return null;
-
-    if (!Array.isArray(comment.likes)) {
-      comment.likes = [];
-    }
-
-    const index = comment.likes.findIndex(
-      like => String(
-        typeof like === "object" ? like.userId : like
-      ) === String(userId)
-    );
-
-    if (index >= 0) {
-      comment.likes.splice(index, 1);
-    } else {
-      comment.likes.push({
-        userId,
-        createdAt: now()
+      comments.forEach(item => {
+        if (
+          item.parentId &&
+          idsToDelete.has(String(item.parentId)) &&
+          !idsToDelete.has(String(item.id))
+        ) {
+          idsToDelete.add(String(item.id));
+          changed = true;
+        }
       });
     }
 
-    if (!persistPosts()) return null;
+    const nextComments = comments.filter(
+      item => !idsToDelete.has(String(item.id))
+    );
 
-    notify("posts", "comment-like", {
-      postId: String(postId),
-      commentId: String(commentId)
-    });
+    const updatedPost = {
+      ...post,
+      comments: nextComments
+    };
 
-    return clone(comment);
+    return saveCollection(
+      STORAGE.posts,
+      replacePostInList(id, updatedPost),
+      "comment-delete",
+      {
+        id: targetId,
+        deletedIds: [...idsToDelete]
+      }
+    );
+  }
+
+  function toggleCommentLike(
+    postId,
+    commentId
+  ) {
+    const post = getPost(postId);
+
+    if (!post) return false;
+
+    const comments = isArray(post.comments);
+
+    const index = comments.findIndex(
+      item => String(item.id) === String(commentId)
+    );
+
+    if (index === -1) return false;
+
+    const comment = comments[index];
+    const liked = !Boolean(comment.liked);
+
+    const reactionCounts = {
+      ...(comment.reactionCounts || {})
+    };
+
+    if (!liked && comment.myReaction) {
+      reactionCounts[comment.myReaction] = Math.max(
+        0,
+        Number(
+          reactionCounts[comment.myReaction] || 0
+        ) - 1
+      );
+    }
+
+    comments[index] = {
+      ...comment,
+      liked,
+      myReaction: liked
+        ? (comment.myReaction || "")
+        : "",
+      reactionCounts,
+      likes: Math.max(
+        0,
+        Number(comment.likes || 0) +
+          (liked ? 1 : -1)
+      )
+    };
+
+    const updatedPost = {
+      ...post,
+      comments
+    };
+
+    return saveCollection(
+      STORAGE.posts,
+      replacePostInList(postId, updatedPost),
+      "comment-like",
+      comments[index]
+    );
+  }
+
+  function setCommentReaction(
+    postId,
+    commentId,
+    emoji
+  ) {
+    const allowedReactions = [
+      "🌹",
+      "😘",
+      "😢",
+      "😠",
+      "🤓"
+    ];
+
+    if (
+      emoji &&
+      !allowedReactions.includes(emoji)
+    ) {
+      return false;
+    }
+
+    const post = getPost(postId);
+
+    if (!post) return false;
+
+    const comments = isArray(post.comments);
+
+    const index = comments.findIndex(
+      item => String(item.id) === String(commentId)
+    );
+
+    if (index === -1) return false;
+
+    const comment = comments[index];
+    const previousReaction = comment.myReaction || "";
+
+    const reactionCounts = {
+      ...(comment.reactionCounts || {})
+    };
+
+    let likes = Math.max(
+      0,
+      Number(comment.likes || 0)
+    );
+
+    if (previousReaction === emoji) {
+      reactionCounts[emoji] = Math.max(
+        0,
+        Number(reactionCounts[emoji] || 0) - 1
+      );
+
+      likes = Math.max(0, likes - 1);
+
+      comments[index] = {
+        ...comment,
+        liked: false,
+        myReaction: "",
+        reactionCounts,
+        likes
+      };
+    } else {
+      if (previousReaction) {
+        reactionCounts[previousReaction] = Math.max(
+          0,
+          Number(
+            reactionCounts[previousReaction] || 0
+          ) - 1
+        );
+      }
+
+      if (!comment.liked) {
+        likes += 1;
+      }
+
+      reactionCounts[emoji] = Number(
+        reactionCounts[emoji] || 0
+      ) + 1;
+
+      comments[index] = {
+        ...comment,
+        liked: true,
+        myReaction: emoji,
+        reactionCounts,
+        likes
+      };
+    }
+
+    const updatedPost = {
+      ...post,
+      comments
+    };
+
+    return saveCollection(
+      STORAGE.posts,
+      replacePostInList(postId, updatedPost),
+      "comment-reaction",
+      comments[index]
+    );
+  }
+
+  function getCommentCount(postId) {
+    return getComments(postId).length;
   }
 
   /* =======================================================
      STORIES
   ======================================================= */
 
-  function getStories() {
-    ensureInitialized();
-    return clone(stories);
+  function getStories(includeExpired = false) {
+    const now = Date.now();
+
+    return isArray(read(STORAGE.stories, []))
+  .filter(story => {
+        if (includeExpired) return true;
+
+        return !story.expiresAt ||
+          new Date(story.expiresAt).getTime() > now;
+      })
+      .sort((a, b) =>
+        new Date(b.createdAt || 0) -
+        new Date(a.createdAt || 0)
+      );
   }
 
-  function getStory(storyId) {
-    ensureInitialized();
-
-    return clone(
-      stories.find(
-        story => String(story.id) === String(storyId)
-      ) || null
-    );
-  }
-
-  function addStory(data = {}) {
-    ensureInitialized();
-
-    const story = {
-      id: data.id || makeId("story"),
-      userId: data.userId || "me",
-      author: data.author || profile.name || "User",
-      avatar: data.avatar || profile.avatar || "",
-      text: asString(data.text),
-      image: data.image || "",
-      mediaId: data.mediaId || null,
-      createdAt: data.createdAt || now(),
-      expiresAt: data.expiresAt ||
-        new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      views: [],
-      ...clone(data)
-    };
-
-    stories.unshift(story);
-
-    if (!persistStories()) {
-      stories.shift();
-      return null;
-    }
-
-    notify("stories", "add", story);
-
-    return clone(story);
-  }
-
-  function deleteStory(storyId) {
-    ensureInitialized();
-
-    const id = asString(storyId);
-    const index = stories.findIndex(
-      story => String(story.id) === id
-    );
-
-    if (index < 0) return false;
-
-    const removed = stories[index];
-
-    stories.splice(index, 1);
-
-    if (!persistStories()) {
-      stories.splice(index, 0, removed);
+  function addStory(story = {}) {
+    if (!story || typeof story !== "object") {
       return false;
     }
 
-    // Preserve media information for safe cleanup.
-    notify("stories", "delete", {
-      id: removed.id,
-      mediaId: removed.mediaId || null,
-      image: removed.image || ""
-    });
+    const now = Date.now();
 
-    return true;
-  }
-
-  function addStoryView(storyId, userId = "me") {
-    ensureInitialized();
-
-    const story = stories.find(
-      item => String(item.id) === String(storyId)
-    );
-
-    if (!story) return false;
-
-    if (!Array.isArray(story.views)) {
-      story.views = [];
-    }
+    const item = {
+      ...clone(story),
+      id: story.id || makeId("story"),
+      createdAt: story.createdAt ||
+        new Date(now).toISOString(),
+      expiresAt: story.expiresAt ||
+        new Date(
+          now + 24 * 60 * 60 * 1000
+        ).toISOString()
+    };
 
     if (
-      story.views.some(view =>
-        String(
-          typeof view === "object" ? view.userId : view
-        ) === String(userId)
-      )
+      !item.mediaId &&
+      !item.mediaData &&
+      !item.text
     ) {
-      return true;
+      return false;
     }
 
-    story.views.push({
-      userId,
-      viewedAt: now()
-    });
+    const stories = getStories(true);
+    stories.unshift(item);
 
-    if (!persistStories()) return false;
+    if (!saveCollection(
+      STORAGE.stories,
+      stories,
+      "add",
+      item
+    )) {
+      return false;
+    }
 
-    notify("stories", "view", {
-      storyId: String(storyId),
-      userId
-    });
-
-    return true;
+    return clone(item);
   }
 
-  function getActiveStories() {
-    ensureInitialized();
+  function deleteStory(storyId) {
+    const id = String(storyId || "");
+    const stories = getStories(true);
 
-    const currentTime = Date.now();
+    const next = stories.filter(
+      story => String(story.id) !== id
+    );
 
-    return clone(
-      stories.filter(story => {
-        if (!story.expiresAt) return true;
+    if (next.length === stories.length) {
+      return false;
+    }
 
-        const expires = new Date(
-          story.expiresAt
-        ).getTime();
-
-        return !Number.isNaN(expires) &&
-          expires > currentTime;
-      })
+    return saveCollection(
+      STORAGE.stories,
+      next,
+      "delete",
+      { id }
     );
   }
 
@@ -742,153 +825,101 @@
   ======================================================= */
 
   function getFriends() {
-    ensureInitialized();
-    return clone(friends);
+    return isArray(
+      read(STORAGE.friends, [])
+    );
   }
 
-  function addFriend(data = {}) {
-    ensureInitialized();
+  function addFriend(friend) {
+    const item = typeof friend === "string"
+      ? {
+          name: cleanText(friend, 60)
+        }
+      : clone(friend || {});
 
-    const friend = {
-      id: data.id || makeId("friend"),
-      userId: data.userId || data.id || "",
-      name: data.name || "",
-      avatar: data.avatar || "",
-      status: data.status || "friend",
-      createdAt: data.createdAt || now(),
-      ...clone(data)
-    };
+    const name = cleanText(item.name, 60);
 
-    const exists = friends.some(
-      item => String(item.userId) === String(friend.userId)
+    if (!name) return false;
+
+    const friends = getFriends();
+
+    const duplicate = friends.some(existing =>
+      String(existing.name || "").toLowerCase() ===
+      name.toLowerCase()
     );
 
-    if (exists) return false;
+    if (duplicate) return false;
 
-    friends.push(friend);
+    const newFriend = {
+      ...item,
+      id: item.id || makeId("friend"),
+      name,
+      avatar: item.avatar ||
+        item.initial ||
+        name.charAt(0),
+      createdAt: item.createdAt ||
+        new Date().toISOString()
+    };
 
-    if (!persistFriends()) {
-      friends.pop();
+    friends.unshift(newFriend);
+
+    if (!saveCollection(
+      STORAGE.friends,
+      friends,
+      "add",
+      newFriend
+    )) {
       return false;
     }
 
-    notify("friends", "add", friend);
-
-    return clone(friend);
+    return clone(newFriend);
   }
 
-  function removeFriend(userId) {
-    ensureInitialized();
+  function updateFriend(
+    friendId,
+    changes = {}
+  ) {
+    const id = String(friendId || "");
+    const friends = getFriends();
 
     const index = friends.findIndex(
-      item => String(item.userId) === String(userId)
+      friend => String(friend.id) === id
     );
 
-    if (index < 0) return false;
+    if (index === -1) return false;
 
-    const removed = friends.splice(index, 1)[0];
+    friends[index] = {
+      ...friends[index],
+      ...clone(changes),
+      id: friends[index].id
+    };
 
-    if (!persistFriends()) {
-      friends.splice(index, 0, removed);
+    return saveCollection(
+      STORAGE.friends,
+      friends,
+      "update",
+      friends[index]
+    );
+  }
+
+  function removeFriend(friendId) {
+    const id = String(friendId || "");
+    const friends = getFriends();
+
+    const next = friends.filter(
+      friend => String(friend.id) !== id
+    );
+
+    if (next.length === friends.length) {
       return false;
     }
 
-    notify("friends", "delete", {
-      id: removed.id,
-      userId: removed.userId
-    });
-
-    return true;
-  }
-
-  /* =======================================================
-     MESSAGES
-  ======================================================= */
-
-  function getMessages() {
-    ensureInitialized();
-    return clone(messages);
-  }
-
-  function addMessage(data = {}) {
-    ensureInitialized();
-
-    const message = {
-      id: data.id || makeId("message"),
-      senderId: data.senderId || "me",
-      receiverId: data.receiverId || "",
-      text: asString(data.text),
-      image: data.image || "",
-      createdAt: data.createdAt || now(),
-      read: false,
-      ...clone(data)
-    };
-
-    messages.push(message);
-
-    if (!persistMessages()) {
-      messages.pop();
-      return null;
-    }
-
-    notify("messages", "add", message);
-
-    return clone(message);
-  }
-
-  function deleteMessage(messageId) {
-    ensureInitialized();
-
-    const index = messages.findIndex(
-      item => String(item.id) === String(messageId)
+    return saveCollection(
+      STORAGE.friends,
+      next,
+      "delete",
+      { id }
     );
-
-    if (index < 0) return false;
-
-    const removed = messages.splice(index, 1)[0];
-
-    if (!persistMessages()) {
-      messages.splice(index, 0, removed);
-      return false;
-    }
-
-    notify("messages", "delete", {
-      id: removed.id
-    });
-
-    return true;
-  }
-
-  /* =======================================================
-     CHATS
-  ======================================================= */
-
-  function getChats() {
-    ensureInitialized();
-    return clone(chats);
-  }
-
-  function addChat(data = {}) {
-    ensureInitialized();
-
-    const chat = {
-      id: data.id || makeId("chat"),
-      participants: asArray(data.participants),
-      messages: asArray(data.messages),
-      updatedAt: data.updatedAt || now(),
-      ...clone(data)
-    };
-
-    chats.push(chat);
-
-    if (!persistChats()) {
-      chats.pop();
-      return null;
-    }
-
-    notify("messages", "chat-add", chat);
-
-    return clone(chat);
   }
 
   /* =======================================================
@@ -896,51 +927,227 @@
   ======================================================= */
 
   function getProfile() {
-    ensureInitialized();
-    return clone(profile);
+    const profile = read(
+      STORAGE.profile,
+      DEFAULT_PROFILE
+    );
+
+    return {
+      ...clone(DEFAULT_PROFILE),
+      ...(profile && typeof profile === "object"
+        ? profile
+        : {})
+    };
   }
 
-  function updateProfile(updates = {}) {
-    ensureInitialized();
-
-    const previous = clone(profile);
-
-    const oldAvatar = profile.avatar || "";
-    const oldCover = profile.cover || "";
-
-    profile = {
-      ...profile,
-      ...clone(updates)
-    };
-
-    if (!persistProfile()) {
-      profile = previous;
-      return null;
+  function saveProfile(profile = {}) {
+    if (!profile || typeof profile !== "object") {
+      return false;
     }
 
-    const newAvatar = profile.avatar || "";
-    const newCover = profile.cover || "";
+    const current = getProfile();
 
-    notify("profile", "update", {
-      ...clone(profile),
+    const next = {
+      ...current,
+      ...clone(profile)
+    };
 
-      oldAvatar,
-      oldCover,
+    if ("name" in profile) {
+      next.name = cleanText(
+        profile.name,
+        60
+      );
+    }
 
-      oldAvatarMediaId:
-        previous.avatarMediaId || null,
+    if ("bio" in profile) {
+      next.bio = cleanText(
+        profile.bio,
+        240
+      );
+    }
 
-      oldCoverMediaId:
-        previous.coverMediaId || null,
+    if ("location" in profile) {
+      next.location = cleanText(
+        profile.location,
+        100
+      );
+    }
 
-      newAvatarMediaId:
-        profile.avatarMediaId || null,
+    if ("avatar" in profile) {
+      next.avatar = cleanText(
+        profile.avatar,
+        200000
+      );
+    }
 
-      newCoverMediaId:
-        profile.coverMediaId || null
+    if ("cover" in profile) {
+      next.cover = cleanText(
+        profile.cover,
+        200000
+      );
+    }
+
+    if (!write(STORAGE.profile, next)) {
+      return false;
+    }
+
+    emit("profile", "update", next);
+
+    return clone(next);
+  }
+
+  /* =======================================================
+     MESSAGES AND CHATS
+  ======================================================= */
+
+  function getMessages() {
+    return isArray(
+      read(STORAGE.messages, [])
+    ).sort((a, b) =>
+      new Date(a.createdAt || a.time || 0) -
+      new Date(b.createdAt || b.time || 0)
+    );
+  }
+
+  function getChats() {
+    const storedChats = isArray(
+      read(STORAGE.chats, [])
+    );
+
+    const messages = getMessages();
+    const chatsById = new Map();
+
+    storedChats.forEach(chat => {
+      chatsById.set(String(chat.id), {
+        ...chat,
+        messages: isArray(chat.messages)
+      });
     });
 
-    return clone(profile);
+    messages.forEach(message => {
+      const chatId = String(
+        message.chatId || "general"
+      );
+
+      if (!chatsById.has(chatId)) {
+        chatsById.set(chatId, {
+          id: chatId,
+          userId: message.userId || "",
+          name: message.sender || "सन्देश",
+          avatar: message.avatar || "",
+          messages: []
+        });
+      }
+
+      const chat = chatsById.get(chatId);
+
+      const exists = chat.messages.some(
+        item => String(item.id) ===
+          String(message.id)
+      );
+
+      if (!exists) {
+        chat.messages.push({
+          ...message,
+          text: message.text || "",
+          fromMe: Boolean(message.fromMe),
+          time: message.time ||
+            message.createdAt ||
+            Date.now()
+        });
+      }
+    });
+
+    return [...chatsById.values()].map(chat => ({
+      ...chat,
+      messages: chat.messages.sort((a, b) =>
+        new Date(a.time || a.createdAt || 0) -
+        new Date(b.time || b.createdAt || 0)
+      )
+    }));
+  }
+
+  function createChat(friend = {}) {
+    if (!friend || typeof friend !== "object") {
+      return false;
+    }
+
+    const chats = getChats();
+
+    const existing = chats.find(chat =>
+      String(chat.userId) === String(friend.id)
+    );
+
+    if (existing) return existing.id;
+
+    const chat = {
+      id: makeId("chat"),
+      userId: friend.id || "",
+      name: cleanText(
+        friend.name || "साथी",
+        60
+      ),
+      avatar: friend.avatar ||
+        friend.initial ||
+        "",
+      messages: [],
+      createdAt: new Date().toISOString()
+    };
+
+    const stored = isArray(
+      read(STORAGE.chats, [])
+    );
+
+    stored.unshift(chat);
+
+    if (!saveCollection(
+      STORAGE.chats,
+      stored,
+      "add",
+      chat
+    )) {
+      return false;
+    }
+
+    return chat.id;
+  }
+
+  function sendMessage(
+    chatId,
+    message,
+    options = {}
+  ) {
+    const id = String(chatId || "");
+
+    const text = typeof message === "object"
+      ? cleanText(message.text, 2000)
+      : cleanText(message, 2000);
+
+    if (!id || !text) return false;
+
+    const item = {
+      id: makeId("message"),
+      chatId: id,
+      sender: options.sender || "",
+      text,
+      fromMe: options.fromMe !== false,
+      createdAt: new Date().toISOString(),
+      time: Date.now()
+    };
+
+    const messages = getMessages();
+    messages.push(item);
+
+    if (!saveCollection(
+      STORAGE.messages,
+      messages,
+      "send",
+      item
+    )) {
+      return false;
+    }
+
+    return clone(item);
   }
 
   /* =======================================================
@@ -948,60 +1155,70 @@
   ======================================================= */
 
   function getNotifications() {
-    ensureInitialized();
-    return clone(notifications);
+    return isArray(
+      read(STORAGE.notifications, [])
+    ).sort((a, b) =>
+      new Date(b.createdAt || b.time || 0) -
+      new Date(a.createdAt || a.time || 0)
+    );
   }
 
-  function addNotification(data = {}) {
-    ensureInitialized();
-
-    const notification = {
-      id: data.id || makeId("notification"),
-      type: data.type || "general",
-      text: data.text || "",
-      read: false,
-      createdAt: data.createdAt || now(),
-      ...clone(data)
-    };
-
-    notifications.unshift(notification);
-
-    if (!persistNotifications()) {
-      notifications.shift();
-      return null;
-    }
-
-    notify("notifications", "add", notification);
-
-    return clone(notification);
-  }
-
-  function markNotificationsRead() {
-    ensureInitialized();
-
-    const previous = clone(notifications);
-
-    notifications = notifications.map(item => ({
-      ...item,
-      read: true
-    }));
-
-    if (!persistNotifications()) {
-      notifications = previous;
+  function addNotification(notification = {}) {
+    if (
+      !notification ||
+      typeof notification !== "object"
+    ) {
       return false;
     }
 
-    notify("notifications", "mark-read", {
-      count: notifications.length
-    });
+    const item = {
+      ...clone(notification),
+      id: notification.id ||
+        makeId("notification"),
+      text: cleanText(
+        notification.text,
+        500
+      ),
+      read: Boolean(notification.read),
+      createdAt: notification.createdAt ||
+        new Date().toISOString(),
+      time: notification.time || Date.now()
+    };
 
-    return true;
+    if (!item.text) return false;
+
+    const notifications = getNotifications();
+    notifications.unshift(item);
+
+    if (!saveCollection(
+      STORAGE.notifications,
+      notifications,
+      "add",
+      item
+    )) {
+      return false;
+    }
+
+    return clone(item);
+  }
+
+  function markNotificationsRead() {
+    const notifications = getNotifications().map(
+      item => ({
+        ...item,
+        read: true
+      })
+    );
+
+    return saveCollection(
+      STORAGE.notifications,
+      notifications,
+      "mark-read"
+    );
   }
 
   function getUnreadNotificationCount() {
-    ensureInitialized();
-
-    return notifications.filter(
+    return getNotifications().filter(
       item => !item.read
     ).length;
   }
@@ -1011,85 +1228,93 @@
   ======================================================= */
 
   function getSavedPosts() {
-    ensureInitialized();
-    return clone(saved);
+    return isArray(
+      read(STORAGE.saved, [])
+    );
   }
 
   function savePost(postId) {
-    ensureInitialized();
-
-    const id = asString(postId);
+    const id = String(postId || "");
 
     if (!id) return false;
 
+    const saved = getSavedPosts();
+
     if (
-      saved.some(item =>
-        String(
-          typeof item === "object" ? item.postId : item
-        ) === id
-      )
+      saved.some(item => String(item) === id)
     ) {
       return true;
     }
 
-    saved.push({
-      postId: id,
-      savedAt: now()
-    });
+    saved.push(id);
 
-    if (!persistSaved()) {
-      saved.pop();
-      return false;
-    }
-
-    notify("saved", "add", {
-      postId: id
-    });
-
-    return true;
+    return saveCollection(
+      STORAGE.saved,
+      saved,
+      "save",
+      { id }
+    );
   }
 
   function unsavePost(postId) {
-    ensureInitialized();
+    const id = String(postId || "");
+    const saved = getSavedPosts();
 
-    const id = asString(postId);
-
-    const index = saved.findIndex(
-      item => String(
-        typeof item === "object" ? item.postId : item
-      ) === id
+    const next = saved.filter(
+      item => String(item) !== id
     );
 
-    if (index < 0) return false;
-
-    const removed = saved.splice(index, 1)[0];
-
-    if (!persistSaved()) {
-      saved.splice(index, 0, removed);
+    if (next.length === saved.length) {
       return false;
     }
 
-    notify("saved", "delete", {
-      postId: id
-    });
-
-    return true;
+    return saveCollection(
+      STORAGE.saved,
+      next,
+      "unsave",
+      { id }
+    );
   }
 
   function toggleSavedPost(postId) {
-    ensureInitialized();
+  const id = String(postId || "");
 
-    const id = asString(postId);
+  if (!id) return false;
 
-    const exists = saved.some(
-      item => String(
-        typeof item === "object" ? item.postId : item
-      ) === id
+  const exists = getSavedPosts().some(
+    item => String(item) === id
+  );
+
+  if (exists) {
+    unsavePost(id);
+  } else {
+    savePost(id);
+  }
+
+  // सफलतापछि मात्र होइन, वास्तविक storage अवस्था जाँच्ने
+  return getSavedPosts().some(
+    item => String(item) === id
+  );
+}
+
+  /* =======================================================
+     INITIALIZATION
+  ======================================================= */
+
+  function initialize() {
+    if (initialized) return true;
+
+    initialized = true;
+
+    global.dispatchEvent(
+      new CustomEvent("ksk:data-ready", {
+        detail: {
+          timestamp: Date.now()
+        }
+      })
     );
 
-    return exists
-      ? unsavePost(id)
-      : savePost(id);
+    return true;
   }
 
   /* =======================================================
@@ -1097,8 +1322,8 @@
   ======================================================= */
 
   const api = Object.freeze({
-
     initialize,
+    subscribe,
 
     // Posts
     getPosts,
@@ -1106,41 +1331,37 @@
     addPost,
     updatePost,
     deletePost,
-    togglePostLike,
 
-    // Comments
+    // Comments and replies
+    getComments,
+    getComment,
     addComment,
     updateComment,
     deleteComment,
-    addReply,
-    deleteReply,
     toggleCommentLike,
+    setCommentReaction,
+    getCommentCount,
 
     // Stories
     getStories,
-    getStory,
-    getActiveStories,
     addStory,
     deleteStory,
-    addStoryView,
 
     // Friends
     getFriends,
     addFriend,
+    updateFriend,
     removeFriend,
-
-    // Messages
-    getMessages,
-    addMessage,
-    deleteMessage,
-
-    // Chats
-    getChats,
-    addChat,
 
     // Profile
     getProfile,
-    updateProfile,
+    saveProfile,
+
+    // Messages
+    getMessages,
+    getChats,
+    createChat,
+    sendMessage,
 
     // Notifications
     getNotifications,
