@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -103,6 +102,19 @@
     return String(value ?? "")
       .trim()
       .slice(0, maxLength);
+  }
+
+  /*
+   * Return only IDs owned by KSKMedia.
+   * Data URLs, remote URLs and arbitrary strings must never
+   * be treated as IndexedDB keys for deletion.
+   */
+  function getStoredMediaId(value) {
+    const id = String(value ?? "").trim();
+
+    return /^(?:ksk_media_|media_)[A-Za-z0-9_-]+$/.test(id)
+      ? id
+      : "";
   }
 
   function isArray(value) {
@@ -304,21 +316,31 @@
 
   function deletePost(postId) {
     const id = String(postId || "");
+    if (!id) return false;
+
     const posts = getPosts();
+    const existing = posts.find(
+      post => String(post.id) === id
+    );
+
+    if (!existing) return false;
 
     const next = posts.filter(
       post => String(post.id) !== id
     );
 
-    if (next.length === posts.length) {
-      return false;
-    }
-
+    /*
+     * Include the removed media ID in the change event.
+     * Cleanup must verify whether another item references it.
+     */
     return saveCollection(
       STORAGE.posts,
       next,
       "delete",
-      { id }
+      {
+        id,
+        mediaId: getStoredMediaId(existing.mediaId)
+      }
     );
   }
 
@@ -747,7 +769,7 @@
     const now = Date.now();
 
     return isArray(read(STORAGE.stories, []))
-  .filter(story => {
+      .filter(story => {
         if (includeExpired) return true;
 
         return !story.expiresAt ||
@@ -802,21 +824,31 @@
 
   function deleteStory(storyId) {
     const id = String(storyId || "");
+    if (!id) return false;
+
     const stories = getStories(true);
+    const existing = stories.find(
+      story => String(story.id) === id
+    );
+
+    if (!existing) return false;
 
     const next = stories.filter(
       story => String(story.id) !== id
     );
 
-    if (next.length === stories.length) {
-      return false;
-    }
-
+    /*
+     * Include the removed media ID in the change event.
+     * Cleanup must verify whether another item references it.
+     */
     return saveCollection(
       STORAGE.stories,
       next,
       "delete",
-      { id }
+      {
+        id,
+        mediaId: getStoredMediaId(existing.mediaId)
+      }
     );
   }
 
@@ -991,7 +1023,38 @@
       return false;
     }
 
-    emit("profile", "update", next);
+    const previousMedia = {
+      avatarMediaId: getStoredMediaId(
+        current.avatarMediaId || current.avatar
+      ),
+      coverMediaId: getStoredMediaId(
+        current.coverMediaId || current.cover
+      )
+    };
+
+    const nextMedia = {
+      avatarMediaId: getStoredMediaId(
+        next.avatarMediaId || next.avatar
+      ),
+      coverMediaId: getStoredMediaId(
+        next.coverMediaId || next.cover
+      )
+    };
+
+    /*
+     * Keep the stored profile schema unchanged.
+     * Event metadata tells media cleanup which old IDs
+     * may become orphaned after a successful update.
+     */
+    emit("profile", "update", {
+      ...next,
+      previousMedia,
+      nextMedia,
+      changedMedia: {
+        avatar: previousMedia.avatarMediaId !== nextMedia.avatarMediaId,
+        cover: previousMedia.coverMediaId !== nextMedia.coverMediaId
+      }
+    });
 
     return clone(next);
   }
@@ -1277,25 +1340,24 @@
   }
 
   function toggleSavedPost(postId) {
-  const id = String(postId || "");
+    const id = String(postId || "");
 
-  if (!id) return false;
+    if (!id) return false;
 
-  const exists = getSavedPosts().some(
-    item => String(item) === id
-  );
+    const exists = getSavedPosts().some(
+      item => String(item) === id
+    );
 
-  if (exists) {
-    unsavePost(id);
-  } else {
-    savePost(id);
+    if (exists) {
+      unsavePost(id);
+    } else {
+      savePost(id);
+    }
+
+    return getSavedPosts().some(
+      item => String(item) === id
+    );
   }
-
-  // सफलतापछि मात्र होइन, वास्तविक storage अवस्था जाँच्ने
-  return getSavedPosts().some(
-    item => String(item) === id
-  );
-}
 
   /* =======================================================
      INITIALIZATION
