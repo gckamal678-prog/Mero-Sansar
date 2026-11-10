@@ -463,7 +463,7 @@
    * Listen for Post, Story and Profile changes.
    */
 
-  function handleDataChange(event) {
+    function handleDataChange(event) {
     const detail = event?.detail || {};
 
     const collection = String(
@@ -475,43 +475,53 @@
     ).toLowerCase();
 
     const item = detail.item || {};
+    const mediaIds = new Set();
 
-    const mediaIds = [];
-
-    // Deleted Post or Story
+    // Post / Story Delete
     if (
       action === "delete" &&
       (
         collection.includes("posts") ||
         collection.includes("stories")
-      )
+      ) &&
+      item.mediaId
     ) {
-      mediaIds.push(item.mediaId);
+      mediaIds.add(item.mediaId);
     }
 
-    // Replaced Profile Avatar or Cover
+    // Profile Avatar / Cover Update
     if (
       collection === "profile" &&
       action === "update"
     ) {
-      mediaIds.push(
-        item.previousMedia?.avatarMediaId,
-        item.previousMedia?.coverMediaId
-      );
+      const previousMedia = item.previousMedia || {};
+      const changedMedia = item.changedMedia || {};
+
+      if (
+        changedMedia.avatar &&
+        previousMedia.avatarMediaId
+      ) {
+        mediaIds.add(previousMedia.avatarMediaId);
+      }
+
+      if (
+        changedMedia.cover &&
+        previousMedia.coverMediaId
+      ) {
+        mediaIds.add(previousMedia.coverMediaId);
+      }
     }
 
-    const uniqueIds = [...new Set(
-      mediaIds
-        .map(value => String(value || "").trim())
-        .filter(Boolean)
-    )];
+    if (mediaIds.size === 0) return;
 
-    if (!uniqueIds.length) return;
-
+    /*
+     * Wait until synchronous data-change listeners finish.
+     * Reference checking prevents deleting media still in use.
+     */
     Promise.resolve().then(() => {
-      uniqueIds.forEach(mediaId => {
+      for (const mediaId of mediaIds) {
         cleanupOrphanedImage(mediaId);
-      });
+      }
     });
   }
 
