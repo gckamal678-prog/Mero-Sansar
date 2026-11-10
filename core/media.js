@@ -1,12 +1,34 @@
+
 "use strict";
 
 /*
  * KSK — MEDIA STORAGE
- * Images are stored in IndexedDB, not localStorage.
- * Designed for Stories, Posts, Profile Avatar and Cover.
+ *
+ * RESPONSIBILITY:
+ * - Store images in IndexedDB.
+ * - Retrieve images and Object URLs.
+ * - Delete unused media safely.
+ * - Clean up Post and Story media after deletion.
+ * - Clean up old Profile Avatar and Cover media after updates.
+ * - Prevent deletion when a media ID is still referenced.
+ *
+ * DEPENDENCIES:
+ * - Browser IndexedDB
+ * - KSKData
  */
 
 (function (global) {
+  "use strict";
+
+  if (global.KSKMedia) {
+    console.warn("KSKMedia is already initialized.");
+    return;
+  }
+
+  /* =====================================================
+     CONFIGURATION
+  ===================================================== */
+
   const DB_NAME = "ksk_media_database";
   const DB_VERSION = 1;
   const STORE_NAME = "images";
@@ -17,8 +39,13 @@
   const IMAGE_QUALITY = 0.84;
 
   let databasePromise = null;
+  let dataChangeListenerBound = false;
 
   const urlCache = new Map();
+
+  /* =====================================================
+     HELPERS
+  ===================================================== */
 
   function createId() {
     const id = global.crypto?.randomUUID
@@ -28,19 +55,51 @@
     return `ksk_media_${id}`;
   }
 
+  function isValidMediaId(value) {
+    return /^(?:ksk_media_|media_)[A-Za-z0-9_-]+$/.test(
+      String(value || "").trim()
+    );
+  }
+
+  function normalizeMediaId(value) {
+    const id = String(value || "").trim();
+
+    return isValidMediaId(id) ? id : "";
+  }
+
+  function logError(message, error) {
+    console.error(`[KSKMedia] ${message}`, error || "");
+  }
+
+  /* =====================================================
+     INDEXEDDB
+  ===================================================== */
+
   function openDatabase() {
-    if (databasePromise) return databasePromise;
+    if (databasePromise) {
+      return databasePromise;
+    }
 
     databasePromise = new Promise((resolve, reject) => {
       if (!global.indexedDB) {
-        reject(new Error("यो ब्राउजरमा फोटो भण्डारण उपलब्ध छैन।"));
+        reject(
+          new Error("यो ब्राउजरमा फोटो भण्डारण उपलब्ध छैन।")
+        );
         return;
       }
 
-      const request = global.indexedDB.open(
-        DB_NAME,
-        DB_VERSION
-      );
+      let request;
+
+      try {
+        request = global.indexedDB.open(
+          DB_NAME,
+          DB_VERSION
+        );
+      } catch (error) {
+        databasePromise = null;
+        reject(error);
+        return;
+      }
 
       request.onupgradeneeded = event => {
         const db = event.target.result;
@@ -65,6 +124,7 @@
 
       request.onerror = () => {
         databasePromise = null;
+
         reject(
           request.error ||
           new Error("फोटो भण्डारण खोल्न सकिएन।")
@@ -73,8 +133,11 @@
 
       request.onblocked = () => {
         databasePromise = null;
+
         reject(
-          new Error("फोटो भण्डारण अर्को ट्याबमा व्यस्त छ।")
+          new Error(
+            "फोटो भण्डारण अर्को ट्याबमा व्यस्त छ।"
+          )
         );
       };
     });
@@ -82,60 +145,90 @@
     return databasePromise;
   }
 
+  /* =====================================================
+     FILE VALIDATION
+  ===================================================== */
+
   function validateFile(file) {
     if (!(file instanceof Blob)) {
-      throw new Error("कृपया फोटो फाइल छान्नुहोस्।");
+      throw new Error(
+        "कृपया फोटो फाइल छान्नुहोस्।"
+      );
     }
 
     if (!String(file.type || "").startsWith("image/")) {
-      throw new Error("कृपया JPG, PNG वा WebP फोटो छान्नुहोस्।");
+      throw new Error(
+        "कृपया JPG, PNG वा WebP फोटो छान्नुहोस्।"
+      );
+    }
+
+    if (file.size <= 0) {
+      throw new Error(
+        "छानिएको फोटो खाली छ।"
+      );
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      throw new Error("फोटोको आकार १२ MB भन्दा कम हुनुपर्छ।");
+      throw new Error(
+        "फोटोको आकार १२ MB भन्दा कम हुनुपर्छ।"
+      );
     }
   }
 
+  /* =====================================================
+     IMAGE OPTIMIZATION
+  ===================================================== */
+
   async function createOptimizedBlob(file) {
     let bitmap = null;
+    let temporaryURL = "";
 
     try {
-      if (global.createImageBitmap) {
-        bitmap = await global.createImageBitmap(file);
-      }
-
       let width;
       let height;
       let source;
+
+      if (global.createImageBitmap) {
+        try {
+          bitmap = await global.createImageBitmap(file);
+        } catch (error) {
+          logError(
+            "ImageBitmap decode failed; using Image fallback.",
+            error
+          );
+        }
+      }
 
       if (bitmap) {
         width = bitmap.width;
         height = bitmap.height;
         source = bitmap;
       } else {
-        const imageURL = URL.createObjectURL(file);
+        temporaryURL = global.URL.createObjectURL(file);
 
-        try {
-          const image = new Image();
+        const image = new global.Image();
 
-          await new Promise((resolve, reject) => {
-            image.onload = resolve;
-            image.onerror = () => reject(
+        await new Promise((resolve, reject) => {
+          image.onload = resolve;
+
+          image.onerror = () => {
+            reject(
               new Error("फोटो खोल्न सकिएन।")
             );
-            image.src = imageURL;
-          });
+          };
 
-          width = image.naturalWidth;
-          height = image.naturalHeight;
-          source = image;
-        } finally {
-          URL.revokeObjectURL(imageURL);
-        }
+          image.src = temporaryURL;
+        });
+
+        width = image.naturalWidth;
+        height = image.naturalHeight;
+        source = image;
       }
 
       if (!width || !height) {
-        throw new Error("फोटोको आकार पहिचान गर्न सकिएन।");
+        throw new Error(
+          "फोटोको आकार पहिचान गर्न सकिएन।"
+        );
       }
 
       const scale = Math.min(
@@ -154,7 +247,7 @@
         Math.round(height * scale)
       );
 
-      const canvas = document.createElement("canvas");
+      const canvas = global.document.createElement("canvas");
 
       canvas.width = outputWidth;
       canvas.height = outputHeight;
@@ -164,10 +257,13 @@
       });
 
       if (!context) {
-        throw new Error("फोटो तयार गर्न सकिएन।");
+        throw new Error(
+          "फोटो तयार गर्न सकिएन।"
+        );
       }
 
       context.fillStyle = "#ffffff";
+
       context.fillRect(
         0,
         0,
@@ -183,11 +279,11 @@
         outputHeight
       );
 
-      const blob = await new Promise((resolve, reject) => {
+      return await new Promise((resolve, reject) => {
         canvas.toBlob(
-          result => {
-            if (result) {
-              resolve(result);
+          blob => {
+            if (blob && blob.size > 0) {
+              resolve(blob);
             } else {
               reject(
                 new Error("फोटो कम्प्रेस गर्न सकिएन।")
@@ -198,14 +294,20 @@
           IMAGE_QUALITY
         );
       });
-
-      return blob;
     } finally {
       if (bitmap) {
         bitmap.close?.();
       }
+
+      if (temporaryURL) {
+        global.URL.revokeObjectURL(temporaryURL);
+      }
     }
   }
+
+  /* =====================================================
+     SAVE IMAGE
+  ===================================================== */
 
   async function saveImage(file, options = {}) {
     validateFile(file);
@@ -219,31 +321,45 @@
       id,
       blob,
       type: "image/jpeg",
-      name: String(options.name || file.name || "photo")
-        .slice(0, 150),
+      name: String(
+        options.name || file.name || "photo"
+      ).slice(0, 150),
       size: blob.size,
       createdAt: new Date().toISOString()
     };
 
     await new Promise((resolve, reject) => {
-      const transaction = db.transaction(
-        STORE_NAME,
-        "readwrite"
-      );
+      let transaction;
 
-      transaction.objectStore(STORE_NAME).put(record);
+      try {
+        transaction = db.transaction(
+          STORE_NAME,
+          "readwrite"
+        );
+
+        transaction.objectStore(STORE_NAME).put(record);
+      } catch (error) {
+        reject(error);
+        return;
+      }
 
       transaction.oncomplete = resolve;
 
-      transaction.onerror = () => reject(
-        transaction.error ||
-        new Error("फोटो सुरक्षित गर्न सकिएन।")
-      );
+      transaction.onerror = () => {
+        reject(
+          transaction.error ||
+          new Error("फोटो सुरक्षित गर्न सकिएन।")
+        );
+      };
 
-      transaction.onabort = () => reject(
-        transaction.error ||
-        new Error("फोटो सुरक्षित गर्ने प्रक्रिया रद्द भयो।")
-      );
+      transaction.onabort = () => {
+        reject(
+          transaction.error ||
+          new Error(
+            "फोटो सुरक्षित गर्ने प्रक्रिया रद्द भयो।"
+          )
+        );
+      };
     });
 
     return {
@@ -255,8 +371,16 @@
     };
   }
 
+  /* =====================================================
+     GET IMAGE
+  ===================================================== */
+
   async function getImage(id) {
-    if (!id) return null;
+    const key = normalizeMediaId(id);
+
+    if (!key) {
+      return null;
+    }
 
     const db = await openDatabase();
 
@@ -268,23 +392,31 @@
 
       const request = transaction
         .objectStore(STORE_NAME)
-        .get(String(id));
+        .get(key);
 
       request.onsuccess = () => {
         resolve(request.result || null);
       };
 
-      request.onerror = () => reject(
-        request.error ||
-        new Error("फोटो प्राप्त गर्न सकिएन।")
-      );
+      request.onerror = () => {
+        reject(
+          request.error ||
+          new Error("फोटो प्राप्त गर्न सकिएन।")
+        );
+      };
     });
   }
 
-  async function getImageURL(id) {
-    if (!id) return "";
+  /* =====================================================
+     GET OBJECT URL
+  ===================================================== */
 
-    const key = String(id);
+  async function getImageURL(id) {
+    const key = normalizeMediaId(id);
+
+    if (!key) {
+      return "";
+    }
 
     if (urlCache.has(key)) {
       return urlCache.get(key);
@@ -292,56 +424,30 @@
 
     const record = await getImage(key);
 
-    if (!record?.blob) return "";
+    if (!record?.blob) {
+      return "";
+    }
 
-    const url = URL.createObjectURL(record.blob);
+    const url = global.URL.createObjectURL(record.blob);
 
     urlCache.set(key, url);
 
     return url;
   }
 
-  async function deleteImage(id) {
-    if (!id) return false;
-
-    const key = String(id);
-    const db = await openDatabase();
-
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(
-        STORE_NAME,
-        "readwrite"
-      );
-
-      transaction.objectStore(STORE_NAME).delete(key);
-
-      transaction.oncomplete = () => {
-        const oldURL = urlCache.get(key);
-
-        if (oldURL) {
-          URL.revokeObjectURL(oldURL);
-          urlCache.delete(key);
-        }
-
-        resolve(true);
-      };
-
-      transaction.onerror = () => reject(
-        transaction.error ||
-        new Error("फोटो हटाउन सकिएन।")
-      );
-
-      transaction.onabort = () => resolve(false);
-    });
-  }
+  /* =====================================================
+     REVOKE OBJECT URL
+  ===================================================== */
 
   function revokeImageURL(id) {
     const key = String(id || "");
     const url = urlCache.get(key);
 
-    if (!url) return false;
+    if (!url) {
+      return false;
+    }
 
-    URL.revokeObjectURL(url);
+    global.URL.revokeObjectURL(url);
     urlCache.delete(key);
 
     return true;
@@ -349,21 +455,86 @@
 
   function revokeAllImageURLs() {
     urlCache.forEach(url => {
-      URL.revokeObjectURL(url);
+      global.URL.revokeObjectURL(url);
     });
 
     urlCache.clear();
+
+    return true;
   }
 
+  /* =====================================================
+     DELETE IMAGE
+  ===================================================== */
+
+  async function deleteImage(id) {
+    const key = normalizeMediaId(id);
+
+    if (!key) {
+      return false;
+    }
+
+    const db = await openDatabase();
+
+    return new Promise((resolve, reject) => {
+      let transaction;
+
+      try {
+        transaction = db.transaction(
+          STORE_NAME,
+          "readwrite"
+        );
+
+        transaction.objectStore(STORE_NAME).delete(key);
+      } catch (error) {
+        reject(error);
+        return;
+      }
+
+      transaction.oncomplete = () => {
+        // Revoke only after IndexedDB confirms deletion.
+        revokeImageURL(key);
+        resolve(true);
+      };
+
+      transaction.onerror = () => {
+        reject(
+          transaction.error ||
+          new Error("फोटो हटाउन सकिएन।")
+        );
+      };
+
+      transaction.onabort = () => {
+        resolve(false);
+      };
+    });
+  }
+
+  /* =====================================================
+     MEDIA REFERENCE CHECK
+  ===================================================== */
+
   /*
-   * Check whether an image is still referenced anywhere.
-   * If data APIs are missing or fail, keep the image.
+   * Check all known data collections before deleting media.
+   *
+   * If KSKData or any required getter is missing, or a getter
+   * throws, fail safely and keep the image.
+   *
+   * This prevents accidental deletion of media still in use.
    */
 
   function hasMediaReference(mediaId) {
+    const key = normalizeMediaId(mediaId);
+
+    if (!key) {
+      return true;
+    }
+
     const data = global.KSKData;
 
-    if (!data) return true;
+    if (!data) {
+      return true;
+    }
 
     const getters = [
       "getPosts",
@@ -372,13 +543,18 @@
       "getFriends",
       "getMessages",
       "getChats",
-      "getNotifications"
+      "getNotifications",
+      "getSavedPosts"
     ];
 
     const collections = [];
 
     for (const name of getters) {
       if (typeof data[name] !== "function") {
+        logError(
+          `Reference check skipped: ${name}() is unavailable.`
+        );
+
         return true;
       }
 
@@ -392,11 +568,9 @@
         }
 
         collections.push(value);
-
       } catch (error) {
-        console.warn(
-          "KSK media reference check failed:",
-          name,
+        logError(
+          `Reference check failed: ${name}()`,
           error
         );
 
@@ -404,16 +578,23 @@
       }
     }
 
-    const seen = new Set();
+    const seen = new WeakSet();
 
     function contains(value) {
-      if (value === mediaId) return true;
+      if (value === key) {
+        return true;
+      }
 
-      if (!value || typeof value !== "object") {
+      if (
+        value === null ||
+        typeof value !== "object"
+      ) {
         return false;
       }
 
-      if (seen.has(value)) return false;
+      if (seen.has(value)) {
+        return false;
+      }
 
       seen.add(value);
 
@@ -421,37 +602,35 @@
         return value.some(contains);
       }
 
-      return Object.keys(value).some(
-        key => contains(value[key])
-      );
+      return Object.keys(value).some(property => {
+        return contains(value[property]);
+      });
     }
 
     return collections.some(contains);
   }
 
-  /*
-   * Delete only orphaned KSK media.
-   */
+  /* =====================================================
+     CLEANUP ORPHANED IMAGE
+  ===================================================== */
 
   async function cleanupOrphanedImage(mediaId) {
-    const key = String(mediaId || "").trim();
+    const key = normalizeMediaId(mediaId);
 
-    if (
-      !/^(?:ksk_media_|media_)[A-Za-z0-9_-]+$/.test(key)
-    ) {
+    if (!key) {
       return false;
     }
 
+    // Never delete media that is still referenced.
     if (hasMediaReference(key)) {
       return false;
     }
 
     try {
       return await deleteImage(key);
-
     } catch (error) {
-      console.warn(
-        "KSK orphan media cleanup failed:",
+      logError(
+        `Orphan cleanup failed for ${key}`,
         error
       );
 
@@ -459,11 +638,98 @@
     }
   }
 
+  /* =====================================================
+     QUEUED CLEANUP
+  ===================================================== */
+
   /*
-   * Listen for Post, Story and Profile changes.
+   * Wait until synchronous data-change listeners finish.
+   * Then inspect the latest stored data before deleting.
    */
 
-    function handleDataChange(event) {
+  function queueOrphanCleanup(mediaIds) {
+    const ids = [
+      ...new Set(
+        (Array.isArray(mediaIds) ? mediaIds : [])
+          .map(normalizeMediaId)
+          .filter(Boolean)
+      )
+    ];
+
+    if (!ids.length) {
+      return;
+    }
+
+    Promise.resolve().then(async () => {
+      for (const id of ids) {
+        try {
+          await cleanupOrphanedImage(id);
+        } catch (error) {
+          logError(
+            `Queued cleanup failed for ${id}`,
+            error
+          );
+        }
+      }
+    });
+  }
+
+  /* =====================================================
+     PROFILE MEDIA CHANGE
+  ===================================================== */
+
+  function getPreviousProfileMedia(detail) {
+    const previous = detail?.item?.previousMedia || {};
+
+    return [
+      previous.avatarMediaId,
+      previous.coverMediaId
+    ]
+      .map(normalizeMediaId)
+      .filter(Boolean);
+  }
+
+  function getChangedProfileMedia(detail) {
+    const item = detail?.item || {};
+
+    const previous = item.previousMedia || {};
+    const next = item.nextMedia || {};
+    const changed = item.changedMedia || {};
+
+    const candidates = [];
+
+    const avatarChanged =
+      changed.avatar === true ||
+      (
+        previous.avatarMediaId &&
+        previous.avatarMediaId !== next.avatarMediaId
+      );
+
+    const coverChanged =
+      changed.cover === true ||
+      (
+        previous.coverMediaId &&
+        previous.coverMediaId !== next.coverMediaId
+      );
+
+    if (avatarChanged) {
+      candidates.push(previous.avatarMediaId);
+    }
+
+    if (coverChanged) {
+      candidates.push(previous.coverMediaId);
+    }
+
+    return candidates
+      .map(normalizeMediaId)
+      .filter(Boolean);
+  }
+
+  /* =====================================================
+     DATA CHANGE HANDLER
+  ===================================================== */
+
+  function handleDataChange(event) {
     const detail = event?.detail || {};
 
     const collection = String(
@@ -475,99 +741,118 @@
     ).toLowerCase();
 
     const item = detail.item || {};
-    const mediaIds = new Set();
 
-    // Post / Story Delete
+    /*
+     * CASE 1:
+     * Post or Story deletion.
+     */
+
     if (
       action === "delete" &&
       (
         collection.includes("posts") ||
         collection.includes("stories")
-      ) &&
-      item.mediaId
+      )
     ) {
-      mediaIds.add(item.mediaId);
+      const mediaId = normalizeMediaId(item.mediaId);
+
+      if (mediaId) {
+        queueOrphanCleanup([mediaId]);
+      }
+
+      return;
     }
 
-    // Profile Avatar / Cover Update
+    /*
+     * CASE 2:
+     * Profile Avatar or Cover update.
+     *
+     * core/data.js emits:
+     * previousMedia
+     * nextMedia
+     * changedMedia
+     */
+
     if (
       collection === "profile" &&
       action === "update"
     ) {
-      const previousMedia = item.previousMedia || {};
-      const changedMedia = item.changedMedia || {};
+      const oldMediaIds = getChangedProfileMedia(detail);
 
-      if (
-        changedMedia.avatar &&
-        previousMedia.avatarMediaId
-      ) {
-        mediaIds.add(previousMedia.avatarMediaId);
-      }
-
-      if (
-        changedMedia.cover &&
-        previousMedia.coverMediaId
-      ) {
-        mediaIds.add(previousMedia.coverMediaId);
+      if (oldMediaIds.length) {
+        queueOrphanCleanup(oldMediaIds);
       }
     }
-
-    if (mediaIds.size === 0) return;
-
-    /*
-     * Wait until synchronous data-change listeners finish.
-     * Reference checking prevents deleting media still in use.
-     */
-    Promise.resolve().then(() => {
-      for (const mediaId of mediaIds) {
-        cleanupOrphanedImage(mediaId);
-      }
-    });
   }
 
-  let dataChangeListenerBound = false;
+  /* =====================================================
+     DATA CHANGE LISTENER
+  ===================================================== */
 
   function bindDataChangeListener() {
     if (
-      global.addEventListener &&
-      !dataChangeListenerBound
+      dataChangeListenerBound ||
+      typeof global.addEventListener !== "function"
     ) {
-      global.addEventListener(
-        "ksk:data-change",
-        handleDataChange
+      return false;
+    }
+
+    global.addEventListener(
+      "ksk:data-change",
+      handleDataChange
+    );
+
+    dataChangeListenerBound = true;
+
+    return true;
+  }
+
+  /* =====================================================
+     INITIALIZATION
+  ===================================================== */
+
+  async function initialize() {
+    bindDataChangeListener();
+
+    try {
+      await openDatabase();
+      return true;
+    } catch (error) {
+      logError(
+        "Media initialization failed.",
+        error
       );
 
-      dataChangeListenerBound = true;
+      return false;
     }
   }
 
-  function initialize() {
-    bindDataChangeListener();
-
-    return openDatabase()
-      .then(() => true)
-      .catch(error => {
-        console.error(
-          "KSK Media initialization failed:",
-          error
-        );
-
-        return false;
-      });
-  }
+  /* =====================================================
+     PUBLIC API
+  ===================================================== */
 
   const api = Object.freeze({
     initialize,
+
     saveImage,
     getImage,
     getImageURL,
     deleteImage,
+
     cleanupOrphanedImage,
+    hasMediaReference,
+
     revokeImageURL,
     revokeAllImageURLs
   });
 
   global.KSKMedia = api;
+
+  /*
+   * Bind immediately.
+   * The application does not need to call initialize()
+   * for data-change cleanup events to be received.
+   */
 
   bindDataChangeListener();
 
