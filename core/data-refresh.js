@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -609,23 +608,6 @@
 
     if (isNotificationsCollection(name)) {
       if (currentPage === "notifications") {
-        /*
-         * Navigation dispatches "ksk:navigate" before it renders
-         * the destination page. The notifications page handles that
-         * event by marking notifications as read, which emits this
-         * "mark-read" data-change event synchronously.
-         *
-         * Do not render here: navigate() will render the notifications
-         * page immediately after all navigation listeners return.
-         * Rendering here as well causes the page to render twice.
-         *
-         * Other notification changes must still refresh the visible
-         * notifications page as before.
-         */
-        if (action === "mark-read") {
-          return true;
-        }
-
         return refreshOtherPage();
       }
 
