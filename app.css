@@ -1744,5 +1744,65 @@ body.ksk-compact-mode .stories-section {
 
 
 /* =========================================================
+   PHASE 4.3 — NETWORK CONNECTION STATUS
+========================================================= */
+
+.network-status {
+  box-sizing: border-box;
+
+  width: min(
+    calc(100% - 28px),
+    var(--app-content-width)
+  );
+
+  margin: 10px auto 0;
+  padding: 11px 14px;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+
+  overflow-wrap: anywhere;
+}
+
+.network-status-offline {
+  color: var(--color-warning);
+
+  background: var(--color-warning-soft);
+
+  border-color: var(--color-warning);
+}
+
+.network-status-online {
+  color: var(--color-success);
+
+  background: var(--color-success-soft);
+
+  border-color: var(--color-success);
+}
+
+.network-status[hidden] {
+  display: none !important;
+}
+
+/* Small mobile screens */
+
+@media (max-width: 420px) {
+  .network-status {
+    width: calc(100% - 20px);
+
+    margin-top: 8px;
+
+    padding: 9px 11px;
+
+    font-size: 12px;
+  }
+}
+
+
+/* =========================================================
    END — KSK APPLICATION LAYOUT
 ========================================================= */
