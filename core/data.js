@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -1417,6 +1418,34 @@
   }
 
   /* =======================================================
+     CROSS-TAB STORAGE SYNCHRONIZATION
+  ======================================================= */
+
+  function handleStorageChange(event) {
+    if (!event || !event.key) {
+      // localStorage.clear() जस्ता key-विहीन event बेवास्ता गर्ने।
+      return false;
+    }
+
+    // एपले व्यवस्थापन गर्ने storage keys मात्र स्वीकार गर्ने।
+    const managedKeys = Object.values(STORAGE);
+
+    if (!managedKeys.includes(event.key)) {
+      return false;
+    }
+
+    // अर्को tab मा परिवर्तन भएको data लाई
+    // हालको tab को refresh system मा पठाउने।
+    emit(
+      event.key,
+      "sync",
+      null
+    );
+
+    return true;
+  }
+
+  /* =======================================================
      INITIALIZATION
   ======================================================= */
 
@@ -1424,6 +1453,12 @@
     if (initialized) return true;
 
     initialized = true;
+
+    // अर्को tab मा localStorage परिवर्तन हुँदा सुन्ने।
+    global.addEventListener(
+      "storage",
+      handleStorageChange
+    );
 
     global.dispatchEvent(
       new CustomEvent("ksk:data-ready", {
