@@ -501,7 +501,17 @@
       state.currentPage || "home"
     );
 
-    if (!isValidPage(savedPage)) {
+    const rawHash = String(global.location?.hash || "")
+      .replace(/^#/, "")
+      .trim();
+
+    const linkedPage = rawHash ? normalizePage(rawHash) : "";
+
+    // A valid deep link takes priority; an empty hash must not
+    // overwrite the user's previously selected page.
+    if (linkedPage && isValidPage(linkedPage)) {
+      updatePageState(linkedPage);
+    } else if (!isValidPage(savedPage)) {
       updatePageState("home");
     }
 
@@ -517,11 +527,37 @@
       handleNavigationRequest
     );
 
+    global.addEventListener(
+      "hashchange",
+      handleHashChange
+    );
+
     initialized = true;
 
     updateActiveNavigation();
 
     return true;
+  }
+
+  /* =======================================================
+     DEEP-LINK ROUTING
+  ======================================================= */
+
+  function handleHashChange() {
+    const rawHash = String(global.location?.hash || "")
+      .replace(/^#/, "")
+      .trim();
+
+    if (!rawHash) {
+      setCurrentPage("home");
+      return;
+    }
+
+    const linkedPage = normalizePage(rawHash);
+
+    if (isValidPage(linkedPage)) {
+      setCurrentPage(linkedPage);
+    }
   }
 
   /* =======================================================
@@ -548,6 +584,11 @@
     global.removeEventListener(
       "ksk:navigate-request",
       handleNavigationRequest
+    );
+
+    global.removeEventListener(
+      "hashchange",
+      handleHashChange
     );
 
     initialized = false;
