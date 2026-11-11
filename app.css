@@ -1804,5 +1804,136 @@ body.ksk-compact-mode .stories-section {
 
 
 /* =========================================================
+   PWA UPDATE BANNER
+========================================================= */
+
+.pwa-update-banner {
+  box-sizing: border-box;
+
+  width: min(
+    calc(100% - 28px),
+    var(--app-content-width)
+  );
+
+  margin: 10px auto 0;
+  padding: 14px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+
+  background: var(--color-primary-soft);
+  color: var(--color-text);
+
+  box-shadow: var(--shadow-xs);
+}
+
+.pwa-update-banner[hidden] {
+  display: none !important;
+}
+
+.pwa-update-content {
+  flex: 1 1 190px;
+  min-width: 0;
+}
+
+.pwa-update-content strong {
+  display: block;
+  margin-bottom: 4px;
+
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.pwa-update-content p {
+  margin: 0;
+
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.7;
+
+  overflow-wrap: anywhere;
+}
+
+.pwa-update-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.pwa-update-button {
+  min-height: 36px;
+  padding: 7px 12px;
+
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+  transition:
+    background .18s ease,
+    opacity .18s ease;
+}
+
+.pwa-update-button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.pwa-update-later {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.pwa-update-now {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.pwa-update-later:hover:not(:disabled) {
+  background: var(--color-surface-secondary);
+}
+
+.pwa-update-now:hover:not(:disabled) {
+  opacity: .88;
+}
+
+.pwa-update-button:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .pwa-update-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pwa-update-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwa-update-button {
+    transition: none;
+  }
+}
+
+
+/* =========================================================
    END — KSK APPLICATION LAYOUT
 ========================================================= */
