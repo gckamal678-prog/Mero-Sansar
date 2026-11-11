@@ -1,12 +1,18 @@
+
 "use strict";
 
 /*
  * =========================================================
  * KSK — MESSAGES PAGE MODULE
  *
+ * PHASE 3.2 — CHAT MESSAGE PAGINATION
+ *
  * OWNER:
  * - Conversation list
  * - Individual chat view
+ * - Paginated messages (20 per page)
+ * - Loading older messages
+ * - Scroll position preservation
  * - Opening conversations
  * - Opening friend conversations
  * - Sending messages
@@ -36,6 +42,9 @@
 
   let activeChatId = null;
   let initialized = false;
+
+  const MESSAGE_PAGE_SIZE = 20;
+  let visibleMessageCount = MESSAGE_PAGE_SIZE;
 
   const DATA = () => global.KSKData || null;
   const LANG = () => global.KSKLanguage || null;
@@ -225,7 +234,29 @@
   }
 
   /* =======================================================
-     SINGLE CHAT VIEW
+     RENDER SINGLE MESSAGE
+  ======================================================= */
+
+  function renderChatMessage(message) {
+    return `
+      <div class="chat-message ${
+        message.fromMe ? "chat-message-mine" : ""
+      }">
+
+        <p>${escapeHTML(message.text || "")}</p>
+
+        <small class="post-time">
+          ${escapeHTML(
+            formatTime(message.time || message.createdAt)
+          )}
+        </small>
+
+      </div>
+    `;
+  }
+
+  /* =======================================================
+     SINGLE CHAT VIEW — PAGINATED
   ======================================================= */
 
   function renderChat(chat) {
@@ -233,35 +264,40 @@
       ? chat.messages
       : [];
 
-    const messageContent = messages.length
-      ? messages.map(message => `
-          <div class="chat-message ${
-            message.fromMe
-              ? "chat-message-mine"
-              : ""
-          }">
+    const visibleCount = Math.min(
+      visibleMessageCount,
+      messages.length
+    );
 
-            <p>
-              ${escapeHTML(message.text || "")}
-            </p>
+    const startIndex = Math.max(
+      0,
+      messages.length - visibleCount
+    );
 
-            <small class="post-time">
-              ${escapeHTML(
-                formatTime(
-                  message.time || message.createdAt
-                )
-              )}
-            </small>
+    const visibleMessages = messages.slice(startIndex);
 
-          </div>
-        `).join("")
+    const olderButton = startIndex > 0
+      ? `
+        <button
+          class="chat-load-older"
+          type="button"
+          data-load-older-messages>
+          ${isEnglish()
+            ? "Load older messages"
+            : "पुराना सन्देश हेर्नुहोस्"}
+        </button>
+      `
+      : "";
+
+    const messageContent = visibleMessages.length
+      ? visibleMessages.map(renderChatMessage).join("")
       : `
-          <div class="empty-state">
-            ${isEnglish()
-              ? "Start the conversation."
-              : "कुराकानी सुरु गर्नुहोस्।"}
-          </div>
-        `;
+        <div class="empty-state">
+          ${isEnglish()
+            ? "Start the conversation."
+            : "कुराकानी सुरु गर्नुहोस्।"}
+        </div>
+      `;
 
     return `
       <section class="chat-view">
@@ -275,9 +311,7 @@
             aria-label="${isEnglish()
               ? "Back to messages"
               : "सन्देश सूचीमा फर्कनुहोस्"}">
-
             ←
-
           </button>
 
           ${renderAvatar(chat)}
@@ -289,6 +323,8 @@
         </div>
 
         <div class="chat-messages">
+
+          ${olderButton}
 
           ${messageContent}
 
@@ -311,17 +347,92 @@
           <button
             class="btn btn-primary"
             type="submit">
-
-            ${isEnglish()
-              ? "Send"
-              : "पठाउनुहोस्"}
-
+            ${isEnglish() ? "Send" : "पठाउनुहोस्"}
           </button>
 
         </form>
 
       </section>
     `;
+  }
+
+  /* =======================================================
+     LOAD OLDER MESSAGES WITHOUT LOSING SCROLL POSITION
+  ======================================================= */
+
+  function loadOlderMessages(button) {
+    if (!activeChatId || !button) return false;
+
+    const chat = getChats().find(item =>
+      String(item.id) === String(activeChatId)
+    );
+
+    if (!chat) return false;
+
+    const messages = Array.isArray(chat.messages)
+      ? chat.messages
+      : [];
+
+    const container = button.closest(".chat-messages");
+
+    if (!container) return false;
+
+    const currentCount = Math.min(
+      visibleMessageCount,
+      messages.length
+    );
+
+    if (currentCount >= messages.length) {
+      button.remove();
+      return false;
+    }
+
+    const nextCount = Math.min(
+      currentCount + MESSAGE_PAGE_SIZE,
+      messages.length
+    );
+
+    const fromIndex = Math.max(
+      0,
+      messages.length - nextCount
+    );
+
+    const toIndex = Math.max(
+      0,
+      messages.length - currentCount
+    );
+
+    const olderMarkup = messages
+      .slice(fromIndex, toIndex)
+      .map(renderChatMessage)
+      .join("");
+
+    if (!olderMarkup) {
+      button.remove();
+      return false;
+    }
+
+    const previousHeight = container.scrollHeight;
+    const previousScrollTop = container.scrollTop;
+
+    button.insertAdjacentHTML(
+      "afterend",
+      olderMarkup
+    );
+
+    visibleMessageCount = nextCount;
+
+    if (fromIndex === 0) {
+      button.remove();
+    }
+
+    const heightDifference =
+      container.scrollHeight - previousHeight;
+
+    container.scrollTop =
+      previousScrollTop + heightDifference;
+
+    return true;
   }
 
   /* =======================================================
@@ -332,6 +443,7 @@
 
     if (options.activeChatId && !activeChatId) {
       activeChatId = String(options.activeChatId);
+      visibleMessageCount = MESSAGE_PAGE_SIZE;
     }
 
     const chats = getChats();
@@ -346,6 +458,7 @@
       }
 
       activeChatId = null;
+      visibleMessageCount = MESSAGE_PAGE_SIZE;
     }
 
     if (!chats.length) {
@@ -416,6 +529,10 @@
       return false;
     }
 
+    if (activeChatId !== id) {
+      visibleMessageCount = MESSAGE_PAGE_SIZE;
+    }
+
     activeChatId = id;
 
     return navigateToMessages();
@@ -423,10 +540,6 @@
 
   /* =======================================================
      OPEN FRIEND CHAT
-
-     FIX:
-     Previously this function was missing.
-     It is now properly defined and exported.
   ======================================================= */
 
   function openFriendChat(friendId) {
@@ -491,12 +604,19 @@
       return false;
     }
 
-    activeChatId = String(chatId);
+    const nextChatId = String(chatId);
+
+    if (activeChatId !== nextChatId) {
+      visibleMessageCount = MESSAGE_PAGE_SIZE;
+    }
+
+    activeChatId = nextChatId;
 
     const navigated = navigateToMessages();
 
     if (!navigated) {
       activeChatId = null;
+      visibleMessageCount = MESSAGE_PAGE_SIZE;
 
       showToast(
         isEnglish()
@@ -564,6 +684,7 @@
 
   function closeChat() {
     activeChatId = null;
+    visibleMessageCount = MESSAGE_PAGE_SIZE;
 
     refreshPage();
 
@@ -589,6 +710,20 @@
 
     if (!target?.closest) return;
 
+    /* LOAD OLDER MESSAGES */
+
+    const olderButton = target.closest(
+      "[data-load-older-messages]"
+    );
+
+    if (olderButton) {
+      stopEvent(event);
+      loadOlderMessages(olderButton);
+      return;
+    }
+
+    /* OPEN EXISTING CHAT */
+
     const openChatButton = target.closest(
       "[data-open-chat]"
     );
@@ -601,6 +736,8 @@
       return;
     }
 
+    /* BACK TO MESSAGE LIST */
+
     const backButton = target.closest(
       "[data-back-messages]"
     );
@@ -612,6 +749,8 @@
 
       return;
     }
+
+    /* OPEN FRIEND CHAT */
 
     const friendButton = target.closest(
       "[data-message-friend]"
@@ -646,16 +785,17 @@
 
   function handleNavigation(event) {
     const page = event.detail?.page;
-
     const options = event.detail?.options || {};
 
     if (page !== "messages") {
       activeChatId = null;
+      visibleMessageCount = MESSAGE_PAGE_SIZE;
       return;
     }
 
     if (!options.keepChat) {
       activeChatId = null;
+      visibleMessageCount = MESSAGE_PAGE_SIZE;
     }
   }
 
@@ -703,6 +843,10 @@
     render,
 
     renderChat,
+
+    renderChatMessage,
+
+    loadOlderMessages,
 
     renderConversationList,
 
