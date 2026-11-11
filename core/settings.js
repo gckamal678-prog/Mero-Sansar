@@ -1,4 +1,3 @@
-
 "use strict";
 
 /* =========================================================
@@ -11,6 +10,7 @@
    - Import and export settings
    - Notify subscribers about changes
    - Keep settings isolated from external mutation
+   - Synchronize settings across browser tabs
 
    Theme UI    : core/theme.js
    Language UI : core/language.js
@@ -545,6 +545,56 @@
   }
 
   /* =======================================================
+     CROSS-TAB SETTINGS SYNCHRONIZATION
+  ======================================================= */
+
+  function handleStorageChange(event) {
+    if (
+      !event ||
+      event.key !== STORAGE_KEY
+    ) {
+      return false;
+    }
+
+    let nextSettings;
+
+    try {
+      if (event.newValue === null) {
+        nextSettings = clone(DEFAULT_SETTINGS);
+      } else {
+        const parsed = JSON.parse(event.newValue);
+
+        nextSettings = normalizeSettings(
+          isObject(parsed) ? parsed : {}
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "KSKSettings: Cross-tab settings sync failed.",
+        error
+      );
+
+      return false;
+    }
+
+    // परिवर्तन नभए अनावश्यक UI refresh नगर्ने।
+    if (
+      JSON.stringify(settings) ===
+      JSON.stringify(nextSettings)
+    ) {
+      return false;
+    }
+
+    // अर्को tab बाट आएको नयाँ Settings लागू गर्ने।
+    settings = nextSettings;
+
+    // Theme, Language र अन्य UI modules लाई जानकारी दिने।
+    notify("settings-sync");
+
+    return true;
+  }
+
+  /* =======================================================
      PUBLIC API
   ======================================================= */
 
@@ -559,6 +609,15 @@
     subscribeSettings,
     DEFAULT_SETTINGS: clone(DEFAULT_SETTINGS)
   });
+
+  /* =======================================================
+     REGISTER CROSS-TAB LISTENER — ONCE
+  ======================================================= */
+
+  global.addEventListener(
+    "storage",
+    handleStorageChange
+  );
 
   console.info(
     "KSK Settings Manager initialized."
