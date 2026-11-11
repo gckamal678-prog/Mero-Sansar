@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -10,6 +11,10 @@
   "use strict";
 
   if (global.KSKHomePage) return;
+
+  const PAGE_SIZE = 10;
+
+  let visiblePostCount = PAGE_SIZE;
 
   let searchQuery = String(
     global.KSKState?.getState?.()?.searchQuery || ""
@@ -38,11 +43,13 @@
 
   function getPosts() {
     const posts = global.KSKData?.getPosts?.();
+
     return Array.isArray(posts) ? posts : [];
   }
 
   function getStories() {
     const stories = global.KSKData?.getStories?.();
+
     return Array.isArray(stories) ? stories : [];
   }
 
@@ -64,9 +71,7 @@
     );
   }
 
-  /*
-   * STORY TEXT PREVIEW STYLES
-   */
+  /* STORY TEXT PREVIEW STYLES */
 
   function ensureStoryPreviewStyles() {
     if ($("#kskStoryPreviewStyles")) return;
@@ -95,9 +100,7 @@
     document.head.appendChild(style);
   }
 
-  /*
-   * CREATE SHORT STORY TEXT
-   */
+  /* CREATE SHORT STORY TEXT */
 
   function getStoryPreview(text) {
     const cleanText = String(text || "")
@@ -116,10 +119,7 @@
     return characters.slice(0, limit).join("") + "…";
   }
 
-  /*
-   * POST CARD RENDERING
-   * Actual card HTML belongs to KSKPostCard.
-   */
+  /* POST CARD RENDERING */
 
   function renderPost(post) {
     if (!post || typeof post !== "object") return "";
@@ -146,21 +146,7 @@
     });
   }
 
-  /*
-   * STORIES RENDERING
-   *
-   * Photo story:
-   *   Show photo thumbnail.
-   *
-   * Text-only story:
-   *   Show a short text preview.
-   *
-   * Photo + text:
-   *   Show photo thumbnail only.
-   *
-   * Empty story:
-   *   Do not render.
-   */
+  /* STORIES RENDERING */
 
   function renderStories() {
     const storiesList = $("#storiesList");
@@ -198,6 +184,7 @@
         }
 
         const hasPhoto = Boolean(story.mediaId);
+
         const hasText = Boolean(
           String(story.text || "").trim()
         );
@@ -241,35 +228,183 @@
 
     storiesList.innerHTML = addStory + storyItems;
 
-    /*
-     * Media UI observes #storiesList and loads
-     * photo thumbnails when its content changes.
-     */
+    return true;
+  }
+
+  /* FEED FILTERING */
+
+  function getFilteredPosts() {
+    const query = searchQuery.toLowerCase();
+
+    return getPosts().filter(post => {
+      if (!post || typeof post !== "object") {
+        return false;
+      }
+
+      const searchable = [
+        String(post.author || ""),
+        String(post.text || "")
+      ].join(" ").toLowerCase();
+
+      return searchable.includes(query);
+    });
+  }
+
+  /* FEED PAGINATION CONTROLS */
+
+  function renderPaginationControls(feedList, total) {
+    feedList
+      .querySelector(".feed-pagination-controls")
+      ?.remove();
+
+    const shown = Math.min(
+      visiblePostCount,
+      total
+    );
+
+    const status = isEnglish()
+      ? `Showing ${shown} of ${total} posts`
+      : `${total} मध्ये ${shown} पोस्ट देखाइएको`;
+
+    const loadMoreLabel = isEnglish()
+      ? "Load more posts"
+      : "थप पोस्ट हेर्नुहोस्";
+
+    const button = shown < total
+      ? `
+        <button
+          class="feed-load-more"
+          type="button"
+          data-feed-load-more>
+          ${escapeHTML(loadMoreLabel)}
+        </button>
+      `
+      : "";
+
+    feedList.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div class="feed-pagination-controls">
+
+          <span
+            class="feed-pagination-status"
+            role="status"
+            aria-live="polite">
+            ${escapeHTML(status)}
+          </span>
+
+          ${button}
+
+        </div>
+      `
+    );
+  }
+
+  /* BIND LOAD MORE EVENT ONLY ONCE */
+
+  function bindFeedPagination(feedList) {
+    if (
+      feedList.dataset.paginationBound === "true"
+    ) {
+      return;
+    }
+
+    feedList.dataset.paginationBound = "true";
+
+    feedList.addEventListener("click", event => {
+      const button = event.target?.closest?.(
+        "[data-feed-load-more]"
+      );
+
+      if (
+        !button ||
+        !feedList.contains(button)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      loadMorePosts();
+    });
+  }
+
+  /* LOAD NEXT PAGE WITHOUT RE-RENDERING OLD POSTS */
+
+  function loadMorePosts() {
+    const feedList = $("#feedList");
+
+    if (!feedList) return false;
+
+    const filtered = getFilteredPosts();
+
+    const start = Math.min(
+      visiblePostCount,
+      filtered.length
+    );
+
+    if (start >= filtered.length) {
+      renderPaginationControls(
+        feedList,
+        filtered.length
+      );
+
+      return false;
+    }
+
+    const end = Math.min(
+      start + PAGE_SIZE,
+      filtered.length
+    );
+
+    const nextMarkup = filtered
+      .slice(start, end)
+      .map(renderPost)
+      .join("");
+
+    feedList
+      .querySelector(".feed-pagination-controls")
+      ?.remove();
+
+    if (nextMarkup) {
+      feedList.insertAdjacentHTML(
+        "beforeend",
+        nextMarkup
+      );
+    }
+
+    visiblePostCount = end;
+
+    renderPaginationControls(
+      feedList,
+      filtered.length
+    );
 
     return true;
   }
 
-  /*
-   * FEED RENDERING
-   */
+  /* FEED RENDERING */
 
   function renderFeed() {
     const feedList = $("#feedList");
 
     if (!feedList) return false;
 
-    const query = searchQuery.toLowerCase();
+    bindFeedPagination(feedList);
 
-    const filtered = getPosts().filter(post => {
-      const searchable = [
-        post.author || "",
-        post.text || ""
-      ].join(" ").toLowerCase();
+    const filtered = getFilteredPosts();
 
-      return searchable.includes(query);
-    });
+    visiblePostCount = Math.min(
+      Math.max(PAGE_SIZE, visiblePostCount),
+      filtered.length
+    );
 
-    feedList.innerHTML = filtered
+    const visible = filtered.slice(
+      0,
+      visiblePostCount
+    );
+
+    feedList.innerHTML = visible
       .map(renderPost)
       .join("");
 
@@ -278,24 +413,28 @@
       filtered.length > 0
     );
 
-    /*
-     * Media UI observes #feedList and loads
-     * post photos when its content changes.
-     */
+    if (filtered.length > 0) {
+      renderPaginationControls(
+        feedList,
+        filtered.length
+      );
+    }
 
     return true;
   }
 
-  /*
-   * SEARCH
-   */
+  /* SEARCH */
 
   function setSearchQuery(value) {
     searchQuery = String(value ?? "")
       .trim()
       .slice(0, 500);
 
-    global.KSKState?.setSearchQuery?.(searchQuery);
+    visiblePostCount = PAGE_SIZE;
+
+    global.KSKState?.setSearchQuery?.(
+      searchQuery
+    );
 
     return searchQuery;
   }
@@ -303,14 +442,14 @@
   function clearSearch() {
     searchQuery = "";
 
+    visiblePostCount = PAGE_SIZE;
+
     global.KSKState?.setSearchQuery?.("");
 
     return true;
   }
 
-  /*
-   * REFRESH
-   */
+  /* REFRESH */
 
   function refresh() {
     renderStories();
@@ -319,9 +458,7 @@
     return true;
   }
 
-  /*
-   * PUBLIC API
-   */
+  /* PUBLIC API */
 
   global.KSKHomePage = Object.freeze({
     getPosts,
@@ -330,6 +467,8 @@
     renderPost,
     renderStories,
     renderFeed,
+
+    loadMorePosts,
 
     setSearchQuery,
     clearSearch,
