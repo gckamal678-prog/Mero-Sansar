@@ -30,10 +30,14 @@
   let postObserver = null;
   let storyObserver = null;
 
+  let postMediaObserver = null;
+  let storyMediaObserver = null;
+
   let postRenderQueued = false;
   let storyRenderQueued = false;
 
   const mediaURLCache = new Map();
+  const mediaURLPending = new Map();
 
 
   /* =====================================================
@@ -150,26 +154,43 @@
       return mediaURLCache.get(key);
     }
 
-    try {
+    if (mediaURLPending.has(key)) {
+      return mediaURLPending.get(key);
+    }
 
-      const url =
-        await global.KSKMedia?.getImageURL?.(key);
+    const request = (async () => {
 
-      if (url) {
-        mediaURLCache.set(key, url);
+      try {
+
+        const url =
+          await global.KSKMedia?.getImageURL?.(key);
+
+        if (url) {
+          mediaURLCache.set(key, url);
+        }
+
+        return url || "";
+
+      } catch (error) {
+
+        console.error(
+          "KSK Media URL loading failed:",
+          error
+        );
+
+        return "";
+
+      } finally {
+
+        mediaURLPending.delete(key);
+
       }
 
-      return url || "";
+    })();
 
-    } catch (error) {
+    mediaURLPending.set(key, request);
 
-      console.error(
-        "KSK Media URL loading failed:",
-        error
-      );
-
-      return "";
-    }
+    return request;
   }
 
 
@@ -870,11 +891,34 @@
   }
 
 
+  function observePostMedia(postElement) {
+
+    if (!postElement) return;
+
+    if (
+      postElement.dataset.mediaReady === "true" ||
+      postElement.dataset.mediaReady === "loading"
+    ) {
+      return;
+    }
+
+    if (postMediaObserver) {
+
+      postMediaObserver.observe(postElement);
+
+      return;
+    }
+
+    // Fallback for browsers without IntersectionObserver.
+    renderPostMedia(postElement);
+  }
+
+
   function renderAllPostMedia() {
 
     document
       .querySelectorAll(".post-card[data-post-id]")
-      .forEach(renderPostMedia);
+      .forEach(observePostMedia);
 
   }
 
@@ -975,13 +1019,37 @@
   }
 
 
+  function observeStoryThumbnail(storyElement) {
+
+    if (!storyElement) return;
+
+    if (
+      storyElement.dataset.storyMediaReady === "true" ||
+      storyElement.dataset.storyMediaReady === "loading" ||
+      storyElement.dataset.storyMediaReady === "error"
+    ) {
+      return;
+    }
+
+    if (storyMediaObserver) {
+
+      storyMediaObserver.observe(storyElement);
+
+      return;
+    }
+
+    // Fallback for browsers without IntersectionObserver.
+    renderStoryThumbnail(storyElement);
+  }
+
+
   function renderAllStoryThumbnails() {
 
     document
       .querySelectorAll(
         "#storiesList [data-story-view]"
       )
-      .forEach(renderStoryThumbnail);
+      .forEach(observeStoryThumbnail);
 
   }
 
@@ -1167,6 +1235,58 @@
 
 
     injectStyles();
+
+
+    /* =========================================
+       INTERSECTION OBSERVERS
+    ========================================= */
+
+    if ("IntersectionObserver" in global) {
+
+      postMediaObserver = new global.IntersectionObserver(
+        entries => {
+
+          entries.forEach(entry => {
+
+            if (!entry.isIntersecting) return;
+
+            postMediaObserver.unobserve(entry.target);
+
+            renderPostMedia(entry.target);
+
+          });
+
+        },
+        {
+          root: null,
+          rootMargin: "350px 0px",
+          threshold: 0.01
+        }
+      );
+
+
+      storyMediaObserver = new global.IntersectionObserver(
+        entries => {
+
+          entries.forEach(entry => {
+
+            if (!entry.isIntersecting) return;
+
+            storyMediaObserver.unobserve(entry.target);
+
+            renderStoryThumbnail(entry.target);
+
+          });
+
+        },
+        {
+          root: null,
+          rootMargin: "150px 0px",
+          threshold: 0.01
+        }
+      );
+
+    }
 
 
     /* CLICK EVENTS */
