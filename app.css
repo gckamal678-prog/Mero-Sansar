@@ -2005,6 +2005,56 @@ body.ksk-compact-mode .stories-section {
   }
 }
 
+/* =========================================================
+   CHAT MESSAGE PAGINATION — PHASE 3.2
+========================================================= */
+
+.chat-load-older {
+  align-self: center;
+  flex: 0 0 auto;
+
+  min-height: 36px;
+  padding: 7px 15px;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+
+  background: var(--color-surface);
+  color: var(--color-primary);
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.chat-load-older:hover {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+
+.chat-load-older:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 420px) {
+  .chat-load-older {
+    min-height: 34px;
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-load-older {
+    transition: none;
+  }
+}
 
 /* =========================================================
    END — KSK APPLICATION LAYOUT
