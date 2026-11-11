@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -60,6 +61,7 @@
       "searchPanel",
       "searchInput",
       "searchToggle",
+      "searchResults",
       "notificationsToggle",
       "settingsModal",
       "closeSettings"
