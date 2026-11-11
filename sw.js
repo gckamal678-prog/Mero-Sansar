@@ -2,7 +2,7 @@
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v15
+   Version: v16
 
    RELEASE SAFETY:
    - New cache contains only current-version files.
@@ -12,7 +12,7 @@
    - Updates activate only after user approval.
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v15";
+const CACHE_NAME = "hamro-sansar-v16";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -564,5 +564,5 @@ self.addEventListener("message", event => {
 });
 
 /* =========================================================
-   END — HAMRO SANSAR SERVICE WORKER v15
+   END — HAMRO SANSAR SERVICE WORKER v16
 ========================================================= */
