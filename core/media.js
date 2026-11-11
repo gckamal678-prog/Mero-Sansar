@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -84,9 +83,12 @@
 
     databasePromise = new Promise((resolve, reject) => {
       if (!global.indexedDB) {
+        databasePromise = null;
+
         reject(
           new Error("यो ब्राउजरमा फोटो भण्डारण उपलब्ध छैन।")
         );
+
         return;
       }
 
@@ -197,7 +199,7 @@
     let temporaryURL = "";
 
     try {
-      // GIF को animation सुरक्षित राख्न मूल Blob नै प्रयोग गर्ने।
+      // GIF animation सुरक्षित राख्ने।
       if (
         String(file.type || "").toLowerCase() ===
         "image/gif"
@@ -328,13 +330,97 @@
   }
 
   /* =====================================================
+     STORAGE CAPACITY CHECK
+  ===================================================== */
+
+  async function ensureStorageCapacity(requiredBytes) {
+    const storage = global.navigator?.storage;
+
+    // Storage estimate API उपलब्ध नभए सामान्य प्रक्रिया जारी राख्ने।
+    if (typeof storage?.estimate !== "function") {
+      return true;
+    }
+
+    let estimate;
+
+    try {
+      estimate = await storage.estimate();
+    } catch (error) {
+      // Estimate असफल भए पनि IndexedDB save प्रयास गर्न दिने।
+      logError(
+        "Storage capacity estimate unavailable.",
+        error
+      );
+
+      return true;
+    }
+
+    const usage = Number(estimate?.usage);
+    const quota = Number(estimate?.quota);
+
+    // भरपर्दो estimate नआएमा upload रोक्ने छैन।
+    if (
+      !Number.isFinite(usage) ||
+      !Number.isFinite(quota) ||
+      quota <= 0
+    ) {
+      return true;
+    }
+
+    const available = Math.max(
+      0,
+      quota - usage
+    );
+
+    // अन्य application data का लागि केही ठाउँ सुरक्षित राख्ने।
+    const reserve = Math.min(
+      512 * 1024,
+      Math.max(64 * 1024, quota * 0.005)
+    );
+
+    if (
+      available <
+      requiredBytes + reserve
+    ) {
+      throw new Error(
+        "भण्डारण ठाउँ पर्याप्त छैन। पुराना अनावश्यक फोटो वा पोस्ट हटाएर फेरि प्रयास गर्नुहोस्।"
+      );
+    }
+
+    return true;
+  }
+
+  /* =====================================================
+     STORAGE ERROR HANDLER
+  ===================================================== */
+
+  function normalizeStorageError(error) {
+    if (
+      error?.name === "QuotaExceededError"
+    ) {
+      return new Error(
+        "भण्डारण क्षमता पूरा भयो। केही पुराना फोटो वा पोस्ट हटाएर फेरि प्रयास गर्नुहोस्।"
+      );
+    }
+
+    return error || new Error(
+      "फोटो सुरक्षित गर्न सकिएन।"
+    );
+  }
+
+  /* =====================================================
      SAVE IMAGE
   ===================================================== */
 
   async function saveImage(file, options = {}) {
     validateFile(file);
 
+    // GIF animation सुरक्षित राख्ने र अन्य फोटो optimize गर्ने।
     const blob = await createOptimizedBlob(file);
+
+    // IndexedDB मा save गर्नुअघि उपलब्ध ठाउँ जाँच गर्ने।
+    await ensureStorageCapacity(blob.size);
+
     const db = await openDatabase();
 
     const id = createId();
@@ -362,24 +448,29 @@
         transaction.objectStore(STORE_NAME).put(record);
 
       } catch (error) {
-        reject(error);
+        reject(
+          normalizeStorageError(error)
+        );
+
         return;
       }
 
-      transaction.oncomplete = resolve;
+      transaction.oncomplete = () => {
+        resolve();
+      };
 
       transaction.onerror = () => {
         reject(
-          transaction.error ||
-          new Error("फोटो सुरक्षित गर्न सकिएन।")
+          normalizeStorageError(
+            transaction.error
+          )
         );
       };
 
       transaction.onabort = () => {
         reject(
-          transaction.error ||
-          new Error(
-            "फोटो सुरक्षित गर्ने प्रक्रिया रद्द भयो।"
+          normalizeStorageError(
+            transaction.error
           )
         );
       };
@@ -441,12 +532,10 @@
       return "";
     }
 
-    // Return an existing Object URL.
     if (urlCache.has(key)) {
       return urlCache.get(key);
     }
 
-    // Reuse an ongoing IndexedDB request.
     if (urlPending.has(key)) {
       return urlPending.get(key);
     }
@@ -461,7 +550,6 @@
           return "";
         }
 
-        // Do not create a URL for deleted or invalidated media.
         if (
           (urlGeneration.get(key) || 0) !== generation
         ) {
@@ -501,7 +589,6 @@
       return false;
     }
 
-    // Invalidate any pending URL request.
     urlGeneration.set(
       key,
       (urlGeneration.get(key) || 0) + 1
@@ -521,7 +608,6 @@
   }
 
   function revokeAllImageURLs() {
-    // Invalidate both cached and pending requests.
     const keys = new Set([
       ...urlCache.keys(),
       ...urlPending.keys()
@@ -573,7 +659,6 @@
       }
 
       transaction.oncomplete = () => {
-        // Revoke only after IndexedDB confirms deletion.
         revokeImageURL(key);
         resolve(true);
       };
@@ -594,15 +679,6 @@
   /* =====================================================
      MEDIA REFERENCE CHECK
   ===================================================== */
-
-  /*
-   * Check all known data collections before deleting media.
-   *
-   * If KSKData or any required getter is missing, or a getter
-   * throws, fail safely and keep the image.
-   *
-   * This prevents accidental deletion of media still in use.
-   */
 
   function hasMediaReference(mediaId) {
     const key = normalizeMediaId(mediaId);
@@ -703,7 +779,6 @@
       return false;
     }
 
-    // Never delete media that is still referenced.
     if (hasMediaReference(key)) {
       return false;
     }
@@ -724,11 +799,6 @@
   /* =====================================================
      QUEUED CLEANUP
   ===================================================== */
-
-  /*
-   * Wait until synchronous data-change listeners finish.
-   * Then inspect the latest stored data before deleting.
-   */
 
   function queueOrphanCleanup(mediaIds) {
     const ids = [
@@ -850,11 +920,6 @@
     /*
      * CASE 2:
      * Profile Avatar or Cover update.
-     *
-     * core/data.js emits:
-     * previousMedia
-     * nextMedia
-     * changedMedia
      */
 
     if (
