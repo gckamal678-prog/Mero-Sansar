@@ -1,8 +1,9 @@
+
 "use strict";
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v26
+   Version: v27
 
    RELEASE SAFETY:
    - New cache contains only current-version files.
@@ -12,7 +13,7 @@
    - Updates activate only after user approval.
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v26";
+const CACHE_NAME = "hamro-sansar-v27";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -78,16 +79,11 @@ const APP_FILES = [
 ========================================================= */
 
 function getAppURL(path) {
-  return new URL(
-    path,
-    self.registration.scope
-  );
+  return new URL(path, self.registration.scope);
 }
 
 function isAppURL(url) {
-  const scope = new URL(
-    self.registration.scope
-  );
+  const scope = new URL(self.registration.scope);
 
   return (
     url.origin === scope.origin &&
@@ -119,10 +115,7 @@ function discoverAssets(html) {
     }
 
     try {
-      const url = new URL(
-        value,
-        self.registration.scope
-      );
+      const url = new URL(value, self.registration.scope);
 
       if (
         isAppURL(url) &&
@@ -130,7 +123,6 @@ function discoverAssets(html) {
       ) {
         discovered.add(url.href);
       }
-
     } catch (error) {
       console.warn(
         "Invalid application asset reference:",
@@ -170,10 +162,7 @@ async function fetchAndCache(cache, url) {
     );
   }
 
-  await cache.put(
-    url,
-    response.clone()
-  );
+  await cache.put(url, response.clone());
 
   return response;
 }
@@ -183,72 +172,44 @@ async function fetchAndCache(cache, url) {
 ========================================================= */
 
 self.addEventListener("install", event => {
-
   event.waitUntil(
-
     (async () => {
-
-      const cache = await caches.open(
-        CACHE_NAME
-      );
+      const cache = await caches.open(CACHE_NAME);
 
       try {
-
-        const indexURL = getAppURL(
-          "./index.html"
-        ).href;
+        const indexURL = getAppURL("./index.html").href;
 
         const indexResponse = await fetchAndCache(
           cache,
           indexURL
         );
 
-        const html = await indexResponse
-          .clone()
-          .text();
+        const html = await indexResponse.clone().text();
 
         const allFiles = new Set([
-
-          ...APP_FILES.map(
-            path => getAppURL(path).href
-          ),
-
+          ...APP_FILES.map(path => getAppURL(path).href),
           ...discoverAssets(html)
-
         ]);
 
         allFiles.delete(indexURL);
 
-        const failures = (await Promise.all(
-
-          Array.from(allFiles).map(
-            async url => {
-
+        const failures = (
+          await Promise.all(
+            Array.from(allFiles).map(async url => {
               try {
-
-                await fetchAndCache(
-                  cache,
-                  url
-                );
-
+                await fetchAndCache(cache, url);
                 return null;
-
               } catch (error) {
-
                 return {
                   url,
                   reason: error
                 };
-
               }
-
-            }
+            })
           )
-
-        )).filter(Boolean);
+        ).filter(Boolean);
 
         if (failures.length) {
-
           console.error(
             "PWA installation cancelled; incomplete app shell:",
             failures
@@ -259,11 +220,10 @@ self.addEventListener("install", event => {
             failures.length +
             " app asset(s) could not be cached."
           );
-
         }
 
         console.info(
-          "Hamro Sansar v26 app shell cached:",
+          "Hamro Sansar v27 app shell cached:",
           allFiles.size + 1,
           "files"
         );
@@ -274,30 +234,19 @@ self.addEventListener("install", event => {
          */
 
       } catch (error) {
-
         try {
-
-          await caches.delete(
-            CACHE_NAME
-          );
-
+          await caches.delete(CACHE_NAME);
         } catch (cleanupError) {
-
           console.error(
             "Failed to remove incomplete app cache:",
             cleanupError
           );
-
         }
 
         throw error;
-
       }
-
     })()
-
   );
-
 });
 
 /* =========================================================
@@ -305,42 +254,28 @@ self.addEventListener("install", event => {
 ========================================================= */
 
 self.addEventListener("activate", event => {
-
   event.waitUntil(
-
     (async () => {
-
       const cacheNames = await caches.keys();
 
       await Promise.all(
-
         cacheNames.map(async name => {
-
           if (
             name.startsWith(CACHE_PREFIX) &&
             name !== CACHE_NAME
           ) {
-
-            await caches.delete(
-              name
-            );
-
+            await caches.delete(name);
           }
-
         })
-
       );
 
       await self.clients.claim();
 
       console.info(
-        "Hamro Sansar Service Worker v26 activated."
+        "Hamro Sansar Service Worker v27 activated."
       );
-
     })()
-
   );
-
 });
 
 /* =========================================================
@@ -348,48 +283,29 @@ self.addEventListener("activate", event => {
    NETWORK FIRST + OFFLINE INDEX FALLBACK
 ========================================================= */
 
-async function handleNavigationRequest(
-  request,
-  cache
-) {
-
+async function handleNavigationRequest(request, cache) {
   try {
-
-    const response = await fetch(
-      request
-    );
+    const response = await fetch(request);
 
     if (
       response.ok &&
       response.type === "basic" &&
       response.status === 200
     ) {
-
       try {
-
-        await cache.put(
-          request,
-          response.clone()
-        );
-
+        await cache.put(request, response.clone());
       } catch (cacheError) {
-
         console.warn(
           "Navigation cache update failed:",
           cacheError
         );
-
       }
-
     }
 
     return response;
 
   } catch (error) {
-
-    const exactMatch = await cache.match(
-      request
-    );
+    const exactMatch = await cache.match(request);
 
     if (exactMatch) {
       return exactMatch;
@@ -404,9 +320,7 @@ async function handleNavigationRequest(
     }
 
     return offlineResponse();
-
   }
-
 }
 
 /* =========================================================
@@ -414,58 +328,37 @@ async function handleNavigationRequest(
    CACHE FIRST + NETWORK FALLBACK
 ========================================================= */
 
-async function handleAssetRequest(
-  request,
-  cache
-) {
-
-  const cached = await cache.match(
-    request
-  );
+async function handleAssetRequest(request, cache) {
+  const cached = await cache.match(request);
 
   if (cached) {
     return cached;
   }
 
   try {
-
-    const response = await fetch(
-      request
-    );
+    const response = await fetch(request);
 
     if (
       response.ok &&
       response.type === "basic" &&
       response.status === 200
     ) {
-
       try {
-
-        await cache.put(
-          request,
-          response.clone()
-        );
-
+        await cache.put(request, response.clone());
       } catch (cacheError) {
-
         console.warn(
           "Asset cache update failed:",
           request.url,
           cacheError
         );
-
       }
-
     }
 
     return response;
 
   } catch (error) {
-
     return offlineResponse();
-
   }
-
 }
 
 /* =========================================================
@@ -473,26 +366,17 @@ async function handleAssetRequest(
 ========================================================= */
 
 function offlineResponse() {
-
   return new Response(
-
     "यो सामग्री अहिले उपलब्ध छैन। इन्टरनेट जडान जाँच गर्नुहोस्।",
-
     {
       status: 503,
       statusText: "Service Unavailable",
-
       headers: {
-        "Content-Type":
-          "text/plain; charset=utf-8",
-
-        "Cache-Control":
-          "no-store"
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store"
       }
     }
-
   );
-
 }
 
 /* =========================================================
@@ -500,47 +384,29 @@ function offlineResponse() {
 ========================================================= */
 
 self.addEventListener("fetch", event => {
-
   const request = event.request;
 
   if (request.method !== "GET") {
     return;
   }
 
-  const url = new URL(
-    request.url
-  );
+  const url = new URL(request.url);
 
   if (!isAppURL(url)) {
     return;
   }
 
   event.respondWith(
-
     (async () => {
-
-      const cache = await caches.open(
-        CACHE_NAME
-      );
+      const cache = await caches.open(CACHE_NAME);
 
       if (request.mode === "navigate") {
-
-        return handleNavigationRequest(
-          request,
-          cache
-        );
-
+        return handleNavigationRequest(request, cache);
       }
 
-      return handleAssetRequest(
-        request,
-        cache
-      );
-
+      return handleAssetRequest(request, cache);
     })()
-
   );
-
 });
 
 /* =========================================================
@@ -549,20 +415,14 @@ self.addEventListener("fetch", event => {
 ========================================================= */
 
 self.addEventListener("message", event => {
-
   if (
     event.data &&
     event.data.type === "SKIP_WAITING"
   ) {
-
-    event.waitUntil(
-      self.skipWaiting()
-    );
-
+    event.waitUntil(self.skipWaiting());
   }
-
 });
 
 /* =========================================================
-   END — HAMRO SANSAR SERVICE WORKER v26
+   END — HAMRO SANSAR SERVICE WORKER v27
 ========================================================= */
