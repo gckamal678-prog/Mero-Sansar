@@ -25,7 +25,6 @@
   let editTarget = null;
   let deletingComment = false;
 
-  // Prevent duplicate event listeners on the same modal body.
   const boundBodies = new WeakSet();
 
   /* =========================================
@@ -178,9 +177,8 @@
      MENTION RENDERING
   ========================================= */
 
-  function renderMentionText(value) {
+  function renderMentionText(value, availableFriends = []) {
     const safe = escapeHTML(value || "");
-    const availableFriends = friends();
 
     if (!availableFriends.length) {
       return safe.replace(/\n/g, "<br>");
@@ -252,16 +250,18 @@
      COMMENT TREE
   ========================================= */
 
-  function renderComment(comment, allComments, depth = 0) {
+  function renderComment(
+    comment,
+    childrenByParent,
+    availableFriends,
+    user,
+    depth = 0
+  ) {
     const id = escapeHTML(comment.id);
     const postId = escapeHTML(activePostId);
 
-    const children = allComments.filter(
-      item =>
-        String(item.parentId || "") === String(comment.id)
-    );
-
-    const user = currentUser();
+    const children =
+      childrenByParent.get(String(comment.id)) || [];
 
     const isMine =
       (comment.authorId && user.id &&
@@ -308,7 +308,10 @@
               ${replyLabel}
 
               <div class="ksk-comment-text">
-                ${renderMentionText(comment.text)}
+                ${renderMentionText(
+                  comment.text,
+                  availableFriends
+                )}
               </div>
 
             </div>
@@ -374,7 +377,13 @@
             ${children.length ? `
               <div class="ksk-comment-replies">
                 ${children.map(child =>
-                  renderComment(child, allComments, depth + 1)
+                  renderComment(
+                    child,
+                    childrenByParent,
+                    availableFriends,
+                    user,
+                    depth + 1
+                  )
                 ).join("")}
               </div>
             ` : ""}
@@ -402,11 +411,7 @@
   function renderCommentList() {
     const comments = getComments();
 
-    const rootComments = comments.filter(
-      comment => !comment.parentId
-    );
-
-    if (!rootComments.length) {
+    if (!comments.length) {
       return `
         <div class="ksk-comments-empty">
           <div>💬</div>
@@ -420,8 +425,44 @@
       `;
     }
 
+    /*
+     * Build the comment tree index once.
+     * This avoids filtering the full array
+     * for every rendered comment.
+     */
+
+    const childrenByParent = new Map();
+    const rootComments = [];
+
+    comments.forEach(comment => {
+      const parentId = String(comment.parentId || "");
+
+      if (!parentId) {
+        rootComments.push(comment);
+        return;
+      }
+
+      if (!childrenByParent.has(parentId)) {
+        childrenByParent.set(parentId, []);
+      }
+
+      childrenByParent.get(parentId).push(comment);
+    });
+
+    /*
+     * Read shared data once per render.
+     */
+
+    const availableFriends = friends();
+    const user = currentUser();
+
     return rootComments.map(comment =>
-      renderComment(comment, comments)
+      renderComment(
+        comment,
+        childrenByParent,
+        availableFriends,
+        user
+      )
     ).join("");
   }
 
@@ -787,119 +828,119 @@
   }
 
   function removeComment(commentId) {
-  if (deletingComment) return;
+    if (deletingComment) return;
 
-  const confirmed = global.confirm(
-    t(
-      "यो टिप्पणी र यसका सबै जवाफ मेटाउने हो?",
-      "Delete this comment and all its replies?"
-    )
-  );
-
-  if (!confirmed) return;
-
-  deletingComment = true;
-
-  try {
-    /*
-     * Collect the selected comment and all descendant
-     * reply IDs before deleting them.
-     *
-     * This prevents stale reply/edit targets.
-     */
-    const deletedIds = new Set([
-      String(commentId)
-    ]);
-
-    const commentsBeforeDelete = getComments();
-
-    let foundDescendant = true;
-
-    while (foundDescendant) {
-      foundDescendant = false;
-
-      commentsBeforeDelete.forEach(comment => {
-        const currentId = String(comment.id);
-        const parentId = String(comment.parentId || "");
-
-        if (
-          parentId &&
-          deletedIds.has(parentId) &&
-          !deletedIds.has(currentId)
-        ) {
-          deletedIds.add(currentId);
-          foundDescendant = true;
-        }
-      });
-    }
-
-    // Delete the comment and its replies.
-    const result = data()?.deleteComment?.(
-      activePostId,
-      commentId
+    const confirmed = global.confirm(
+      t(
+        "यो टिप्पणी र यसका सबै जवाफ मेटाउने हो?",
+        "Delete this comment and all its replies?"
+      )
     );
 
-    if (!result) {
+    if (!confirmed) return;
+
+    deletingComment = true;
+
+    try {
+      /*
+       * Collect the selected comment and all descendant
+       * reply IDs before deleting them.
+       *
+       * This prevents stale reply/edit targets.
+       */
+      const deletedIds = new Set([
+        String(commentId)
+      ]);
+
+      const commentsBeforeDelete = getComments();
+
+      let foundDescendant = true;
+
+      while (foundDescendant) {
+        foundDescendant = false;
+
+        commentsBeforeDelete.forEach(comment => {
+          const currentId = String(comment.id);
+          const parentId = String(comment.parentId || "");
+
+          if (
+            parentId &&
+            deletedIds.has(parentId) &&
+            !deletedIds.has(currentId)
+          ) {
+            deletedIds.add(currentId);
+            foundDescendant = true;
+          }
+        });
+      }
+
+      // Delete the comment and its replies.
+      const result = data()?.deleteComment?.(
+        activePostId,
+        commentId
+      );
+
+      if (!result) {
+        toast(
+          t(
+            "टिप्पणी मेटाउन सकिएन।",
+            "Could not delete comment."
+          ),
+          "error"
+        );
+        return;
+      }
+
+      /*
+       * Clear reply target if it belongs to
+       * the deleted comment or any deleted reply.
+       */
+      if (
+        replyTarget !== null &&
+        deletedIds.has(String(replyTarget))
+      ) {
+        replyTarget = null;
+      }
+
+      /*
+       * Clear edit target if it belongs to
+       * the deleted comment or any deleted reply.
+       */
+      if (
+        editTarget !== null &&
+        deletedIds.has(String(editTarget))
+      ) {
+        editTarget = null;
+      }
+
       toast(
         t(
-          "टिप्पणी मेटाउन सकिएन।",
-          "Could not delete comment."
+          "टिप्पणी मेटाइयो।",
+          "Comment deleted."
+        ),
+        "success"
+      );
+
+      renderModal();
+
+    } catch (error) {
+      console.error(
+        "KSK comment delete failed:",
+        error
+      );
+
+      toast(
+        t(
+          "टिप्पणी मेटाउँदा समस्या आयो।",
+          "An error occurred while deleting the comment."
         ),
         "error"
       );
-      return;
+
+    } finally {
+      deletingComment = false;
     }
-
-    /*
-     * Clear reply target if it belongs to
-     * the deleted comment or any deleted reply.
-     */
-    if (
-      replyTarget !== null &&
-      deletedIds.has(String(replyTarget))
-    ) {
-      replyTarget = null;
-    }
-
-    /*
-     * Clear edit target if it belongs to
-     * the deleted comment or any deleted reply.
-     */
-    if (
-      editTarget !== null &&
-      deletedIds.has(String(editTarget))
-    ) {
-      editTarget = null;
-    }
-
-    toast(
-      t(
-        "टिप्पणी मेटाइयो।",
-        "Comment deleted."
-      ),
-      "success"
-    );
-
-    renderModal();
-
-  } catch (error) {
-    console.error(
-      "KSK comment delete failed:",
-      error
-    );
-
-    toast(
-      t(
-        "टिप्पणी मेटाउँदा समस्या आयो।",
-        "An error occurred while deleting the comment."
-      ),
-      "error"
-    );
-
-  } finally {
-    deletingComment = false;
   }
-}
 
   /* =========================================
      MODAL EVENT BINDING
