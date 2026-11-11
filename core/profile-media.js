@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -27,8 +28,6 @@
   let initialized = false;
   let busy = false;
   let activeCropURL = "";
-
-  const objectURLs = new Map();
 
 
   /* =====================================================
@@ -143,26 +142,16 @@
 
 
   async function getImageURL(id) {
-
     if (!id) return "";
 
-    if (objectURLs.has(id)) {
-      return objectURLs.get(id);
-    }
-
     try {
-
-      const url = await global.KSKMedia?.getImageURL?.(id);
-
-      if (url) {
-        objectURLs.set(id, url);
-      }
-
-      return url || "";
+      return await global.KSKMedia?.getImageURL?.(id) || "";
 
     } catch (error) {
-
-      console.error("KSK Profile Media: Image loading failed.", error);
+      console.error(
+        "KSK Profile Media: Image loading failed.",
+        error
+      );
 
       return "";
     }
@@ -929,7 +918,6 @@
       if (savedId) {
         try {
           await global.KSKMedia?.deleteImage?.(savedId);
-          objectURLs.delete(savedId);
         } catch (cleanupError) {
           console.warn("KSK media cleanup failed:", cleanupError);
         }
