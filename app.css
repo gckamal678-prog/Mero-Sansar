@@ -211,6 +211,106 @@ body {
 }
 
 
+/* GLOBAL SEARCH RESULTS */
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--app-soft-radius);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.search-results-summary {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.search-results-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-results-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.search-results-heading span {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.search-result-post-list,
+.search-result-friend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-result-post {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-secondary);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-result-post:hover,
+.search-result-post:focus-visible {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.search-result-post strong {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.search-result-post span {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.search-results-more {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.search-results-empty {
+  padding: 16px 8px;
+  color: var(--color-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.search-result-friend-list .friend-card {
+  box-shadow: none;
+}
+
+
 /* =========================================================
    05. STORIES
 ========================================================= */
