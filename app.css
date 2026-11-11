@@ -1935,5 +1935,77 @@ body.ksk-compact-mode .stories-section {
 
 
 /* =========================================================
+   FEED PAGINATION — PHASE 3.1
+========================================================= */
+
+.feed-pagination-controls {
+  width: 100%;
+  padding: 10px 0 16px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.feed-pagination-status {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.feed-load-more {
+  min-height: 40px;
+  padding: 8px 20px;
+
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-pill);
+
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.feed-load-more:hover {
+  background: var(--color-surface-hover);
+}
+
+.feed-load-more:active {
+  transform: scale(.97);
+}
+
+.feed-load-more:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 420px) {
+  .feed-pagination-controls {
+    padding: 8px 0 12px;
+  }
+
+  .feed-load-more {
+    width: min(100%, 260px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-load-more {
+    transition: none;
+  }
+}
+
+
+/* =========================================================
    END — KSK APPLICATION LAYOUT
 ========================================================= */
