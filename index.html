@@ -10,38 +10,38 @@
   <meta name="description" content="हाम्रो संसार — साथी जोडौँ, कुरा गरौँ ।">
   <meta name="color-scheme" content="light dark">
 
-<!-- Apply saved theme before stylesheets load -->
-<script>
-  (function () {
-    "use strict";
+  <!-- Apply saved theme before stylesheets load -->
+  <script>
+    (function () {
+      "use strict";
 
-    try {
-      var saved =
-        localStorage.getItem("ksk_app_settings") ||
-        localStorage.getItem("ksk_app_settings_old");
+      try {
+        var saved =
+          localStorage.getItem("ksk_app_settings") ||
+          localStorage.getItem("ksk_app_settings_old");
 
-      var settings = saved ? JSON.parse(saved) : {};
-      var theme = settings.theme === "dark" ? "dark" : "light";
-      var root = document.documentElement;
+        var settings = saved ? JSON.parse(saved) : {};
+        var theme = settings.theme === "dark" ? "dark" : "light";
+        var root = document.documentElement;
 
-      root.dataset.theme = theme;
-      root.style.colorScheme = theme;
+        root.dataset.theme = theme;
+        root.style.colorScheme = theme;
 
-      var themeColor = document.querySelector(
-        'meta[name="theme-color"]'
-      );
-
-      if (themeColor) {
-        themeColor.setAttribute(
-          "content",
-          theme === "dark" ? "#0b1220" : "#2563eb"
+        var themeColor = document.querySelector(
+          'meta[name="theme-color"]'
         );
+
+        if (themeColor) {
+          themeColor.setAttribute(
+            "content",
+            theme === "dark" ? "#0b1220" : "#2563eb"
+          );
+        }
+      } catch (error) {
+        document.documentElement.dataset.theme = "light";
       }
-    } catch (error) {
-      document.documentElement.dataset.theme = "light";
-    }
-  })();
-</script>
+    })();
+  </script>
 
   <title>हाम्रो संसार</title>
 
@@ -57,19 +57,19 @@
   <link rel="stylesheet" href="core/design-system.css">
   <link rel="stylesheet" href="app.css">
   <link rel="stylesheet" href="core/comments.css">
-  
-  <!-- PWA CONFIGURATION -->
-<link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
-<link rel="apple-touch-icon" href="icon-192.png" sizes="192x192">
-<link rel="manifest" href="manifest.json">
 
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="हाम्रो संसार">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <!-- PWA CONFIGURATION -->
+  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icon-192.png" sizes="192x192">
+  <link rel="manifest" href="manifest.json">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="हाम्रो संसार">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
 </head>
-  
+
 <body>
 
   <!-- HEADER -->
@@ -96,46 +96,43 @@
         </div>
       </div>
 
-      
-<div class="header-actions">
+      <div class="header-actions">
 
-  <!-- SEARCH BUTTON -->
-  <button
-    class="icon-button"
-    id="searchToggle"
-    type="button"
-    aria-label="खोज्नुहोस्"
-    title="खोज्नुहोस्">
-    ⌕
-  </button>
+        <!-- SEARCH BUTTON -->
+        <button
+          class="icon-button"
+          id="searchToggle"
+          type="button"
+          aria-label="खोज्नुहोस्"
+          title="खोज्नुहोस्">
+          ⌕
+        </button>
 
-  <!-- NOTIFICATIONS BUTTON -->
-  <button
-    class="icon-button"
-    id="notificationsToggle"
-    type="button"
-    aria-label="सूचनाहरू"
-    title="सूचनाहरू">
-    🔔
-  </button>
+        <!-- NOTIFICATIONS BUTTON -->
+        <button
+          class="icon-button"
+          id="notificationsToggle"
+          type="button"
+          aria-label="सूचनाहरू"
+          title="सूचनाहरू">
+          🔔
+        </button>
 
-  <!-- PWA INSTALL BUTTON -->
-  <button
-    class="icon-button"
-    id="installAppButton"
-    type="button"
-    aria-label="एप इन्स्टल गर्नुहोस्"
-    title="एप इन्स्टल गर्नुहोस्"
-    hidden>
-    ⬇
-  </button>
+        <!-- PWA INSTALL BUTTON -->
+        <button
+          class="icon-button"
+          id="installAppButton"
+          type="button"
+          aria-label="एप इन्स्टल गर्नुहोस्"
+          title="एप इन्स्टल गर्नुहोस्"
+          hidden>
+          ⬇
+        </button>
 
-</div>
-
+      </div>
 
     </div>
   </header>
-
 
   <!-- NETWORK CONNECTION STATUS -->
   <div
@@ -145,6 +142,47 @@
     aria-live="polite"
     aria-atomic="true"
     hidden>
+  </div>
+
+  <!-- PWA UPDATE BANNER -->
+  <div
+    id="pwaUpdateBanner"
+    class="pwa-update-banner"
+    role="region"
+    aria-labelledby="pwaUpdateTitle"
+    aria-live="polite"
+    hidden>
+
+    <div class="pwa-update-content">
+
+      <strong id="pwaUpdateTitle">
+        नयाँ संस्करण उपलब्ध छ
+      </strong>
+
+      <p id="pwaUpdateMessage">
+        हाम्रो संसारको नयाँ संस्करण तयार छ।
+      </p>
+
+    </div>
+
+    <div class="pwa-update-actions">
+
+      <button
+        id="pwaUpdateLater"
+        class="pwa-update-button pwa-update-later"
+        type="button">
+        पछि
+      </button>
+
+      <button
+        id="pwaUpdateNow"
+        class="pwa-update-button pwa-update-now"
+        type="button">
+        Update गर्नुहोस्
+      </button>
+
+    </div>
+
   </div>
 
   <!-- MAIN APPLICATION -->
@@ -425,134 +463,16 @@
   <script src="core/data-refresh.js"></script>
 
   <!-- MAIN APPLICATION -->
- <script src="app.js"></script>
-<script src="core/pwa-install.js"></script>
-<script src="core/network-status.js"></script>
+  <script src="app.js"></script>
 
-<!-- SERVICE WORKER REGISTRATION + SAFE UPDATE DETECTION -->
-<script>
-(function () {
-  "use strict";
+  <!-- PWA INSTALLATION -->
+  <script src="core/pwa-install.js"></script>
 
-  if (!("serviceWorker" in navigator)) {
-    console.warn("Service Worker is not supported.");
-    return;
-  }
+  <!-- NETWORK STATUS -->
+  <script src="core/network-status.js"></script>
 
-  var updatePromptShown = false;
-  var reloadAfterUpdate = false;
-
-  function requestUpdateActivation(worker) {
-    if (!worker || updatePromptShown) {
-      return;
-    }
-
-    updatePromptShown = true;
-
-    var shouldUpdate = window.confirm(
-      "हाम्रो संसारको नयाँ संस्करण तयार छ।\n\n" +
-      "नयाँ संस्करण प्रयोग गर्न अहिले Reload गर्ने?"
-    );
-
-    if (shouldUpdate) {
-      reloadAfterUpdate = true;
-      worker.postMessage({ type: "SKIP_WAITING" });
-    } else {
-      updatePromptShown = false;
-    }
-  }
-
-  navigator.serviceWorker.addEventListener(
-    "controllerchange",
-    function () {
-      if (reloadAfterUpdate) {
-        reloadAfterUpdate = false;
-        window.location.reload();
-      }
-    }
-  );
-
-  window.addEventListener("load", function () {
-
-    navigator.serviceWorker.register("./sw.js", {
-      scope: "./"
-    }).then(function (registration) {
-
-      console.info(
-        "Hamro Sansar Service Worker registered:",
-        registration.scope
-      );
-
-      function monitorWorker(worker) {
-        if (!worker) {
-          return;
-        }
-
-        var installHandled = false;
-
-        function checkWorkerState() {
-          if (
-            worker.state !== "installed" ||
-            installHandled
-          ) {
-            return;
-          }
-
-          installHandled = true;
-
-          if (registration.active) {
-            requestUpdateActivation(worker);
-          } else {
-            /* First install: no older app version to protect. */
-            worker.postMessage({
-              type: "SKIP_WAITING"
-            });
-          }
-        }
-
-        worker.addEventListener(
-          "statechange",
-          checkWorkerState
-        );
-
-        checkWorkerState();
-      }
-
-      /* Check an update that was already waiting. */
-      if (
-        registration.waiting &&
-        registration.active
-      ) {
-        requestUpdateActivation(registration.waiting);
-      }
-
-      registration.addEventListener(
-        "updatefound",
-        function () {
-          monitorWorker(registration.installing);
-        }
-      );
-
-      registration.update().catch(function (error) {
-        console.warn(
-          "Service Worker update check failed:",
-          error
-        );
-      });
-
-    }).catch(function (error) {
-
-      console.error(
-        "Service Worker registration failed:",
-        error
-      );
-
-    });
-
-  }, { once: true });
-
-})();
-</script>
+  <!-- PWA UPDATE CONTROLLER -->
+  <script src="core/pwa-update.js"></script>
 
 </body>
 </html>
