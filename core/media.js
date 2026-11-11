@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -42,6 +41,8 @@
   let dataChangeListenerBound = false;
 
   const urlCache = new Map();
+  const urlPending = new Map();
+  const urlGeneration = new Map();
 
   /* =====================================================
      HELPERS
@@ -294,6 +295,7 @@
           IMAGE_QUALITY
         );
       });
+
     } finally {
       if (bitmap) {
         bitmap.close?.();
@@ -338,6 +340,7 @@
         );
 
         transaction.objectStore(STORE_NAME).put(record);
+
       } catch (error) {
         reject(error);
         return;
@@ -418,21 +421,53 @@
       return "";
     }
 
+    // Return an existing Object URL.
     if (urlCache.has(key)) {
       return urlCache.get(key);
     }
 
-    const record = await getImage(key);
-
-    if (!record?.blob) {
-      return "";
+    // Reuse an ongoing IndexedDB request.
+    if (urlPending.has(key)) {
+      return urlPending.get(key);
     }
 
-    const url = global.URL.createObjectURL(record.blob);
+    const generation = urlGeneration.get(key) || 0;
 
-    urlCache.set(key, url);
+    const request = (async () => {
+      try {
+        const record = await getImage(key);
 
-    return url;
+        if (!record?.blob) {
+          return "";
+        }
+
+        // Do not create a URL for deleted or invalidated media.
+        if (
+          (urlGeneration.get(key) || 0) !== generation
+        ) {
+          return "";
+        }
+
+        const url = global.URL.createObjectURL(
+          record.blob
+        );
+
+        urlCache.set(key, url);
+
+        return url;
+
+      } catch (error) {
+        logError("Image URL loading failed.", error);
+        return "";
+
+      } finally {
+        urlPending.delete(key);
+      }
+    })();
+
+    urlPending.set(key, request);
+
+    return request;
   }
 
   /* =====================================================
@@ -441,6 +476,17 @@
 
   function revokeImageURL(id) {
     const key = String(id || "");
+
+    if (!key) {
+      return false;
+    }
+
+    // Invalidate any pending URL request.
+    urlGeneration.set(
+      key,
+      (urlGeneration.get(key) || 0) + 1
+    );
+
     const url = urlCache.get(key);
 
     if (!url) {
@@ -448,12 +494,27 @@
     }
 
     global.URL.revokeObjectURL(url);
+
     urlCache.delete(key);
 
     return true;
   }
 
+
   function revokeAllImageURLs() {
+    // Invalidate both cached and pending requests.
+    const keys = new Set([
+      ...urlCache.keys(),
+      ...urlPending.keys()
+    ]);
+
+    keys.forEach(key => {
+      urlGeneration.set(
+        key,
+        (urlGeneration.get(key) || 0) + 1
+      );
+    });
+
     urlCache.forEach(url => {
       global.URL.revokeObjectURL(url);
     });
@@ -486,6 +547,7 @@
         );
 
         transaction.objectStore(STORE_NAME).delete(key);
+
       } catch (error) {
         reject(error);
         return;
@@ -568,6 +630,7 @@
         }
 
         collections.push(value);
+
       } catch (error) {
         logError(
           `Reference check failed: ${name}()`,
@@ -628,6 +691,7 @@
 
     try {
       return await deleteImage(key);
+
     } catch (error) {
       logError(
         `Orphan cleanup failed for ${key}`,
@@ -664,6 +728,7 @@
       for (const id of ids) {
         try {
           await cleanupOrphanedImage(id);
+
         } catch (error) {
           logError(
             `Queued cleanup failed for ${id}`,
@@ -817,6 +882,7 @@
     try {
       await openDatabase();
       return true;
+
     } catch (error) {
       logError(
         "Media initialization failed.",
