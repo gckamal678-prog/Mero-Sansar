@@ -1019,28 +1019,29 @@
   }
 
 
-  function observeStoryThumbnail(storyElement) {
+  
+function observeStoryThumbnail(storyElement) {
 
-    if (!storyElement) return;
+  if (!storyElement) return;
 
-    if (
-      storyElement.dataset.storyMediaReady === "true" ||
-      storyElement.dataset.storyMediaReady === "loading" ||
-      storyElement.dataset.storyMediaReady === "error"
-    ) {
-      return;
-    }
-
-    if (storyMediaObserver) {
-
-      storyMediaObserver.observe(storyElement);
-
-      return;
-    }
-
-    // Fallback for browsers without IntersectionObserver.
-    renderStoryThumbnail(storyElement);
+  if (
+    storyElement.dataset.storyMediaReady === "true" ||
+    storyElement.dataset.storyMediaReady === "loading"
+  ) {
+    return;
   }
+
+  if (storyMediaObserver) {
+
+    storyMediaObserver.observe(storyElement);
+
+    return;
+  }
+
+  // Fallback for browsers without IntersectionObserver.
+  renderStoryThumbnail(storyElement);
+}
+
 
 
   function renderAllStoryThumbnails() {
