@@ -2,7 +2,7 @@
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v24
+   Version: v25
 
    RELEASE SAFETY:
    - New cache contains only current-version files.
@@ -12,7 +12,7 @@
    - Updates activate only after user approval.
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v24";
+const CACHE_NAME = "hamro-sansar-v25";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -263,7 +263,7 @@ self.addEventListener("install", event => {
         }
 
         console.info(
-          "Hamro Sansar v24 app shell cached:",
+          "Hamro Sansar v25 app shell cached:",
           allFiles.size + 1,
           "files"
         );
@@ -334,7 +334,7 @@ self.addEventListener("activate", event => {
       await self.clients.claim();
 
       console.info(
-        "Hamro Sansar Service Worker v24 activated."
+        "Hamro Sansar Service Worker v25 activated."
       );
 
     })()
@@ -564,5 +564,5 @@ self.addEventListener("message", event => {
 });
 
 /* =========================================================
-   END — HAMRO SANSAR SERVICE WORKER v24
+   END — HAMRO SANSAR SERVICE WORKER v25
 ========================================================= */
