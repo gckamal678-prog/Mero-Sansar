@@ -329,10 +329,6 @@
       post => String(post.id) !== id
     );
 
-    /*
-     * Include the removed media ID in the change event.
-     * Cleanup must verify whether another item references it.
-     */
     return saveCollection(
       STORAGE.posts,
       next,
@@ -837,10 +833,6 @@
       story => String(story.id) !== id
     );
 
-    /*
-     * Include the removed media ID in the change event.
-     * Cleanup must verify whether another item references it.
-     */
     return saveCollection(
       STORAGE.stories,
       next,
@@ -1041,11 +1033,6 @@
       )
     };
 
-    /*
-     * Keep the stored profile schema unchanged.
-     * Event metadata tells media cleanup which old IDs
-     * may become orphaned after a successful update.
-     */
     emit("profile", "update", {
       ...next,
       previousMedia,
@@ -1291,21 +1278,62 @@
   ======================================================= */
 
   function getSavedPosts() {
-    return isArray(
+    const saved = isArray(
       read(STORAGE.saved, [])
     );
+
+    const posts = getPosts();
+
+    const validPostIds = new Set(
+      posts
+        .map(post => String(post?.id || "").trim())
+        .filter(Boolean)
+    );
+
+    const cleaned = [];
+    const seen = new Set();
+
+    saved.forEach(item => {
+      const id = String(item ?? "").trim();
+
+      if (
+        !id ||
+        seen.has(id) ||
+        !validPostIds.has(id)
+      ) {
+        return;
+      }
+
+      seen.add(id);
+      cleaned.push(id);
+    });
+
+    const unchanged =
+      saved.length === cleaned.length &&
+      saved.every((item, index) => {
+        return String(item ?? "").trim() === cleaned[index];
+      });
+
+    // पुरानो वा अमान्य Saved ID हटाउने।
+    // यहाँ event emit नगर्ने, ताकि अनावश्यक refresh loop नहोस्।
+    if (!unchanged) {
+      write(STORAGE.saved, cleaned);
+    }
+
+    return cleaned;
   }
 
   function savePost(postId) {
-    const id = String(postId || "");
+    const id = String(postId || "").trim();
 
-    if (!id) return false;
+    // अस्तित्वमा नभएको Post Save गर्न नदिने।
+    if (!id || !getPost(id)) {
+      return false;
+    }
 
     const saved = getSavedPosts();
 
-    if (
-      saved.some(item => String(item) === id)
-    ) {
+    if (saved.includes(id)) {
       return true;
     }
 
@@ -1340,23 +1368,20 @@
   }
 
   function toggleSavedPost(postId) {
-    const id = String(postId || "");
+    const id = String(postId || "").trim();
 
-    if (!id) return false;
+    if (!id || !getPost(id)) {
+      return false;
+    }
 
-    const exists = getSavedPosts().some(
-      item => String(item) === id
-    );
+    const exists = getSavedPosts().includes(id);
 
     if (exists) {
       unsavePost(id);
-    } else {
-      savePost(id);
+      return false;
     }
 
-    return getSavedPosts().some(
-      item => String(item) === id
-    );
+    return savePost(id);
   }
 
   /* =======================================================
