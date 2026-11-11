@@ -423,6 +423,54 @@
     return true;
   }
 
+  /* FOCUS A SEARCHED POST */
+
+  function focusPost(postId) {
+    const id = String(postId || "");
+
+    if (!id) return false;
+
+    const filtered = getFilteredPosts();
+
+    const index = filtered.findIndex(post =>
+      String(post?.id || "") === id
+    );
+
+    if (index < 0) return false;
+
+    visiblePostCount = Math.max(
+      PAGE_SIZE,
+      index + 1
+    );
+
+    if (!renderFeed()) {
+      return false;
+    }
+
+    const scrollToPost = () => {
+      const cards = document.querySelectorAll(
+        ".post-card[data-post-id]"
+      );
+
+      const card = Array.from(cards).find(item =>
+        String(item.dataset.postId || "") === id
+      );
+
+      card?.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+    };
+
+    if (typeof global.requestAnimationFrame === "function") {
+      global.requestAnimationFrame(scrollToPost);
+    } else {
+      Promise.resolve().then(scrollToPost);
+    }
+
+    return true;
+  }
+
   /* SEARCH */
 
   function setSearchQuery(value) {
@@ -469,6 +517,8 @@
     renderFeed,
 
     loadMorePosts,
+
+    focusPost,
 
     setSearchQuery,
     clearSearch,
