@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -105,11 +104,6 @@
       .slice(0, maxLength);
   }
 
-  /*
-   * Return only IDs owned by KSKMedia.
-   * Data URLs, remote URLs and arbitrary strings must never
-   * be treated as IndexedDB keys for deletion.
-   */
   function getStoredMediaId(value) {
     const id = String(value ?? "").trim();
 
@@ -668,10 +662,8 @@
       "🤓"
     ];
 
-    if (
-      emoji &&
-      !allowedReactions.includes(emoji)
-    ) {
+    // खाली वा अनुमति नभएको emoji अस्वीकार गर्ने।
+    if (!allowedReactions.includes(emoji)) {
       return false;
     }
 
@@ -767,7 +759,6 @@
       read(STORAGE.stories, [])
     );
 
-    // Internal operations may need expired stories too.
     if (includeExpired) {
       return sortNewest(stories);
     }
@@ -777,8 +768,6 @@
     const expiredStories = [];
 
     stories.forEach(story => {
-      // Preserve stories without an expiry date,
-      // matching the existing application behavior.
       if (!story?.expiresAt) {
         activeStories.push(story);
         return;
@@ -798,14 +787,12 @@
       }
     });
 
-    // Persist cleanup only when expired stories exist.
     if (expiredStories.length > 0) {
       const saved = write(
         STORAGE.stories,
         activeStories
       );
 
-      // Notify media cleanup only after storage succeeds.
       if (saved) {
         expiredStories.forEach(story => {
           emit(
@@ -1362,8 +1349,6 @@
         return String(item ?? "").trim() === cleaned[index];
       });
 
-    // पुरानो वा अमान्य Saved ID हटाउने।
-    // यहाँ event emit नगर्ने, ताकि अनावश्यक refresh loop नहोस्।
     if (!unchanged) {
       write(STORAGE.saved, cleaned);
     }
@@ -1374,7 +1359,6 @@
   function savePost(postId) {
     const id = String(postId || "").trim();
 
-    // अस्तित्वमा नभएको Post Save गर्न नदिने।
     if (!id || !getPost(id)) {
       return false;
     }
