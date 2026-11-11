@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -157,9 +158,20 @@
       );
     }
 
-    if (!String(file.type || "").startsWith("image/")) {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif"
+    ];
+
+    const fileType = String(
+      file.type || ""
+    ).toLowerCase();
+
+    if (!allowedTypes.includes(fileType)) {
       throw new Error(
-        "कृपया JPG, PNG वा WebP फोटो छान्नुहोस्।"
+        "कृपया JPG, PNG, WebP वा GIF फोटो छान्नुहोस्।"
       );
     }
 
@@ -185,6 +197,14 @@
     let temporaryURL = "";
 
     try {
+      // GIF को animation सुरक्षित राख्न मूल Blob नै प्रयोग गर्ने।
+      if (
+        String(file.type || "").toLowerCase() ===
+        "image/gif"
+      ) {
+        return file;
+      }
+
       let width;
       let height;
       let source;
@@ -322,7 +342,7 @@
     const record = {
       id,
       blob,
-      type: "image/jpeg",
+      type: blob.type || "image/jpeg",
       name: String(
         options.name || file.name || "photo"
       ).slice(0, 150),
@@ -499,7 +519,6 @@
 
     return true;
   }
-
 
   function revokeAllImageURLs() {
     // Invalidate both cached and pending requests.
