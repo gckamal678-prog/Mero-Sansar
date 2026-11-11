@@ -242,9 +242,10 @@
       }
 
       const searchable = [
-        String(post.author || ""),
-        String(post.text || "")
-      ].join(" ").toLowerCase();
+  String(post.author || ""),
+  String(post.text || ""),
+  String(post.location || "")
+].join(" ").toLowerCase();
 
       return searchable.includes(query);
     });
