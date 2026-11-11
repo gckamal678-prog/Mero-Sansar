@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -762,19 +763,66 @@
   ======================================================= */
 
   function getStories(includeExpired = false) {
+    const stories = isArray(
+      read(STORAGE.stories, [])
+    );
+
+    // Internal operations may need expired stories too.
+    if (includeExpired) {
+      return sortNewest(stories);
+    }
+
     const now = Date.now();
+    const activeStories = [];
+    const expiredStories = [];
 
-    return isArray(read(STORAGE.stories, []))
-      .filter(story => {
-        if (includeExpired) return true;
+    stories.forEach(story => {
+      // Preserve stories without an expiry date,
+      // matching the existing application behavior.
+      if (!story?.expiresAt) {
+        activeStories.push(story);
+        return;
+      }
 
-        return !story.expiresAt ||
-          new Date(story.expiresAt).getTime() > now;
-      })
-      .sort((a, b) =>
-        new Date(b.createdAt || 0) -
-        new Date(a.createdAt || 0)
+      const expiryTime = new Date(
+        story.expiresAt
+      ).getTime();
+
+      if (
+        Number.isFinite(expiryTime) &&
+        expiryTime > now
+      ) {
+        activeStories.push(story);
+      } else {
+        expiredStories.push(story);
+      }
+    });
+
+    // Persist cleanup only when expired stories exist.
+    if (expiredStories.length > 0) {
+      const saved = write(
+        STORAGE.stories,
+        activeStories
       );
+
+      // Notify media cleanup only after storage succeeds.
+      if (saved) {
+        expiredStories.forEach(story => {
+          emit(
+            STORAGE.stories,
+            "delete",
+            {
+              id: String(story?.id || ""),
+              mediaId: getStoredMediaId(
+                story?.mediaId
+              )
+            }
+          );
+        });
+      }
+    }
+
+    return sortNewest(activeStories);
   }
 
   function addStory(story = {}) {
