@@ -1,9 +1,8 @@
-
 "use strict";
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v27
+   Version: v28
 
    RELEASE SAFETY:
    - New cache contains only current-version files.
@@ -13,7 +12,7 @@
    - Updates activate only after user approval.
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v27";
+const CACHE_NAME = "hamro-sansar-v28";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -115,7 +114,10 @@ function discoverAssets(html) {
     }
 
     try {
-      const url = new URL(value, self.registration.scope);
+      const url = new URL(
+        value,
+        self.registration.scope
+      );
 
       if (
         isAppURL(url) &&
@@ -177,7 +179,9 @@ self.addEventListener("install", event => {
       const cache = await caches.open(CACHE_NAME);
 
       try {
-        const indexURL = getAppURL("./index.html").href;
+        const indexURL = getAppURL(
+          "./index.html"
+        ).href;
 
         const indexResponse = await fetchAndCache(
           cache,
@@ -187,7 +191,9 @@ self.addEventListener("install", event => {
         const html = await indexResponse.clone().text();
 
         const allFiles = new Set([
-          ...APP_FILES.map(path => getAppURL(path).href),
+          ...APP_FILES.map(path =>
+            getAppURL(path).href
+          ),
           ...discoverAssets(html)
         ]);
 
@@ -223,7 +229,7 @@ self.addEventListener("install", event => {
         }
 
         console.info(
-          "Hamro Sansar v27 app shell cached:",
+          "Hamro Sansar v28 app shell cached:",
           allFiles.size + 1,
           "files"
         );
@@ -272,7 +278,7 @@ self.addEventListener("activate", event => {
       await self.clients.claim();
 
       console.info(
-        "Hamro Sansar Service Worker v27 activated."
+        "Hamro Sansar Service Worker v28 activated."
       );
     })()
   );
@@ -401,10 +407,16 @@ self.addEventListener("fetch", event => {
       const cache = await caches.open(CACHE_NAME);
 
       if (request.mode === "navigate") {
-        return handleNavigationRequest(request, cache);
+        return handleNavigationRequest(
+          request,
+          cache
+        );
       }
 
-      return handleAssetRequest(request, cache);
+      return handleAssetRequest(
+        request,
+        cache
+      );
     })()
   );
 });
@@ -419,10 +431,12 @@ self.addEventListener("message", event => {
     event.data &&
     event.data.type === "SKIP_WAITING"
   ) {
-    event.waitUntil(self.skipWaiting());
+    event.waitUntil(
+      self.skipWaiting()
+    );
   }
 });
 
 /* =========================================================
-   END — HAMRO SANSAR SERVICE WORKER v27
+   END — HAMRO SANSAR SERVICE WORKER v28
 ========================================================= */
