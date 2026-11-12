@@ -1,807 +1,774 @@
-
 "use strict";
 
 /* =========================================================
-   KSK SOCIAL DATA
-   LocalStorage adapter — no backend / no server sync.
-   Backward-compatible with existing ksk_social_state_v1.
+   MERO SANSAR — SOCIAL DATA + FRIENDS PAGE
+   LocalStorage prototype only. No backend / server sync.
 ========================================================= */
 
 (function (global) {
   "use strict";
 
-  if (global.KSKSocialData) return;
+  /* =======================================================
+     SOCIAL DATA API — EXISTING STORAGE COMPATIBILITY
+  ======================================================= */
 
-  const STORAGE_KEY = "ksk_social_state_v1";
-  const VERSION = 1;
+  if (!global.KSKSocialData) {
+    const STORAGE_KEY = "ksk_social_state_v1";
+    const VERSION = 1;
 
-  function emptyState() {
-    return {
-      version: VERSION,
-      localUserId: "",
-      friendRequests: [],
-      friendships: [],
-      follows: [],
-      blocks: []
-    };
-  }
-
-  function makeId(prefix) {
-    try {
-      if (global.crypto?.randomUUID) {
-        return prefix + "_" + global.crypto.randomUUID();
-      }
-    } catch (error) {}
-
-    return prefix + "_" + Date.now().toString(36) +
-      "_" + Math.random().toString(36).slice(2, 12);
-  }
-
-  function normalizeId(value) {
-    if (typeof value !== "string" && typeof value !== "number") {
-      return "";
+    function emptyState() {
+      return {
+        version: VERSION,
+        localUserId: "",
+        friendRequests: [],
+        friendships: [],
+        follows: [],
+        blocks: []
+      };
     }
 
-    const id = String(value).trim();
-
-    if (
-      !id ||
-      id.length > 128 ||
-      /[\u0000-\u001f\u007f]/.test(id)
-    ) {
-      return "";
-    }
-
-    return id;
-  }
-
-  function clone(value) {
-    return JSON.parse(JSON.stringify(value));
-  }
-
-  function readState() {
-    try {
-      const raw = global.localStorage.getItem(STORAGE_KEY);
-
-      if (raw === null) {
-        return { ok: true, state: emptyState() };
-      }
-
-      const state = JSON.parse(raw);
-
-      if (
-        !state ||
-        state.version !== VERSION ||
-        !Array.isArray(state.friendRequests) ||
-        !Array.isArray(state.friendships) ||
-        !Array.isArray(state.follows)
-      ) {
-        return { ok: false, code: "CORRUPT_DATA" };
-      }
-
-      if (typeof state.localUserId !== "string") {
-        state.localUserId = "";
-      }
-
-      // Migration: पुरानो v1 डाटामा blocks थिएन।
-      if (!Array.isArray(state.blocks)) {
-        state.blocks = [];
-      }
-
-      return { ok: true, state };
-    } catch (error) {
-      return { ok: false, code: "STORAGE_UNAVAILABLE" };
-    }
-  }
-
-  function failure(code) {
-    return {
-      ok: false,
-      code: code || "UNKNOWN_ERROR",
-      data: null
-    };
-  }
-
-  function saveState(state, code, data) {
-    try {
-      global.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(state)
-      );
-
+    function makeId(prefix) {
       try {
-        global.dispatchEvent(new CustomEvent("ksk:social-change", {
-          detail: { type: code || "UPDATED" }
-        }));
+        if (global.crypto?.randomUUID) {
+          return prefix + "_" + global.crypto.randomUUID();
+        }
       } catch (error) {}
 
+      return prefix + "_" + Date.now().toString(36) +
+        "_" + Math.random().toString(36).slice(2, 12);
+    }
+
+    function normalizeId(value) {
+      if (typeof value !== "string" && typeof value !== "number") {
+        return "";
+      }
+
+      const id = String(value).trim();
+
+      if (
+        !id ||
+        id.length > 128 ||
+        /[\u0000-\u001f\u007f]/.test(id)
+      ) {
+        return "";
+      }
+
+      return id;
+    }
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function readState() {
+      try {
+        const raw = global.localStorage.getItem(STORAGE_KEY);
+
+        if (raw === null) {
+          return { ok: true, state: emptyState() };
+        }
+
+        const state = JSON.parse(raw);
+
+        if (
+          !state ||
+          state.version !== VERSION ||
+          !Array.isArray(state.friendRequests) ||
+          !Array.isArray(state.friendships) ||
+          !Array.isArray(state.follows)
+        ) {
+          return { ok: false, code: "CORRUPT_DATA" };
+        }
+
+        if (typeof state.localUserId !== "string") {
+          state.localUserId = "";
+        }
+
+        if (!Array.isArray(state.blocks)) {
+          state.blocks = [];
+        }
+
+        return { ok: true, state };
+      } catch (error) {
+        return { ok: false, code: "STORAGE_UNAVAILABLE" };
+      }
+    }
+
+    function failure(code) {
       return {
-        ok: true,
-        code: code || "OK",
-        data: data === undefined ? null : clone(data)
+        ok: false,
+        code: code || "UNKNOWN_ERROR",
+        data: null
       };
-    } catch (error) {
-      return failure("STORAGE_UNAVAILABLE");
-    }
-  }
-
-  function getLocalUserId() {
-    const result = readState();
-    if (!result.ok) return "";
-
-    const state = result.state;
-
-    if (state.localUserId) {
-      return state.localUserId;
     }
 
-    state.localUserId = makeId("local-user");
+    function saveState(state, code, data) {
+      try {
+        global.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(state)
+        );
 
-    const saved = saveState(
-      state,
-      "LOCAL_USER_ID_CREATED",
-      { userId: state.localUserId }
-    );
+        try {
+          global.dispatchEvent(new CustomEvent(
+            "ksk:social-change",
+            { detail: { type: code || "UPDATED" } }
+          ));
+        } catch (error) {}
 
-    return saved.ok ? state.localUserId : "";
-  }
-
-  function pairKey(a, b) {
-    return [a, b].sort().join("\u0000");
-  }
-
-  function findFriendship(state, a, b) {
-    const key = pairKey(a, b);
-
-    return state.friendships.find(item =>
-      pairKey(item.userAId, item.userBId) === key
-    );
-  }
-
-  function isBlockedPair(state, firstId, secondId) {
-    return state.blocks.some(item =>
-      (
-        item.blockerId === firstId &&
-        item.blockedUserId === secondId
-      ) ||
-      (
-        item.blockerId === secondId &&
-        item.blockedUserId === firstId
-      )
-    );
-  }
-
-  /* =======================================================
-     BLOCK / UNBLOCK
-  ======================================================= */
-
-  function getBlockedUsers(userId) {
-    const id = normalizeId(userId);
-    if (!id) return [];
-
-    const result = readState();
-    if (!result.ok) return [];
-
-    return result.state.blocks
-      .filter(item => item.blockerId === id)
-      .map(item => ({
-        userId: item.blockedUserId,
-        createdAt: item.createdAt
-      }));
-  }
-
-  function isUserBlocked(userId, otherUserId) {
-    const first = normalizeId(userId);
-    const second = normalizeId(otherUserId);
-
-    if (!first || !second) return false;
-
-    const result = readState();
-    if (!result.ok) return false;
-
-    return isBlockedPair(result.state, first, second);
-  }
-
-  function blockUser(blockerId, blockedUserId) {
-    const blocker = normalizeId(blockerId);
-    const blocked = normalizeId(blockedUserId);
-
-    if (!blocker || !blocked) {
-      return failure("INVALID_USER_ID");
+        return {
+          ok: true,
+          code: code || "OK",
+          data: data === undefined ? null : clone(data)
+        };
+      } catch (error) {
+        return failure("STORAGE_UNAVAILABLE");
+      }
     }
 
-    if (blocker === blocked) {
-      return failure("SELF_BLOCK_NOT_ALLOWED");
+    function getLocalUserId() {
+      const result = readState();
+      if (!result.ok) return "";
+
+      const state = result.state;
+
+      if (state.localUserId) {
+        return state.localUserId;
+      }
+
+      state.localUserId = makeId("local-user");
+
+      const saved = saveState(
+        state,
+        "LOCAL_USER_ID_CREATED",
+        { userId: state.localUserId }
+      );
+
+      return saved.ok ? state.localUserId : "";
     }
 
-    const result = readState();
-    if (!result.ok) return failure(result.code);
-
-    const state = result.state;
-
-    if (state.blocks.some(item =>
-      item.blockerId === blocker &&
-      item.blockedUserId === blocked
-    )) {
-      return failure("ALREADY_BLOCKED");
+    function pairKey(a, b) {
+      return [a, b].sort().join("\u0000");
     }
 
-    state.blocks.push({
-      id: makeId("block"),
-      blockerId: blocker,
-      blockedUserId: blocked,
-      createdAt: new Date().toISOString()
-    });
+    function findFriendship(state, a, b) {
+      const key = pairKey(a, b);
 
-    // Block गर्दा दुवै दिशाका सम्बन्ध हटाइन्छ।
-    state.friendships = state.friendships.filter(item =>
-      pairKey(item.userAId, item.userBId) !==
-      pairKey(blocker, blocked)
-    );
+      return state.friendships.find(item =>
+        pairKey(item.userAId, item.userBId) === key
+      );
+    }
 
-    state.follows = state.follows.filter(item =>
-      !(
+    function isBlockedPair(state, firstId, secondId) {
+      return state.blocks.some(item =>
         (
-          item.followerId === blocker &&
-          item.followingId === blocked
+          item.blockerId === firstId &&
+          item.blockedUserId === secondId
         ) ||
         (
-          item.followerId === blocked &&
-          item.followingId === blocker
+          item.blockerId === secondId &&
+          item.blockedUserId === firstId
         )
-      )
-    );
+      );
+    }
 
-    // Pending request निष्क्रिय हुन्छ; इतिहास राखिन्छ।
-    state.friendRequests.forEach(item => {
-      if (
-        item.status === "pending" &&
-        (
+    function getBlockedUsers(userId) {
+      const id = normalizeId(userId);
+      if (!id) return [];
+
+      const result = readState();
+      if (!result.ok) return [];
+
+      return result.state.blocks
+        .filter(item => item.blockerId === id)
+        .map(item => ({
+          userId: item.blockedUserId,
+          createdAt: item.createdAt
+        }));
+    }
+
+    function isUserBlocked(userId, otherUserId) {
+      const first = normalizeId(userId);
+      const second = normalizeId(otherUserId);
+
+      if (!first || !second) return false;
+
+      const result = readState();
+      if (!result.ok) return false;
+
+      return isBlockedPair(result.state, first, second);
+    }
+
+    function blockUser(blockerId, blockedUserId) {
+      const blocker = normalizeId(blockerId);
+      const blocked = normalizeId(blockedUserId);
+
+      if (!blocker || !blocked) {
+        return failure("INVALID_USER_ID");
+      }
+
+      if (blocker === blocked) {
+        return failure("SELF_BLOCK_NOT_ALLOWED");
+      }
+
+      const result = readState();
+      if (!result.ok) return failure(result.code);
+
+      const state = result.state;
+
+      if (state.blocks.some(item =>
+        item.blockerId === blocker &&
+        item.blockedUserId === blocked
+      )) {
+        return failure("ALREADY_BLOCKED");
+      }
+
+      state.blocks.push({
+        id: makeId("block"),
+        blockerId: blocker,
+        blockedUserId: blocked,
+        createdAt: new Date().toISOString()
+      });
+
+      state.friendships = state.friendships.filter(item =>
+        pairKey(item.userAId, item.userBId) !==
+        pairKey(blocker, blocked)
+      );
+
+      state.follows = state.follows.filter(item =>
+        !(
           (
-            item.fromUserId === blocker &&
-            item.toUserId === blocked
+            item.followerId === blocker &&
+            item.followingId === blocked
           ) ||
           (
-            item.fromUserId === blocked &&
-            item.toUserId === blocker
+            item.followerId === blocked &&
+            item.followingId === blocker
           )
         )
-      ) {
-        item.status = "cancelled";
-        item.updatedAt = new Date().toISOString();
-      }
-    });
+      );
 
-    return saveState(state, "USER_BLOCKED", {
-      blockerId: blocker,
-      blockedUserId: blocked
-    });
-  }
+      state.friendRequests.forEach(item => {
+        if (
+          item.status === "pending" &&
+          (
+            (
+              item.fromUserId === blocker &&
+              item.toUserId === blocked
+            ) ||
+            (
+              item.fromUserId === blocked &&
+              item.toUserId === blocker
+            )
+          )
+        ) {
+          item.status = "cancelled";
+          item.updatedAt = new Date().toISOString();
+        }
+      });
 
-  function unblockUser(blockerId, blockedUserId) {
-    const blocker = normalizeId(blockerId);
-    const blocked = normalizeId(blockedUserId);
-
-    if (!blocker || !blocked) {
-      return failure("INVALID_USER_ID");
-    }
-
-    const result = readState();
-    if (!result.ok) return failure(result.code);
-
-    const state = result.state;
-
-    const index = state.blocks.findIndex(item =>
-      item.blockerId === blocker &&
-      item.blockedUserId === blocked
-    );
-
-    if (index < 0) {
-      return failure("BLOCK_NOT_FOUND");
-    }
-
-    const removed = state.blocks.splice(index, 1)[0];
-
-    return saveState(state, "USER_UNBLOCKED", removed);
-  }
-
-  /* =======================================================
-     FRIENDS
-  ======================================================= */
-
-  function getFriends(userId) {
-    const id = normalizeId(userId);
-    if (!id) return [];
-
-    const result = readState();
-    if (!result.ok) return [];
-
-    return result.state.friendships
-      .filter(item =>
-        item.userAId === id || item.userBId === id
-      )
-      .map(item => ({
-        userId: item.userAId === id
-          ? item.userBId
-          : item.userAId,
-        createdAt: item.createdAt
-      }));
-  }
-
-  function removeFriend(userId, friendUserId) {
-    const user = normalizeId(userId);
-    const friend = normalizeId(friendUserId);
-
-    if (!user || !friend) {
-      return failure("INVALID_USER_ID");
-    }
-
-    if (user === friend) {
-      return failure("SELF_RELATION_NOT_ALLOWED");
-    }
-
-    const result = readState();
-    if (!result.ok) return failure(result.code);
-
-    const state = result.state;
-
-    const index = state.friendships.findIndex(item =>
-      pairKey(item.userAId, item.userBId) ===
-      pairKey(user, friend)
-    );
-
-    if (index < 0) {
-      return failure("FRIENDSHIP_NOT_FOUND");
-    }
-
-    const removed = state.friendships.splice(index, 1)[0];
-
-    return saveState(state, "FRIEND_REMOVED", removed);
-  }
-
-  /* =======================================================
-     FRIEND REQUESTS
-  ======================================================= */
-
-  function sendFriendRequest(fromUserId, toUserId) {
-    const from = normalizeId(fromUserId);
-    const to = normalizeId(toUserId);
-
-    if (!from || !to) {
-      return failure("INVALID_USER_ID");
-    }
-
-    if (from === to) {
-      return failure("SELF_REQUEST_NOT_ALLOWED");
-    }
-
-    const result = readState();
-    if (!result.ok) return failure(result.code);
-
-    const state = result.state;
-
-    if (isBlockedPair(state, from, to)) {
-      return failure("USER_BLOCKED");
-    }
-
-    if (findFriendship(state, from, to)) {
-      return failure("ALREADY_FRIENDS");
-    }
-
-    if (state.friendRequests.some(item =>
-      item.fromUserId === to &&
-      item.toUserId === from &&
-      item.status === "pending"
-    )) {
-      return failure("REQUEST_ALREADY_RECEIVED");
-    }
-
-    if (state.friendRequests.some(item =>
-      item.fromUserId === from &&
-      item.toUserId === to &&
-      item.status === "pending"
-    )) {
-      return failure("DUPLICATE_REQUEST");
-    }
-
-    const now = new Date().toISOString();
-
-    const request = {
-      id: makeId("request"),
-      fromUserId: from,
-      toUserId: to,
-      status: "pending",
-      createdAt: now,
-      updatedAt: now
-    };
-
-    state.friendRequests.push(request);
-
-    return saveState(state, "FRIEND_REQUEST_SENT", request);
-  }
-
-  function getFriendRequests(userId, options = {}) {
-    const id = normalizeId(userId);
-    if (!id) return [];
-
-    const result = readState();
-    if (!result.ok) return [];
-
-    const direction = [
-      "all",
-      "incoming",
-      "outgoing"
-    ].includes(options.direction)
-      ? options.direction
-      : "all";
-
-    const status = options.status === undefined
-      ? "pending"
-      : options.status;
-
-    if (
-      status !== "all" &&
-      ![
-        "pending",
-        "accepted",
-        "rejected",
-        "cancelled"
-      ].includes(status)
-    ) {
-      return [];
-    }
-
-    return result.state.friendRequests
-      .filter(item => {
-        const belongs = direction === "incoming"
-          ? item.toUserId === id
-          : direction === "outgoing"
-            ? item.fromUserId === id
-            : (
-                item.fromUserId === id ||
-                item.toUserId === id
-              );
-
-        return belongs &&
-          (status === "all" || item.status === status);
-      })
-      .map(item => ({ ...item }));
-  }
-
-  function updateRequest(
-    requestId,
-    currentUserId,
-    nextStatus,
-    ownerField
-  ) {
-    const rid = normalizeId(requestId);
-    const actor = normalizeId(currentUserId);
-
-    if (!rid || !actor) {
-      return failure("INVALID_ARGUMENT");
-    }
-
-    const result = readState();
-    if (!result.ok) return failure(result.code);
-
-    const state = result.state;
-
-    const request = state.friendRequests.find(
-      item => item.id === rid
-    );
-
-    if (!request) {
-      return failure("REQUEST_NOT_FOUND");
-    }
-
-    if (request[ownerField] !== actor) {
-      return failure("NOT_AUTHORIZED_FOR_REQUEST");
-    }
-
-    if (request.status !== "pending") {
-      return failure("REQUEST_NOT_PENDING");
-    }
-
-    if (
-      nextStatus === "accepted" &&
-      isBlockedPair(
-        state,
-        request.fromUserId,
-        request.toUserId
-      )
-    ) {
-      return failure("USER_BLOCKED");
-    }
-
-    if (
-      nextStatus === "accepted" &&
-      !findFriendship(
-        state,
-        request.fromUserId,
-        request.toUserId
-      )
-    ) {
-      const ids = [
-        request.fromUserId,
-        request.toUserId
-      ].sort();
-
-      state.friendships.push({
-        id: makeId("friendship"),
-        userAId: ids[0],
-        userBId: ids[1],
-        createdAt: new Date().toISOString()
+      return saveState(state, "USER_BLOCKED", {
+        blockerId: blocker,
+        blockedUserId: blocked
       });
     }
 
-    request.status = nextStatus;
-    request.updatedAt = new Date().toISOString();
+    function unblockUser(blockerId, blockedUserId) {
+      const blocker = normalizeId(blockerId);
+      const blocked = normalizeId(blockedUserId);
 
-    return saveState(
-      state,
-      "FRIEND_REQUEST_" + nextStatus.toUpperCase(),
-      request
-    );
-  }
+      if (!blocker || !blocked) {
+        return failure("INVALID_USER_ID");
+      }
 
-  function acceptFriendRequest(id, userId) {
-    return updateRequest(
-      id,
-      userId,
-      "accepted",
-      "toUserId"
-    );
-  }
+      const result = readState();
+      if (!result.ok) return failure(result.code);
 
-  function rejectFriendRequest(id, userId) {
-    return updateRequest(
-      id,
-      userId,
-      "rejected",
-      "toUserId"
-    );
-  }
+      const state = result.state;
 
-  function cancelFriendRequest(id, userId) {
-    return updateRequest(
-      id,
-      userId,
-      "cancelled",
-      "fromUserId"
-    );
-  }
+      const index = state.blocks.findIndex(item =>
+        item.blockerId === blocker &&
+        item.blockedUserId === blocked
+      );
 
-  /* =======================================================
-     FOLLOW / UNFOLLOW
-  ======================================================= */
+      if (index < 0) {
+        return failure("BLOCK_NOT_FOUND");
+      }
 
-  function followUser(followerId, followingId) {
-    const follower = normalizeId(followerId);
-    const following = normalizeId(followingId);
+      const removed = state.blocks.splice(index, 1)[0];
 
-    if (!follower || !following) {
-      return failure("INVALID_USER_ID");
+      return saveState(state, "USER_UNBLOCKED", removed);
     }
 
-    if (follower === following) {
-      return failure("SELF_FOLLOW_NOT_ALLOWED");
+    function getFriends(userId) {
+      const id = normalizeId(userId);
+      if (!id) return [];
+
+      const result = readState();
+      if (!result.ok) return [];
+
+      return result.state.friendships
+        .filter(item =>
+          item.userAId === id || item.userBId === id
+        )
+        .map(item => ({
+          userId: item.userAId === id
+            ? item.userBId
+            : item.userAId,
+          createdAt: item.createdAt
+        }));
     }
 
-    const result = readState();
-    if (!result.ok) return failure(result.code);
+    function removeFriend(userId, friendUserId) {
+      const user = normalizeId(userId);
+      const friend = normalizeId(friendUserId);
 
-    const state = result.state;
+      if (!user || !friend) {
+        return failure("INVALID_USER_ID");
+      }
 
-    if (isBlockedPair(state, follower, following)) {
-      return failure("USER_BLOCKED");
+      if (user === friend) {
+        return failure("SELF_RELATION_NOT_ALLOWED");
+      }
+
+      const result = readState();
+      if (!result.ok) return failure(result.code);
+
+      const state = result.state;
+
+      const index = state.friendships.findIndex(item =>
+        pairKey(item.userAId, item.userBId) ===
+        pairKey(user, friend)
+      );
+
+      if (index < 0) {
+        return failure("FRIENDSHIP_NOT_FOUND");
+      }
+
+      const removed = state.friendships.splice(index, 1)[0];
+
+      return saveState(state, "FRIEND_REMOVED", removed);
     }
 
-    if (state.follows.some(item =>
-      item.followerId === follower &&
-      item.followingId === following
-    )) {
-      return failure("ALREADY_FOLLOWING");
-    }
+    function sendFriendRequest(fromUserId, toUserId) {
+      const from = normalizeId(fromUserId);
+      const to = normalizeId(toUserId);
 
-    const relation = {
-      id: makeId("follow"),
-      followerId: follower,
-      followingId: following,
-      createdAt: new Date().toISOString()
-    };
+      if (!from || !to) {
+        return failure("INVALID_USER_ID");
+      }
 
-    state.follows.push(relation);
+      if (from === to) {
+        return failure("SELF_REQUEST_NOT_ALLOWED");
+      }
 
-    return saveState(state, "USER_FOLLOWED", relation);
-  }
+      const result = readState();
+      if (!result.ok) return failure(result.code);
 
-  function unfollowUser(followerId, followingId) {
-    const follower = normalizeId(followerId);
-    const following = normalizeId(followingId);
+      const state = result.state;
 
-    if (!follower || !following) {
-      return failure("INVALID_USER_ID");
-    }
+      if (isBlockedPair(state, from, to)) {
+        return failure("USER_BLOCKED");
+      }
 
-    if (follower === following) {
-      return failure("SELF_RELATION_NOT_ALLOWED");
-    }
+      if (findFriendship(state, from, to)) {
+        return failure("ALREADY_FRIENDS");
+      }
 
-    const result = readState();
-    if (!result.ok) return failure(result.code);
-
-    const state = result.state;
-
-    const index = state.follows.findIndex(item =>
-      item.followerId === follower &&
-      item.followingId === following
-    );
-
-    if (index < 0) {
-      return failure("NOT_FOLLOWING");
-    }
-
-    const removed = state.follows.splice(index, 1)[0];
-
-    return saveState(state, "USER_UNFOLLOWED", removed);
-  }
-
-  function getFollowing(userId) {
-    const id = normalizeId(userId);
-    if (!id) return [];
-
-    const result = readState();
-    if (!result.ok) return [];
-
-    return result.state.follows
-      .filter(item => item.followerId === id)
-      .map(item => ({
-        userId: item.followingId,
-        createdAt: item.createdAt
-      }));
-  }
-
-  function getFollowers(userId) {
-    const id = normalizeId(userId);
-    if (!id) return [];
-
-    const result = readState();
-    if (!result.ok) return [];
-
-    return result.state.follows
-      .filter(item => item.followingId === id)
-      .map(item => ({
-        userId: item.followerId,
-        createdAt: item.createdAt
-      }));
-  }
-
-  /* =======================================================
-     MUTUAL FRIENDS
-  ======================================================= */
-
-  function getMutualFriends(userId, otherUserId) {
-    const first = normalizeId(userId);
-    const second = normalizeId(otherUserId);
-
-    if (!first || !second || first === second) {
-      return [];
-    }
-
-    const firstFriends = new Set(
-      getFriends(first).map(item => item.userId)
-    );
-
-    return getFriends(second).filter(item =>
-      firstFriends.has(item.userId)
-    );
-  }
-
-  /* =======================================================
-     COUNTS
-  ======================================================= */
-
-  function getCounts(userId) {
-    const id = normalizeId(userId);
-
-    const empty = {
-      friends: 0,
-      followers: 0,
-      following: 0,
-      incomingRequests: 0,
-      outgoingRequests: 0,
-      blocked: 0
-    };
-
-    if (!id) return empty;
-
-    const result = readState();
-    if (!result.ok) return empty;
-
-    const state = result.state;
-
-    return {
-      friends: state.friendships.filter(item =>
-        item.userAId === id || item.userBId === id
-      ).length,
-
-      followers: state.follows.filter(
-        item => item.followingId === id
-      ).length,
-
-      following: state.follows.filter(
-        item => item.followerId === id
-      ).length,
-
-      incomingRequests: state.friendRequests.filter(item =>
-        item.toUserId === id &&
+      if (state.friendRequests.some(item =>
+        item.fromUserId === to &&
+        item.toUserId === from &&
         item.status === "pending"
-      ).length,
+      )) {
+        return failure("REQUEST_ALREADY_RECEIVED");
+      }
 
-      outgoingRequests: state.friendRequests.filter(item =>
-        item.fromUserId === id &&
+      if (state.friendRequests.some(item =>
+        item.fromUserId === from &&
+        item.toUserId === to &&
         item.status === "pending"
-      ).length,
+      )) {
+        return failure("DUPLICATE_REQUEST");
+      }
 
-      blocked: state.blocks.filter(
-        item => item.blockerId === id
-      ).length
-    };
+      const now = new Date().toISOString();
+
+      const request = {
+        id: makeId("request"),
+        fromUserId: from,
+        toUserId: to,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now
+      };
+
+      state.friendRequests.push(request);
+
+      return saveState(state, "FRIEND_REQUEST_SENT", request);
+    }
+
+    function getFriendRequests(userId, options = {}) {
+      const id = normalizeId(userId);
+      if (!id) return [];
+
+      const result = readState();
+      if (!result.ok) return [];
+
+      const direction = [
+        "all",
+        "incoming",
+        "outgoing"
+      ].includes(options.direction)
+        ? options.direction
+        : "all";
+
+      const status = options.status === undefined
+        ? "pending"
+        : options.status;
+
+      if (
+        status !== "all" &&
+        ![
+          "pending",
+          "accepted",
+          "rejected",
+          "cancelled"
+        ].includes(status)
+      ) {
+        return [];
+      }
+
+      return result.state.friendRequests
+        .filter(item => {
+          const belongs = direction === "incoming"
+            ? item.toUserId === id
+            : direction === "outgoing"
+              ? item.fromUserId === id
+              : (
+                  item.fromUserId === id ||
+                  item.toUserId === id
+                );
+
+          return belongs &&
+            (status === "all" || item.status === status);
+        })
+        .map(item => ({ ...item }));
+    }
+
+    function updateRequest(
+      requestId,
+      currentUserId,
+      nextStatus,
+      ownerField
+    ) {
+      const rid = normalizeId(requestId);
+      const actor = normalizeId(currentUserId);
+
+      if (!rid || !actor) {
+        return failure("INVALID_ARGUMENT");
+      }
+
+      const result = readState();
+      if (!result.ok) return failure(result.code);
+
+      const state = result.state;
+
+      const request = state.friendRequests.find(
+        item => item.id === rid
+      );
+
+      if (!request) {
+        return failure("REQUEST_NOT_FOUND");
+      }
+
+      if (request[ownerField] !== actor) {
+        return failure("NOT_AUTHORIZED_FOR_REQUEST");
+      }
+
+      if (request.status !== "pending") {
+        return failure("REQUEST_NOT_PENDING");
+      }
+
+      if (
+        nextStatus === "accepted" &&
+        isBlockedPair(
+          state,
+          request.fromUserId,
+          request.toUserId
+        )
+      ) {
+        return failure("USER_BLOCKED");
+      }
+
+      if (
+        nextStatus === "accepted" &&
+        !findFriendship(
+          state,
+          request.fromUserId,
+          request.toUserId
+        )
+      ) {
+        const ids = [
+          request.fromUserId,
+          request.toUserId
+        ].sort();
+
+        state.friendships.push({
+          id: makeId("friendship"),
+          userAId: ids[0],
+          userBId: ids[1],
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      request.status = nextStatus;
+      request.updatedAt = new Date().toISOString();
+
+      return saveState(
+        state,
+        "FRIEND_REQUEST_" + nextStatus.toUpperCase(),
+        request
+      );
+    }
+
+    function acceptFriendRequest(id, userId) {
+      return updateRequest(
+        id,
+        userId,
+        "accepted",
+        "toUserId"
+      );
+    }
+
+    function rejectFriendRequest(id, userId) {
+      return updateRequest(
+        id,
+        userId,
+        "rejected",
+        "toUserId"
+      );
+    }
+
+    function cancelFriendRequest(id, userId) {
+      return updateRequest(
+        id,
+        userId,
+        "cancelled",
+        "fromUserId"
+      );
+    }
+
+    function followUser(followerId, followingId) {
+      const follower = normalizeId(followerId);
+      const following = normalizeId(followingId);
+
+      if (!follower || !following) {
+        return failure("INVALID_USER_ID");
+      }
+
+      if (follower === following) {
+        return failure("SELF_FOLLOW_NOT_ALLOWED");
+      }
+
+      const result = readState();
+      if (!result.ok) return failure(result.code);
+
+      const state = result.state;
+
+      if (isBlockedPair(state, follower, following)) {
+        return failure("USER_BLOCKED");
+      }
+
+      if (state.follows.some(item =>
+        item.followerId === follower &&
+        item.followingId === following
+      )) {
+        return failure("ALREADY_FOLLOWING");
+      }
+
+      const relation = {
+        id: makeId("follow"),
+        followerId: follower,
+        followingId: following,
+        createdAt: new Date().toISOString()
+      };
+
+      state.follows.push(relation);
+
+      return saveState(state, "USER_FOLLOWED", relation);
+    }
+
+    function unfollowUser(followerId, followingId) {
+      const follower = normalizeId(followerId);
+      const following = normalizeId(followingId);
+
+      if (!follower || !following) {
+        return failure("INVALID_USER_ID");
+      }
+
+      if (follower === following) {
+        return failure("SELF_RELATION_NOT_ALLOWED");
+      }
+
+      const result = readState();
+      if (!result.ok) return failure(result.code);
+
+      const state = result.state;
+
+      const index = state.follows.findIndex(item =>
+        item.followerId === follower &&
+        item.followingId === following
+      );
+
+      if (index < 0) {
+        return failure("NOT_FOLLOWING");
+      }
+
+      const removed = state.follows.splice(index, 1)[0];
+
+      return saveState(state, "USER_UNFOLLOWED", removed);
+    }
+
+    function getFollowing(userId) {
+      const id = normalizeId(userId);
+      if (!id) return [];
+
+      const result = readState();
+      if (!result.ok) return [];
+
+      return result.state.follows
+        .filter(item => item.followerId === id)
+        .map(item => ({
+          userId: item.followingId,
+          createdAt: item.createdAt
+        }));
+    }
+
+    function getFollowers(userId) {
+      const id = normalizeId(userId);
+      if (!id) return [];
+
+      const result = readState();
+      if (!result.ok) return [];
+
+      return result.state.follows
+        .filter(item => item.followingId === id)
+        .map(item => ({
+          userId: item.followerId,
+          createdAt: item.createdAt
+        }));
+    }
+
+    function getMutualFriends(userId, otherUserId) {
+      const first = normalizeId(userId);
+      const second = normalizeId(otherUserId);
+
+      if (!first || !second || first === second) {
+        return [];
+      }
+
+      const firstFriends = new Set(
+        getFriends(first).map(item => item.userId)
+      );
+
+      return getFriends(second).filter(item =>
+        firstFriends.has(item.userId)
+      );
+    }
+
+    function getCounts(userId) {
+      const id = normalizeId(userId);
+
+      const empty = {
+        friends: 0,
+        followers: 0,
+        following: 0,
+        incomingRequests: 0,
+        outgoingRequests: 0,
+        blocked: 0
+      };
+
+      if (!id) return empty;
+
+      const result = readState();
+      if (!result.ok) return empty;
+
+      const state = result.state;
+
+      return {
+        friends: state.friendships.filter(item =>
+          item.userAId === id || item.userBId === id
+        ).length,
+
+        followers: state.follows.filter(
+          item => item.followingId === id
+        ).length,
+
+        following: state.follows.filter(
+          item => item.followerId === id
+        ).length,
+
+        incomingRequests: state.friendRequests.filter(item =>
+          item.toUserId === id &&
+          item.status === "pending"
+        ).length,
+
+        outgoingRequests: state.friendRequests.filter(item =>
+          item.fromUserId === id &&
+          item.status === "pending"
+        ).length,
+
+        blocked: state.blocks.filter(
+          item => item.blockerId === id
+        ).length
+      };
+    }
+
+    global.addEventListener("storage", event => {
+      if (event.key !== STORAGE_KEY) return;
+
+      try {
+        global.dispatchEvent(new CustomEvent(
+          "ksk:social-change",
+          { detail: { type: "STORAGE_SYNC" } }
+        ));
+      } catch (error) {}
+    });
+
+    global.KSKSocialData = Object.freeze({
+      STORAGE_KEY,
+      getLocalUserId,
+      sendFriendRequest,
+      getFriendRequests,
+      acceptFriendRequest,
+      rejectFriendRequest,
+      cancelFriendRequest,
+      getFriends,
+      removeFriend,
+      followUser,
+      unfollowUser,
+      getFollowers,
+      getFollowing,
+      getMutualFriends,
+      getCounts,
+      blockUser,
+      unblockUser,
+      getBlockedUsers,
+      isUserBlocked
+    });
   }
 
   /* =======================================================
-     STORAGE SYNCHRONIZATION
+     FRIENDS PAGE UI
   ======================================================= */
-
-  global.addEventListener("storage", event => {
-    if (event.key !== STORAGE_KEY) return;
-
-    try {
-      global.dispatchEvent(new CustomEvent("ksk:social-change", {
-        detail: { type: "STORAGE_SYNC" }
-      }));
-    } catch (error) {}
-  });
-
-  global.KSKSocialData = Object.freeze({
-    STORAGE_KEY,
-    getLocalUserId,
-    sendFriendRequest,
-    getFriendRequests,
-    acceptFriendRequest,
-    rejectFriendRequest,
-    cancelFriendRequest,
-    getFriends,
-    removeFriend,
-    followUser,
-    unfollowUser,
-    getFollowers,
-    getFollowing,
-    getMutualFriends,
-    getCounts,
-    blockUser,
-    unblockUser,
-    getBlockedUsers,
-    isUserBlocked
-  });
-
-})(window);
-
-
-/* =========================================================
-   KSK FRIENDS PAGE — COMPLETE LOCAL SOCIAL UI
-========================================================= */
-
-(function (global) {
-  "use strict";
 
   if (global.KSKFriendsPage) return;
 
+  const SOCIAL = () => global.KSKSocialData || null;
   const DATA = () => global.KSKData || null;
   const LANG = () => global.KSKLanguage || null;
   const MODAL = () => global.KSKModal || null;
   const TOAST = () => global.KSKToast || null;
-  const SOCIAL = () => global.KSKSocialData || null;
 
   function isEnglish() {
     return LANG()?.getLanguage?.() === "en";
@@ -837,35 +804,337 @@
     }
   }
 
-  function emptyMessage(message) {
-    return `
-      <p style="
-        margin:12px 0 0;
-        color:var(--text-muted);
+  function injectStyles() {
+    if (global.document.getElementById("ksk-friends-redesign-style")) {
+      return;
+    }
+
+    const style = global.document.createElement("style");
+    style.id = "ksk-friends-redesign-style";
+
+    style.textContent = `
+      .ksf-page {
+        --ksf-border: var(--border-color, rgba(127,127,127,.17));
+        --ksf-muted: var(--text-muted, #7b8494);
+        width:100%;
+        max-width:100%;
+        padding-bottom:24px;
+      }
+
+      .ksf-heading {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin:0 0 14px;
+      }
+
+      .ksf-heading h2 {
+        margin:0;
+        font-size:20px;
+        font-weight:800;
+        letter-spacing:-.35px;
+      }
+
+      .ksf-subtitle {
+        color:var(--ksf-muted);
+        font-size:12px;
+        line-height:1.55;
+        margin:5px 0 0;
+      }
+
+      .ksf-card {
+        background:var(--card-bg, var(--surface, #fff));
+        color:var(--text-color, inherit);
+        border:1px solid var(--ksf-border);
+        border-radius:17px;
+        padding:15px;
+        margin:12px 0;
+        min-width:0;
+        box-shadow:0 5px 18px rgba(0,0,0,.035);
+      }
+
+      .ksf-identity {
+        padding:17px;
+        background:
+          linear-gradient(135deg,
+            rgba(37,99,235,.11),
+            rgba(14,165,233,.045));
+        border-color:rgba(37,99,235,.18);
+      }
+
+      .ksf-id-label {
+        font-size:12px;
+        color:var(--ksf-muted);
+        font-weight:700;
+      }
+
+      .ksf-id-line {
+        display:flex;
+        align-items:center;
+        gap:9px;
+        margin-top:9px;
+        min-width:0;
+      }
+
+      .ksf-id-value {
+        min-width:0;
+        flex:1;
+        overflow-wrap:anywhere;
+        font-size:12px;
+        line-height:1.5;
+        font-weight:700;
+        color:var(--text-color, inherit);
+      }
+
+      .ksf-actions {
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:9px;
+        margin-top:15px;
+      }
+
+      .ksf-action {
+        min-height:43px;
+        border-radius:12px;
+        padding:9px 10px;
+        font-weight:700;
         font-size:13px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:6px;
+        cursor:pointer;
+      }
+
+      .ksf-primary {
+        background:var(--primary-color, #2563eb);
+        color:#fff;
+        border:1px solid transparent;
+      }
+
+      .ksf-secondary {
+        background:var(--surface-2, rgba(127,127,127,.09));
+        color:var(--text-color, inherit);
+        border:1px solid var(--ksf-border);
+      }
+
+      .ksf-action:disabled {
+        opacity:.5;
+        cursor:not-allowed;
+      }
+
+      .ksf-stats {
+        display:grid;
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        gap:8px;
+        margin:12px 0;
+      }
+
+      .ksf-stat {
+        min-width:0;
         text-align:center;
-      ">${message}</p>
+        padding:13px 5px;
+        border:1px solid var(--ksf-border);
+        border-radius:14px;
+        background:var(--card-bg, var(--surface, #fff));
+      }
+
+      .ksf-stat strong {
+        display:block;
+        font-size:21px;
+        line-height:1.2;
+        font-weight:800;
+      }
+
+      .ksf-stat span {
+        display:block;
+        margin-top:4px;
+        font-size:11px;
+        color:var(--ksf-muted);
+      }
+
+      .ksf-section {
+        overflow:hidden;
+      }
+
+      .ksf-section summary {
+        list-style:none;
+        cursor:pointer;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        min-height:35px;
+        font-weight:800;
+        font-size:14px;
+      }
+
+      .ksf-section summary::-webkit-details-marker {
+        display:none;
+      }
+
+      .ksf-section summary::after {
+        content:"＋";
+        font-size:17px;
+        color:var(--ksf-muted);
+        flex:none;
+      }
+
+      .ksf-section[open] summary::after {
+        content:"−";
+      }
+
+      .ksf-section summary .ksf-count {
+        margin-left:auto;
+        margin-right:5px;
+        min-width:25px;
+        text-align:center;
+        border-radius:20px;
+        padding:3px 7px;
+        font-size:11px;
+        background:rgba(127,127,127,.11);
+        color:var(--ksf-muted);
+      }
+
+      .ksf-section-body {
+        border-top:1px solid var(--ksf-border);
+        margin-top:12px;
+        padding-top:10px;
+      }
+
+      .ksf-item {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        flex-wrap:wrap;
+        gap:10px;
+        padding:11px 0;
+        border-bottom:1px solid var(--ksf-border);
+      }
+
+      .ksf-item:last-child {
+        border-bottom:0;
+      }
+
+      .ksf-item-id {
+        min-width:0;
+        flex:1;
+        overflow-wrap:anywhere;
+        font-size:12px;
+        line-height:1.55;
+      }
+
+      .ksf-item-actions {
+        display:flex;
+        align-items:center;
+        flex-wrap:wrap;
+        gap:6px;
+      }
+
+      .ksf-small-btn {
+        min-height:33px;
+        border-radius:9px;
+        padding:6px 10px;
+        font-size:11px;
+        font-weight:700;
+      }
+
+      .ksf-search {
+        width:100%;
+        min-height:42px;
+        padding:10px 12px;
+        border-radius:12px;
+        border:1px solid var(--ksf-border);
+        background:var(--input-bg, var(--card-bg, #fff));
+        color:var(--text-color, inherit);
+        outline:none;
+        font:inherit;
+        font-size:13px;
+        margin:0 0 5px;
+      }
+
+      .ksf-search:focus {
+        border-color:var(--primary-color, #2563eb);
+        box-shadow:0 0 0 3px rgba(37,99,235,.10);
+      }
+
+      .ksf-empty {
+        text-align:center;
+        padding:17px 8px;
+        color:var(--ksf-muted);
+        font-size:12px;
+        line-height:1.6;
+      }
+
+      .ksf-note {
+        padding:12px 13px;
+        border-radius:12px;
+        background:rgba(127,127,127,.07);
+        color:var(--ksf-muted);
+        font-size:11px;
+        line-height:1.65;
+        margin-top:12px;
+      }
+
+      .ksf-muted {
+        color:var(--ksf-muted);
+        font-size:11px;
+      }
+
+      .ksf-danger {
+        color:#dc4444;
+      }
+
+      .ksf-hidden {
+        display:none !important;
+      }
+
+      @media(max-width:380px) {
+        .ksf-card { padding:12px; }
+        .ksf-heading h2 { font-size:18px; }
+        .ksf-action { font-size:12px; }
+        .ksf-item-actions { width:100%; }
+        .ksf-item-actions button { flex:1; }
+      }
     `;
+
+    global.document.head.appendChild(style);
   }
 
-  function actionButton(
-    action,
-    id,
-    label,
-    className = "btn-secondary"
-  ) {
+  function actionButton(action, id, label, kind = "secondary") {
     return `
       <button
         type="button"
-        class="btn ${className} btn-sm"
+        class="ksf-action ksf-small-btn ${kind === "primary" ? "ksf-primary" : "ksf-secondary"}"
         data-social-action="${escapeHTML(action)}"
         data-social-id="${escapeHTML(id)}"
       >${label}</button>
     `;
   }
 
+  function emptyMessage(message) {
+    return `
+      <div class="ksf-empty">
+        ${escapeHTML(message)}
+      </div>
+    `;
+  }
+
+  function searchableItem(id, content) {
+    return `
+      <div class="ksf-item ksf-searchable"
+        data-search="${escapeHTML(String(id).toLowerCase())}">
+        <div class="ksf-item-id">
+          <code>${escapeHTML(id)}</code>
+        </div>
+        ${content || ""}
+      </div>
+    `;
+  }
+
   /* =======================================================
-     REQUESTS UI
+     REQUEST SECTIONS
   ======================================================= */
 
   function renderRequests(userId, english) {
@@ -883,105 +1152,82 @@
 
     const incomingHTML = incoming.length
       ? incoming.map(item => `
-          <article class="card" style="
-            padding:13px;
-            margin-top:9px;
-            display:flex;
-            flex-wrap:wrap;
-            align-items:center;
-            justify-content:space-between;
-            gap:10px;
-          ">
-            <div style="min-width:0;flex:1">
+          <div class="ksf-item">
+            <div class="ksf-item-id">
               <strong>${english ? "Request from" : "Request पठाउने ID"}</strong>
-              <div style="font-size:12px;overflow-wrap:anywhere">
-                ${escapeHTML(item.fromUserId)}
-              </div>
+              <div><code>${escapeHTML(item.fromUserId)}</code></div>
             </div>
 
-            <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <div class="ksf-item-actions">
               ${actionButton(
                 "accept-request",
                 item.id,
                 english ? "Accept" : "स्वीकार",
-                "btn-primary"
+                "primary"
               )}
 
               ${actionButton(
                 "reject-request",
                 item.id,
-                english ? "Reject" : "अस्वीकार",
-                "btn-secondary"
+                english ? "Reject" : "अस्वीकार"
               )}
             </div>
-          </article>
+          </div>
         `).join("")
       : emptyMessage(
           english
             ? "No incoming requests."
-            : "अहिलेसम्म कुनै Incoming Request छैन।"
+            : "अहिलेसम्म कुनै Request आएको छैन।"
         );
 
     const outgoingHTML = outgoing.length
       ? outgoing.map(item => `
-          <article class="card" style="
-            padding:13px;
-            margin-top:9px;
-            display:flex;
-            flex-wrap:wrap;
-            align-items:center;
-            justify-content:space-between;
-            gap:10px;
-          ">
-            <div style="min-width:0;flex:1">
-              <strong>${english ? "Request to" : "Request पठाइएको ID"}</strong>
-
-              <div style="font-size:12px;overflow-wrap:anywhere">
-                ${escapeHTML(item.toUserId)}
-              </div>
-
-              <small style="color:var(--text-muted)">
-                ${english
-                  ? "Pending — local only"
-                  : "प्रतीक्षामा — स्थानीय रेकर्ड मात्र"}
-              </small>
+          <div class="ksf-item">
+            <div class="ksf-item-id">
+              <strong>${english ? "Request sent to" : "Request पठाइएको ID"}</strong>
+              <div><code>${escapeHTML(item.toUserId)}</code></div>
+              <span class="ksf-muted">
+                ${english ? "Pending · Local only" : "प्रतीक्षामा · स्थानीय रेकर्ड"}
+              </span>
             </div>
 
-            ${actionButton(
-              "cancel-request",
-              item.id,
-              english ? "Cancel" : "रद्द",
-              "btn-secondary"
-            )}
-          </article>
+            <div class="ksf-item-actions">
+              ${actionButton(
+                "cancel-request",
+                item.id,
+                english ? "Cancel" : "रद्द"
+              )}
+            </div>
+          </div>
         `).join("")
       : emptyMessage(
           english
             ? "No outgoing requests."
-            : "अहिलेसम्म कुनै Outgoing Request छैन।"
+            : "तपाईंले कुनै Request पठाउनुभएको छैन।"
         );
 
     return `
-      <section class="card" style="padding:16px;margin-top:14px">
-        <h3 style="margin:0">
-          ${english ? "Incoming Requests" : "आएका Request"}
-          <span style="font-size:13px">(${incoming.length})</span>
-        </h3>
-        ${incomingHTML}
-      </section>
+      <details class="ksf-card ksf-section" ${incoming.length ? "open" : ""}>
+        <summary>
+          ${english ? "Friend Requests" : "Friend Requests"}
+          <span class="ksf-count">${incoming.length + outgoing.length}</span>
+        </summary>
 
-      <section class="card" style="padding:16px;margin-top:14px">
-        <h3 style="margin:0">
-          ${english ? "Outgoing Requests" : "पठाएका Request"}
-          <span style="font-size:13px">(${outgoing.length})</span>
-        </h3>
-        ${outgoingHTML}
-      </section>
+        <div class="ksf-section-body">
+          <strong>${english ? "Incoming" : "आएका Request"} (${incoming.length})</strong>
+          ${incomingHTML}
+
+          <div style="height:12px"></div>
+
+          <strong>${english ? "Outgoing" : "पठाएका Request"} (${outgoing.length})</strong>
+          ${outgoingHTML}
+        </div>
+      </details>
     `;
   }
 
   /* =======================================================
-     FRIENDS / FOLLOWERS / FOLLOWING / BLOCKED UI
+     RELATION SECTIONS
   ======================================================= */
 
   function renderRelations(userId, english) {
@@ -993,212 +1239,169 @@
     const blocked = social.getBlockedUsers(userId);
 
     const friendsHTML = friends.length
-      ? friends.map(item => `
-          <article class="card" style="
-            padding:12px;
-            margin-top:8px;
-            display:flex;
-            flex-wrap:wrap;
-            align-items:center;
-            justify-content:space-between;
-            gap:10px;
-          ">
-            <code style="overflow-wrap:anywhere">
-              ${escapeHTML(item.userId)}
-            </code>
-
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              ${actionButton(
-                "remove-friend",
-                item.userId,
-                english ? "Remove" : "हटाउनुहोस्",
-                "btn-secondary"
-              )}
-
-              ${actionButton(
-                "block-user",
-                item.userId,
-                english ? "Block" : "Block",
-                "btn-secondary"
-              )}
-            </div>
-          </article>
-        `).join("")
+      ? friends.map(item => searchableItem(
+          item.userId,
+          `<div class="ksf-item-actions">
+            ${actionButton(
+              "remove-friend",
+              item.userId,
+              english ? "Remove" : "हटाउनुहोस्"
+            )}
+            ${actionButton(
+              "block-user",
+              item.userId,
+              "Block"
+            )}
+          </div>`
+        )).join("")
       : emptyMessage(
           english ? "No friends yet." : "अहिलेसम्म साथी छैनन्।"
         );
 
     const followersHTML = followers.length
-      ? followers.map(item => `
-          <div style="
-            padding:9px 0;
-            border-bottom:1px solid var(--border-color,rgba(127,127,127,.15));
-            overflow-wrap:anywhere;
-          ">
-            <code>${escapeHTML(item.userId)}</code>
-          </div>
-        `).join("")
+      ? followers.map(item => searchableItem(
+          item.userId,
+          ""
+        )).join("")
       : emptyMessage(
           english ? "No followers yet." : "अहिलेसम्म Followers छैनन्।"
         );
 
     const followingHTML = following.length
-      ? following.map(item => `
-          <article style="
-            padding:9px 0;
-            display:flex;
-            flex-wrap:wrap;
-            align-items:center;
-            justify-content:space-between;
-            gap:8px;
-            border-bottom:1px solid var(--border-color,rgba(127,127,127,.15));
-          ">
-            <code style="overflow-wrap:anywhere">
-              ${escapeHTML(item.userId)}
-            </code>
-
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              ${actionButton(
-                "unfollow",
-                item.userId,
-                "Unfollow",
-                "btn-secondary"
-              )}
-
-              ${actionButton(
-                "block-user",
-                item.userId,
-                "Block",
-                "btn-secondary"
-              )}
-            </div>
-          </article>
-        `).join("")
+      ? following.map(item => searchableItem(
+          item.userId,
+          `<div class="ksf-item-actions">
+            ${actionButton(
+              "unfollow",
+              item.userId,
+              "Unfollow"
+            )}
+            ${actionButton(
+              "block-user",
+              item.userId,
+              "Block"
+            )}
+          </div>`
+        )).join("")
       : emptyMessage(
           english
-            ? "Not following anyone."
+            ? "You are not following anyone."
             : "कसैलाई Follow गर्नुभएको छैन।"
         );
 
     const blockedHTML = blocked.length
-      ? blocked.map(item => `
-          <article style="
-            padding:9px 0;
-            display:flex;
-            flex-wrap:wrap;
-            align-items:center;
-            justify-content:space-between;
-            gap:8px;
-            border-bottom:1px solid var(--border-color,rgba(127,127,127,.15));
-          ">
-            <code style="overflow-wrap:anywhere">
-              ${escapeHTML(item.userId)}
-            </code>
-
+      ? blocked.map(item => searchableItem(
+          item.userId,
+          `<div class="ksf-item-actions">
             ${actionButton(
               "unblock-user",
               item.userId,
-              "Unblock",
-              "btn-secondary"
+              "Unblock"
             )}
-          </article>
-        `).join("")
+          </div>`
+        )).join("")
       : emptyMessage(
-          english
-            ? "No blocked users."
-            : "कुनै Block गरिएको ID छैन।"
+          english ? "No blocked users." : "कुनै Block गरिएको ID छैन।"
         );
 
     return `
-      <section class="card" style="padding:16px;margin-top:14px">
-        <h3 style="margin:0">
-          ${english ? "Your Friends" : "तपाईंका साथीहरू"}
-          <span style="font-size:13px">(${friends.length})</span>
-        </h3>
-        ${friendsHTML}
-      </section>
+      <details class="ksf-card ksf-section" open>
+        <summary>
+          ${english ? "Friends" : "तपाईंका साथीहरू"}
+          <span class="ksf-count">${friends.length}</span>
+        </summary>
+        <div class="ksf-section-body">
+          ${friendsHTML}
+        </div>
+      </details>
 
-      <section class="card" style="padding:16px;margin-top:14px">
-        <h3 style="margin:0">
+      <details class="ksf-card ksf-section">
+        <summary>
           Followers
-          <span style="font-size:13px">(${followers.length})</span>
-        </h3>
-        ${followersHTML}
-      </section>
+          <span class="ksf-count">${followers.length}</span>
+        </summary>
+        <div class="ksf-section-body">
+          ${followersHTML}
+        </div>
+      </details>
 
-      <section class="card" style="padding:16px;margin-top:14px">
-        <h3 style="margin:0">
+      <details class="ksf-card ksf-section">
+        <summary>
           Following
-          <span style="font-size:13px">(${following.length})</span>
-        </h3>
-        ${followingHTML}
-      </section>
+          <span class="ksf-count">${following.length}</span>
+        </summary>
+        <div class="ksf-section-body">
+          ${followingHTML}
+        </div>
+      </details>
 
-      <section class="card" style="padding:16px;margin-top:14px">
-        <h3 style="margin:0">
-          ${english ? "Blocked Users" : "Block गरिएका ID"}
-          <span style="font-size:13px">(${blocked.length})</span>
-        </h3>
-        ${blockedHTML}
-      </section>
+      <details class="ksf-card ksf-section">
+        <summary>
+          ${english ? "Blocked Users" : "Block गरिएका प्रयोगकर्ता"}
+          <span class="ksf-count">${blocked.length}</span>
+        </summary>
+        <div class="ksf-section-body">
+          ${blockedHTML}
+        </div>
+      </details>
     `;
   }
 
   /* =======================================================
-     MUTUAL FRIENDS UI
+     MUTUAL FRIENDS
   ======================================================= */
 
   function renderMutualFriends(english) {
     return `
-      <section class="card" style="padding:16px;margin-top:14px">
-        <h3 style="margin:0">
+      <details class="ksf-card ksf-section">
+        <summary>
           ${english ? "Mutual Friends" : "आपसी साथीहरू"}
-        </h3>
+        </summary>
 
-        <p style="
-          margin:7px 0 10px;
-          font-size:13px;
-          line-height:1.6;
-          color:var(--text-muted);
-        ">
-          ${english
-            ? "Compare your friend list with another local profile ID."
-            : "अर्को स्थानीय Profile ID सँग साझा साथीहरू तुलना गर्नुहोस्।"}
-        </p>
+        <div class="ksf-section-body">
+          <p class="ksf-subtitle" style="margin:0 0 10px">
+            ${english
+              ? "Compare friend records with another local profile ID."
+              : "अर्को स्थानीय Profile ID सँग साझा साथीहरू तुलना गर्नुहोस्।"}
+          </p>
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input
-            id="ksk-mutual-user-id"
-            type="text"
-            maxlength="128"
-            autocomplete="off"
-            placeholder="${english ? "Other profile ID" : "अर्को Profile ID"}"
-            style="flex:1;min-width:150px"
-          />
+          <div style="display:flex;gap:8px">
+            <input
+              id="ksk-mutual-user-id"
+              class="ksf-search"
+              type="text"
+              maxlength="128"
+              autocomplete="off"
+              placeholder="${english ? "Other profile ID" : "अर्को Profile ID"}"
+            />
 
-          <button
-            type="button"
-            class="btn btn-secondary"
-            data-mutual-search
-          >${english ? "Find" : "खोज्नुहोस्"}</button>
+            <button
+              type="button"
+              class="ksf-action ksf-secondary"
+              data-mutual-search
+              style="min-width:75px"
+            >${english ? "Find" : "खोज्नुहोस्"}</button>
+          </div>
+
+          <div id="ksk-mutual-results" aria-live="polite">
+            ${emptyMessage(
+              english
+                ? "Enter an ID to compare."
+                : "तुलना गर्न अर्को ID राख्नुहोस्।"
+            )}
+          </div>
         </div>
-
-        <div id="ksk-mutual-results" aria-live="polite">
-          ${emptyMessage(
-            english
-              ? "Enter an ID to compare."
-              : "तुलना गर्न अर्को ID राख्नुहोस्।"
-          )}
-        </div>
-      </section>
+      </details>
     `;
   }
 
   /* =======================================================
-     MAIN PAGE RENDER
+     MAIN PAGE
   ======================================================= */
 
   function render(options = {}) {
+    injectStyles();
+
     const english = typeof options.isEnglish === "boolean"
       ? options.isEnglish
       : isEnglish();
@@ -1211,76 +1414,78 @@
       : {
           friends: 0,
           followers: 0,
-          following: 0
+          following: 0,
+          incomingRequests: 0,
+          outgoingRequests: 0,
+          blocked: 0
         };
 
-    // पुरानो Friends रेकर्डलाई मेटाउँदैनौँ।
     const oldFriends = DATA()?.getFriends?.() || [];
-
-    const stats = [
-      {
-        value: counts.friends,
-        label: english ? "Friends" : "साथीहरू"
-      },
-      {
-        value: counts.followers,
-        label: english ? "Followers" : "फलोअर्स"
-      },
-      {
-        value: counts.following,
-        label: english ? "Following" : "फलोइङ"
-      }
-    ];
 
     const oldFriendsHTML = oldFriends.length
       ? `
-        <section class="card" style="padding:16px;margin-top:14px">
-          <h3>
-            ${english
-              ? "Previously saved friends"
-              : "पहिले सुरक्षित गरिएका साथीहरू"}
-          </h3>
+        <details class="ksf-card ksf-section">
+          <summary>
+            ${english ? "Previously saved friends" : "पुराना सुरक्षित साथीहरू"}
+            <span class="ksf-count">${oldFriends.length}</span>
+          </summary>
 
-          <p style="
-            font-size:13px;
-            color:var(--text-muted);
-            line-height:1.5;
-          ">
-            ${english
-              ? "Old local entries; not verified friend connections."
-              : "पुराना स्थानीय रेकर्ड हुन्, प्रमाणित साथी सम्बन्ध होइनन्।"}
-          </p>
+          <div class="ksf-section-body">
+            <p class="ksf-subtitle">
+              ${english
+                ? "Legacy local entries. These are not verified social connections."
+                : "यी पुराना स्थानीय रेकर्ड हुन्, प्रमाणित साथी सम्बन्ध होइनन्।"}
+            </p>
 
-          ${oldFriends.map(friend => `
-            <div style="padding:7px 0">
-              ${escapeHTML(friend.name || "Friend")}
-            </div>
-          `).join("")}
-        </section>
+            ${oldFriends.map(friend => `
+              <div class="ksf-item">
+                <strong>${escapeHTML(friend.name || "Friend")}</strong>
+              </div>
+            `).join("")}
+          </div>
+        </details>
       `
       : "";
 
     return `
-      <section class="page-section ksk-social-page">
+      <section class="page-section ksf-page">
 
-        <div style="
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          gap:10px;
-          flex-wrap:wrap;
-          margin-bottom:14px;
-        ">
-          <h3 class="section-title" style="margin:0">
-            ${english
-              ? "Friends & Social"
-              : "साथी तथा सामाजिक सम्बन्ध"}
-          </h3>
+        <header class="ksf-heading">
+          <div>
+            <h2>${english ? "Friends" : "साथीहरू"}</h2>
+            <p class="ksf-subtitle">
+              ${english
+                ? "Manage your local social connections."
+                : "आफ्ना सामाजिक सम्बन्धहरू व्यवस्थित गर्नुहोस्।"}
+            </p>
+          </div>
+        </header>
 
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <section class="ksf-card ksf-identity">
+          <div class="ksf-id-label">
+            ${english ? "YOUR LOCAL PROFILE ID" : "तपाईंको स्थानीय PROFILE ID"}
+          </div>
+
+          <div class="ksf-id-line">
+            <code class="ksf-id-value">
+              ${escapeHTML(userId || "ID unavailable")}
+            </code>
+
             <button
               type="button"
-              class="btn btn-primary"
+              class="ksf-action ksf-secondary"
+              data-copy-social-id
+              ${userId ? "" : "disabled"}
+              style="min-height:36px;flex:none"
+            >
+              ${english ? "Copy" : "कपी"}
+            </button>
+          </div>
+
+          <div class="ksf-actions">
+            <button
+              type="button"
+              class="ksf-action ksf-primary"
               data-add-friend-open
               ${userId ? "" : "disabled"}
             >
@@ -1289,110 +1494,49 @@
 
             <button
               type="button"
-              class="btn btn-secondary"
+              class="ksf-action ksf-secondary"
               data-open-follow
               ${userId ? "" : "disabled"}
             >
               ${english ? "Follow by ID" : "ID बाट Follow"}
             </button>
           </div>
-        </div>
 
-        <div class="card" style="
-          padding:18px;
-          margin:14px 0;
-          border-radius:16px;
-        ">
-          <div style="
-            font-size:13px;
-            color:var(--text-muted);
-          ">
+          <div class="ksf-note">
             ${english
-              ? "Your local profile ID"
-              : "तपाईंको स्थानीय Profile ID"}
+              ? "Local prototype only. Your ID and social records are stored in this browser. Requests and follows are not delivered to other devices or real accounts."
+              : "यो LocalStorage Prototype मात्र हो। तपाईंको ID र सामाजिक रेकर्ड यही ब्राउजरमा सुरक्षित हुन्छन्। Request वा Follow अर्को मोबाइल वा वास्तविक Account मा पुग्दैन।"}
+          </div>
+        </section>
+
+        <div class="ksf-stats">
+          <div class="ksf-stat">
+            <strong>${Number(counts.friends || 0)}</strong>
+            <span>${english ? "Friends" : "साथीहरू"}</span>
           </div>
 
-          <div style="
-            display:flex;
-            gap:10px;
-            align-items:center;
-            margin-top:8px;
-            flex-wrap:wrap;
-          ">
-            <code style="
-              flex:1;
-              min-width:180px;
-              overflow-wrap:anywhere;
-              font-size:13px;
-            ">
-              ${escapeHTML(userId || "ID unavailable")}
-            </code>
-
-            <button
-              class="btn btn-secondary btn-sm"
-              type="button"
-              data-copy-social-id
-              ${userId ? "" : "disabled"}
-            >
-              ${english ? "Copy ID" : "ID कपी"}
-            </button>
+          <div class="ksf-stat">
+            <strong>${Number(counts.followers || 0)}</strong>
+            <span>Followers</span>
           </div>
 
-          <p style="
-            margin:12px 0 0;
-            font-size:13px;
-            color:var(--text-muted);
-            line-height:1.6;
-          ">
-            ${english
-              ? "This ID and all social records are stored only in this browser. Requests are not delivered to other devices."
-              : "यो ID र सामाजिक रेकर्ड यही ब्राउजरमा मात्र सुरक्षित हुन्छन्। Request अर्को मोबाइलमा पुग्दैन।"}
-          </p>
+          <div class="ksf-stat">
+            <strong>${Number(counts.following || 0)}</strong>
+            <span>Following</span>
+          </div>
         </div>
 
-        <div class="card" style="
-          padding:16px;
-          display:grid;
-          grid-template-columns:repeat(3,minmax(0,1fr));
-          gap:8px;
-          text-align:center;
-        ">
-          ${stats.map(item => `
-            <div>
-              <strong style="display:block;font-size:22px">
-                ${Number(item.value || 0)}
-              </strong>
+        <input
+          type="search"
+          class="ksf-search"
+          data-friends-filter
+          placeholder="${english ? "Search an ID in opened lists..." : "खोलिएका सूचीमा ID खोज्नुहोस्..."}"
+          aria-label="${english ? "Search social lists" : "सामाजिक सूची खोज्नुहोस्"}"
+        />
 
-              <span style="
-                font-size:12px;
-                color:var(--text-muted);
-              ">
-                ${item.label}
-              </span>
-            </div>
-          `).join("")}
-        </div>
-
-        <div class="card" style="padding:14px;margin-top:14px">
-          <strong>
-            ${english ? "Local prototype" : "स्थानीय Prototype"}
-          </strong>
-
-          <p style="
-            margin:6px 0 0;
-            font-size:13px;
-            line-height:1.6;
-            color:var(--text-muted);
-          ">
-            ${english
-              ? "You can record a request or follow relation using an ID. This does not verify that the ID belongs to a real account."
-              : "ID प्रयोग गरेर Request वा Follow को स्थानीय रेकर्ड बनाउन सकिन्छ। यसले त्यो ID वास्तविक Account को हो भनेर प्रमाणित गर्दैन।"}
-          </p>
-        </div>
-
-        ${renderMutualFriends(english)}
         ${renderRequests(userId, english)}
         ${renderRelations(userId, english)}
+        ${renderMutualFriends(english)}
         ${oldFriendsHTML}
 
       </section>
@@ -1413,10 +1557,7 @@
     const localId = social?.getLocalUserId?.() || "";
     const modal = MODAL();
 
-    if (
-      !localId ||
-      typeof modal?.openModal !== "function"
-    ) {
+    if (!localId || typeof modal?.openModal !== "function") {
       toast(
         english
           ? "Social feature is unavailable."
@@ -1430,30 +1571,22 @@
 
     return modal.openModal({
       title: isFollow
-        ? (
-            english
-              ? "Follow a User ID"
-              : "User ID Follow गर्नुहोस्"
-          )
-        : (
-            english
-              ? "Add Friend"
-              : "साथी थप्नुहोस्"
-          ),
+        ? (english ? "Follow a User ID" : "User ID Follow गर्नुहोस्")
+        : (english ? "Add Friend" : "साथी थप्नुहोस्"),
 
       content: `
         <div>
-          <p style="line-height:1.6">
+          <p style="line-height:1.6;font-size:13px">
             ${isFollow
               ? (
                   english
-                    ? "Enter the other profile ID to create a local follow record."
+                    ? "Enter another profile ID to create a local follow record."
                     : "स्थानीय Follow रेकर्ड बनाउन अर्को Profile ID राख्नुहोस्।"
                 )
               : (
                   english
-                    ? "Enter the other profile ID to create a local outgoing friend request."
-                    : "स्थानीय Outgoing Friend Request बनाउन अर्को Profile ID राख्नुहोस्।"
+                    ? "Enter another profile ID to create a local friend request."
+                    : "स्थानीय Friend Request बनाउन अर्को Profile ID राख्नुहोस्।"
                 )}
           </p>
 
@@ -1467,17 +1600,13 @@
             maxlength="128"
             autocomplete="off"
             placeholder="${english ? "Paste user ID" : "User ID यहाँ राख्नुहोस्"}"
+            style="width:100%;box-sizing:border-box"
           />
 
-          <p style="
-            margin-top:10px;
-            font-size:12px;
-            line-height:1.6;
-            color:var(--text-muted);
-          ">
+          <p style="margin-top:10px;font-size:11px;line-height:1.6;color:var(--text-muted)">
             ${english
-              ? "LocalStorage only: this record is not sent to another device or user."
-              : "LocalStorage मात्र: यो रेकर्ड अर्को मोबाइल वा प्रयोगकर्तालाई पठाइँदैन।"}
+              ? "LocalStorage only. This record is not sent to another device or user."
+              : "LocalStorage मात्र। यो रेकर्ड अर्को मोबाइल वा प्रयोगकर्तालाई पठाइँदैन।"}
           </p>
         </div>
       `,
@@ -1498,11 +1627,7 @@
         >
           ${isFollow
             ? "Follow"
-            : (
-                english
-                  ? "Send Request"
-                  : "Request पठाउनुहोस्"
-              )}
+            : (english ? "Send Request" : "Request पठाउनुहोस्")}
         </button>
       `
     });
@@ -1549,9 +1674,7 @@
       field.select();
 
       try {
-        copied = Boolean(
-          global.document.execCommand("copy")
-        );
+        copied = Boolean(global.document.execCommand("copy"));
       } catch (error) {}
 
       field.remove();
@@ -1621,11 +1744,7 @@
           : "प्रयोगकर्ता स्थानीय रूपमा Unblock भयो।"
       };
 
-      toast(
-        messages[action] || "Updated.",
-        "success"
-      );
-
+      toast(messages[action] || "Updated.", "success");
       closeModal();
       refreshPage();
       return;
@@ -1717,7 +1836,7 @@
   }
 
   /* =======================================================
-     MUTUAL FRIEND SEARCH HANDLER
+     MUTUAL FRIEND SEARCH
   ======================================================= */
 
   function handleMutualSearch(event) {
@@ -1747,7 +1866,6 @@
           : "अर्को Profile ID राख्नुहोस्।",
         "warning"
       );
-
       input?.focus();
       return;
     }
@@ -1759,7 +1877,6 @@
           : "आफ्नो भन्दा फरक ID राख्नुहोस्।",
         "warning"
       );
-
       input?.focus();
       return;
     }
@@ -1773,24 +1890,15 @@
 
     resultBox.innerHTML = mutual.length
       ? `
-        <p style="
-          margin:12px 0 6px;
-          font-size:13px;
-          color:var(--text-muted);
-        ">
+        <p class="ksf-subtitle">
           ${isEnglish()
             ? mutual.length + " mutual friend(s) found."
             : mutual.length + " जना साझा साथी भेटिए।"}
         </p>
 
         ${mutual.map(item => `
-          <div style="
-            padding:9px 0;
-            border-bottom:1px solid var(--border-color,rgba(127,127,127,.15));
-          ">
-            <code style="overflow-wrap:anywhere">
-              ${escapeHTML(item.userId)}
-            </code>
+          <div class="ksf-item">
+            <code>${escapeHTML(item.userId)}</code>
           </div>
         `).join("")}
       `
@@ -1799,6 +1907,32 @@
             ? "No mutual friends found in local records."
             : "स्थानीय रेकर्डमा आपसी साथी भेटिएनन्।"
         );
+  }
+
+  /* =======================================================
+     LIST SEARCH
+  ======================================================= */
+
+  function handleListSearch(event) {
+    const input = event.target?.closest?.(
+      "[data-friends-filter]"
+    );
+
+    if (!input) return;
+
+    const query = String(input.value || "")
+      .trim()
+      .toLowerCase();
+
+    global.document
+      .querySelectorAll(".ksf-searchable")
+      .forEach(item => {
+        const value = item.getAttribute("data-search") || "";
+        item.classList.toggle(
+          "ksf-hidden",
+          Boolean(query) && !value.includes(query)
+        );
+      });
   }
 
   /* =======================================================
@@ -1832,10 +1966,7 @@
     if (submit) {
       event.preventDefault();
 
-      const kind = submit.getAttribute(
-        "data-submit-social"
-      );
-
+      const kind = submit.getAttribute("data-submit-social");
       const input = global.document.getElementById(
         "ksk-social-target-id"
       );
@@ -1851,7 +1982,6 @@
             : "User ID राख्नुहोस्।",
           "warning"
         );
-
         input?.focus();
         return;
       }
@@ -1864,21 +1994,13 @@
       return;
     }
 
-    const actionButton = target.closest(
-      "[data-social-action]"
-    );
-
-    if (!actionButton) return;
+    const button = target.closest("[data-social-action]");
+    if (!button) return;
 
     event.preventDefault();
 
-    const action = actionButton.getAttribute(
-      "data-social-action"
-    );
-
-    const id = actionButton.getAttribute(
-      "data-social-id"
-    );
+    const action = button.getAttribute("data-social-action");
+    const id = button.getAttribute("data-social-id");
 
     const social = SOCIAL();
     const localId = social?.getLocalUserId?.() || "";
@@ -1924,32 +2046,19 @@
   }
 
   /* =======================================================
-     PUBLIC PAGE API
+     INITIALIZATION
   ======================================================= */
 
-  function openAddFriend() {
-    return openIdModal("friend");
-  }
-
-  global.document?.addEventListener(
-    "click",
-    handleClick
-  );
-
-  global.document?.addEventListener(
-    "click",
-    handleMutualSearch
-  );
+  global.document?.addEventListener("click", handleClick);
+  global.document?.addEventListener("click", handleMutualSearch);
+  global.document?.addEventListener("input", handleListSearch);
 
   global.KSKFriendsPage = Object.freeze({
     render,
-    openAddFriend,
+    openAddFriend: () => openIdModal("friend"),
     copyLocalId
   });
 
-  // Local state changes refresh the Friends screen when supported.
-  global.addEventListener("ksk:social-change", () => {
-    refreshPage();
-  });
+  global.addEventListener("ksk:social-change", refreshPage);
 
 })(window);
