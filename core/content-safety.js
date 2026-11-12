@@ -17,10 +17,23 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
   const BLOCKED_TERMS = [
-    "porn", "porno", "xxx", "nude", "nudes", "nudity",
-    "nsfw", "naked", "adult content", "explicit content",
-    "sexual content", "sexually explicit",
-    "अश्लील", "पोर्न", "नग्न", "यौन सामग्री"
+    // English explicit terms and common profanity
+    "porn", "porno", "pornography", "xxx", "nude", "nudes", "nudity",
+    "nsfw", "naked", "adult content", "explicit content", "sexual content",
+    "sexually explicit", "erotic", "hentai", "blowjob", "handjob",
+    "fuck", "fucking", "fucked", "motherfucker", "shit", "bullshit",
+    "bitch", "bastard", "asshole", "dick", "pussy", "cunt",
+    "whore", "slut", "rape", "rapist",
+
+    // Nepali script and common Roman Nepali spellings
+    "अश्लील", "पोर्न", "नग्न", "यौन सामग्री", "बलात्कार",
+    "मुजी", "मुजि", "माचिक्ने", "रन्डी", "रण्डी",
+    "लाडो", "लाँडो", "गाँड", "गान्ड", "गान्डु", "गाण्डु",
+    "चिक्ने", "चिक", "बेश्या", "हरामी", "हरामि",
+    "muji", "mujii", "mujy", "machikne", "machikney",
+    "randi", "rundy", "lado", "laado", "gaand", "gand",
+    "gandu", "gandoo", "chikne", "chikney", "chik",
+    "besya", "beshya", "harami", "haraami", "boksi", "boksee"
   ];
 
   let observer = null;
@@ -34,14 +47,20 @@
   })[c]);
 
   function notify(message, type = "info") {
-    if (typeof global.KSKToast?.show === "function") global.KSKToast.show(message, type);
-    else if (type === "error") console.error(message);
-    else console.info(message);
+    if (typeof global.KSKToast?.show === "function") {
+      global.KSKToast.show(message, type);
+    } else if (type === "error") {
+      console.error(message);
+    } else {
+      console.info(message);
+    }
   }
 
   function makeId() {
     try {
-      if (global.crypto?.randomUUID) return "safety_" + global.crypto.randomUUID();
+      if (global.crypto?.randomUUID) {
+        return "safety_" + global.crypto.randomUUID();
+      }
     } catch (e) {}
 
     return "safety_" + Date.now().toString(36) + "_" +
@@ -68,7 +87,10 @@
       global.dispatchEvent(new CustomEvent("ksk:content-safety-change"));
       return true;
     } catch (e) {
-      notify(t("Safety सेटिङ सुरक्षित गर्न सकिएन।", "Could not save safety settings."), "error");
+      notify(
+        t("Safety सेटिङ सुरक्षित गर्न सकिएन।", "Could not save safety settings."),
+        "error"
+      );
       return false;
     }
   }
@@ -82,19 +104,31 @@
 
   function containsBlockedTerm(value) {
     const text = normalize(value);
-
     if (!text) return false;
+
+    const tokens = text.match(/[a-z0-9]+/g) || [];
+    const compactTokens = text.split(/\s+/)
+      .map(part => part.replace(/[^a-z0-9]/g, ""))
+      .filter(Boolean);
 
     return BLOCKED_TERMS.some(term => {
       const word = normalize(term);
 
       if (/^[a-z0-9 ]+$/.test(word)) {
-        const escaped = word.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
+        const wanted = word.split(/\s+/);
 
-        return new RegExp(
-          "(^|[^a-z0-9])" + escaped + "([^a-z0-9]|$)",
-          "i"
-        ).test(text);
+        if (wanted.length === 1) {
+          return tokens.includes(wanted[0]) ||
+            compactTokens.includes(wanted[0]);
+        }
+
+        for (let i = 0; i <= tokens.length - wanted.length; i++) {
+          if (wanted.every((part, offset) => tokens[i + offset] === part)) {
+            return true;
+          }
+        }
+
+        return false;
       }
 
       return text.includes(word);
@@ -112,7 +146,9 @@
   }
 
   function hideContent(type, id, label) {
-    if (!["post", "story", "comment"].includes(type) || !id) return false;
+    if (!["post", "story", "comment"].includes(type) || !id) {
+      return false;
+    }
 
     const state = readState();
 
@@ -147,7 +183,9 @@
       !(x.type === type && String(x.id) === String(id))
     );
 
-    if (before === state.hidden.length || !saveState(state)) return false;
+    if (before === state.hidden.length || !saveState(state)) {
+      return false;
+    }
 
     scan();
     renderPanel();
@@ -161,7 +199,9 @@
   }
 
   function reportContent(type, id, label) {
-    if (!["post", "story", "comment"].includes(type) || !id) return false;
+    if (!["post", "story", "comment"].includes(type) || !id) {
+      return false;
+    }
 
     const state = readState();
 
@@ -171,7 +211,10 @@
       x.status === "open"
     )) {
       notify(
-        t("यो सामग्री पहिल्यै Report गरिएको छ।", "This content has already been reported on this device."),
+        t(
+          "यो सामग्री पहिल्यै Report गरिएको छ।",
+          "This content has already been reported on this device."
+        ),
         "info"
       );
 
@@ -206,7 +249,9 @@
       String(x.id) !== String(id)
     );
 
-    if (before === state.reports.length || !saveState(state)) return false;
+    if (before === state.reports.length || !saveState(state)) {
+      return false;
+    }
 
     renderPanel();
     return true;
@@ -232,6 +277,12 @@
       '[data-ksk-safety-hidden="true"]{display:none!important}',
 
       '.ksk-content-safety-actions{display:flex;flex-wrap:wrap;gap:7px;padding:7px 12px 10px;border-top:1px solid var(--color-border,#ddd)}',
+
+      '.post-card>.ksk-content-safety-actions{display:none!important}',
+
+      '.post-menu-actions .ksk-content-safety-actions{display:flex!important;flex-direction:column;border:0;padding:4px 0;margin-top:8px}',
+
+      '.post-menu-actions .ksk-content-safety-actions button{width:100%;text-align:left;min-height:42px;font-size:14px}',
 
       '.ksk-content-safety-actions button{min-height:32px;padding:5px 9px;border:1px solid var(--color-border,#ddd);border-radius:8px;background:var(--color-surface-secondary,#f5f5f5);color:var(--color-text-secondary,#555);font:inherit;font-size:11px;font-weight:600;cursor:pointer}',
 
@@ -261,8 +312,8 @@
 
   function actionsHTML(type, id) {
     return '<div class="ksk-content-safety-actions" data-ksk-safety-actions>' +
-      '<button type="button" data-ksk-safety-action="hide" data-content-type="' + esc(type) +
-      '" data-content-id="' + esc(id) + '">' +
+      '<button type="button" data-ksk-safety-action="hide" data-content-type="' +
+      esc(type) + '" data-content-id="' + esc(id) + '">' +
       t("लुकाउनुहोस्", "Hide") +
       '</button>' +
 
@@ -313,18 +364,16 @@
     }
   }
 
-  function decoratePosts() {
-    $$(".post-card[data-post-id]").forEach(card => {
-      if ($("[data-ksk-safety-actions]", card)) return;
+  // Post Hide/Report controls are placed inside the existing ⋯ menu only.
+  function decoratePostMenus() {
+    $$(".post-menu-actions").forEach(menu => {
+      if ($("[data-ksk-safety-actions]", menu)) return;
 
-      const id = card.dataset.postId;
-      const footer = $(".post-actions", card);
+      const trigger = $("[data-edit-post], [data-delete-post]", menu);
+      const id = trigger?.dataset.editPost || trigger?.dataset.deletePost;
 
-      if (id && footer) {
-        footer.insertAdjacentHTML(
-          "afterend",
-          actionsHTML("post", id)
-        );
+      if (id) {
+        menu.insertAdjacentHTML("beforeend", actionsHTML("post", id));
       }
     });
   }
@@ -370,7 +419,7 @@
 
   function scan() {
     addStyles();
-    decoratePosts();
+    decoratePostMenus();
     decorateComments();
     decorateStoryViewer();
     applyVisibility();
@@ -399,8 +448,9 @@
 
     const comment = form.matches("[data-comment-form]");
     const reply = form.matches("[data-home-story-reply]");
+    const editPost = form.id === "kskEditPostForm";
 
-    if (!composer && !comment && !reply) return;
+    if (!composer && !comment && !reply && !editPost) return;
 
     const textarea = $("textarea", form);
     const value = textarea?.value || "";
@@ -522,8 +572,8 @@
 
     return '<div class="ksk-content-safety-panel"><p class="ksk-content-safety-note">' +
       t(
-        "चयन गरिएका वयस्क/अश्लील शब्द रोक्ने, लुकाइएका Post, Comment र Story फिर्ता देखाउने तथा स्थानीय Report व्यवस्थापन गर्ने सुविधा। Report यही ब्राउजरमा मात्र रहन्छ। फोटोको स्वचालित जाँच हुँदैन।",
-        "Blocks selected adult/explicit phrases, restores hidden posts/comments/stories and manages local reports. Reports stay in this browser. Photos are not automatically scanned."
+        "चयन गरिएका अपशब्द र अश्लील शब्द रोक्ने, लुकाइएका Post, Comment र Story फिर्ता देखाउने तथा स्थानीय Report व्यवस्थापन गर्ने सुविधा। Report यही ब्राउजरमा मात्र रहन्छ। फोटोको स्वचालित जाँच हुँदैन।",
+        "Blocks selected abusive and explicit terms, restores hidden posts/comments/stories and manages local reports. Reports stay in this browser. Photos are not automatically scanned."
       ) +
       '</p><h3>' + t("लुकाइएको सामग्री", "Hidden content") +
       '</h3>' + hidden +
