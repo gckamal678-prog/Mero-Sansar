@@ -69,7 +69,7 @@
     );
   }
 
-  /* STORY TEXT PREVIEW STYLES */
+  /* STORY TEXT  PREVIEW STYLES */
 
   function ensureStoryPreviewStyles() {
     if ($("#kskStoryPreviewStyles")) return;
