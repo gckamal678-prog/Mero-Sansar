@@ -1,16 +1,25 @@
 
 "use strict";
 
-/* =========================================================
-   MERO SANSAR — SOCIAL DATA + FRIENDS PAGE
-   LocalStorage prototype only. No backend / server sync.
-========================================================= */
+/*
+ * =========================================================
+ * MERO SANSAR — FRIENDS PAGE
+ * PHASE 9.2 — FRIENDS INTERFACE REDESIGN
+ *
+ * - Existing LocalStorage schema preserved
+ * - Existing Social API preserved
+ * - Modern compact mobile-first interface
+ * - Friend requests, friends, followers, following
+ * - Mutual friends, block/unblock, search
+ * - No backend / SQL / server sync
+ * =========================================================
+ */
 
 (function (global) {
   "use strict";
 
   /* =======================================================
-     SOCIAL DATA API — EXISTING STORAGE COMPATIBILITY
+     1. SOCIAL DATA API — EXISTING STORAGE COMPATIBILITY
   ======================================================= */
 
   if (!global.KSKSocialData) {
@@ -533,30 +542,15 @@
     }
 
     function acceptFriendRequest(id, userId) {
-      return updateRequest(
-        id,
-        userId,
-        "accepted",
-        "toUserId"
-      );
+      return updateRequest(id, userId, "accepted", "toUserId");
     }
 
     function rejectFriendRequest(id, userId) {
-      return updateRequest(
-        id,
-        userId,
-        "rejected",
-        "toUserId"
-      );
+      return updateRequest(id, userId, "rejected", "toUserId");
     }
 
     function cancelFriendRequest(id, userId) {
-      return updateRequest(
-        id,
-        userId,
-        "cancelled",
-        "fromUserId"
-      );
+      return updateRequest(id, userId, "cancelled", "fromUserId");
     }
 
     function followUser(followerId, followingId) {
@@ -760,7 +754,7 @@
   }
 
   /* =======================================================
-     FRIENDS PAGE UI
+     2. FRIENDS PAGE UI
   ======================================================= */
 
   if (global.KSKFriendsPage) return;
@@ -773,6 +767,10 @@
 
   function isEnglish() {
     return LANG()?.getLanguage?.() === "en";
+  }
+
+  function t(ne, en) {
+    return isEnglish() ? en : ne;
   }
 
   function escapeHTML(value) {
@@ -805,6 +803,10 @@
     }
   }
 
+  /* =======================================================
+     3. MODERN FRIENDS DESIGN
+  ======================================================= */
+
   function injectStyles() {
     if (global.document.getElementById("ksk-friends-redesign-style")) {
       return;
@@ -815,109 +817,177 @@
 
     style.textContent = `
       .ksf-page {
-        --ksf-border: var(--border-color, rgba(127,127,127,.17));
-        --ksf-muted: var(--text-muted, #7b8494);
+        --ksf-line:var(--color-border,rgba(127,127,127,.18));
+        --ksf-muted:var(--color-muted,#7b8494);
+        --ksf-surface:var(--color-surface,#fff);
+        --ksf-soft:var(--color-surface-secondary,rgba(127,127,127,.07));
+        --ksf-text:var(--color-text,inherit);
+        --ksf-primary:var(--color-primary,#2563eb);
         width:100%;
         max-width:100%;
-        padding-bottom:24px;
+        padding:2px 0 28px;
+        color:var(--ksf-text);
+        box-sizing:border-box;
       }
 
-      .ksf-heading {
+      .ksf-page *,
+      .ksf-page *::before,
+      .ksf-page *::after {
+        box-sizing:border-box;
+      }
+
+      .ksf-topbar {
         display:flex;
         align-items:center;
         justify-content:space-between;
         gap:12px;
-        margin:0 0 14px;
+        margin:0 0 16px;
       }
 
-      .ksf-heading h2 {
+      .ksf-topbar h2 {
         margin:0;
-        font-size:20px;
-        font-weight:800;
-        letter-spacing:-.35px;
+        font-size:21px;
+        line-height:1.25;
+        font-weight:850;
+        letter-spacing:-.45px;
+        color:var(--ksf-text);
       }
 
-      .ksf-subtitle {
+      .ksf-topbar p {
+        margin:5px 0 0;
         color:var(--ksf-muted);
         font-size:12px;
-        line-height:1.55;
-        margin:5px 0 0;
+        line-height:1.5;
       }
 
       .ksf-card {
-        background:var(--card-bg, var(--surface, #fff));
-        color:var(--text-color, inherit);
-        border:1px solid var(--ksf-border);
-        border-radius:17px;
-        padding:15px;
-        margin:12px 0;
         min-width:0;
-        box-shadow:0 5px 18px rgba(0,0,0,.035);
+        margin:12px 0;
+        padding:15px;
+        border:1px solid var(--ksf-line);
+        border-radius:17px;
+        background:var(--ksf-surface);
+        color:var(--ksf-text);
+        box-shadow:0 4px 18px rgba(0,0,0,.035);
       }
 
       .ksf-identity {
+        position:relative;
+        overflow:hidden;
         padding:17px;
-        background:
-          linear-gradient(135deg,
-            rgba(37,99,235,.11),
-            rgba(14,165,233,.045));
-        border-color:rgba(37,99,235,.18);
+        background:linear-gradient(
+          135deg,
+          var(--color-primary-soft,rgba(37,99,235,.12)),
+          var(--ksf-surface) 78%
+        );
+      }
+
+      .ksf-identity::after {
+        content:"";
+        position:absolute;
+        width:115px;
+        height:115px;
+        right:-46px;
+        top:-54px;
+        border-radius:50%;
+        background:rgba(37,99,235,.07);
+        pointer-events:none;
+      }
+
+      .ksf-id-top {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        position:relative;
+        z-index:1;
       }
 
       .ksf-id-label {
-        font-size:12px;
         color:var(--ksf-muted);
-        font-weight:700;
+        font-size:10px;
+        font-weight:800;
+        letter-spacing:.8px;
+      }
+
+      .ksf-local-tag {
+        padding:4px 8px;
+        border-radius:20px;
+        background:var(--ksf-soft);
+        color:var(--ksf-muted);
+        font-size:9px;
+        font-weight:800;
+        white-space:nowrap;
       }
 
       .ksf-id-line {
         display:flex;
         align-items:center;
         gap:9px;
-        margin-top:9px;
+        margin-top:11px;
         min-width:0;
+        position:relative;
+        z-index:1;
       }
 
       .ksf-id-value {
-        min-width:0;
         flex:1;
-        overflow-wrap:anywhere;
-        font-size:12px;
+        min-width:0;
+        display:block;
+        padding:10px 11px;
+        border:1px dashed var(--ksf-line);
+        border-radius:10px;
+        background:var(--ksf-surface);
+        color:var(--ksf-text);
+        font-size:11px;
         line-height:1.5;
-        font-weight:700;
-        color:var(--text-color, inherit);
+        font-weight:750;
+        overflow-wrap:anywhere;
+        user-select:text;
       }
 
-      .ksf-actions {
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:9px;
-        margin-top:15px;
-      }
-
-      .ksf-action {
-        min-height:43px;
-        border-radius:12px;
-        padding:9px 10px;
-        font-weight:700;
-        font-size:13px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        gap:6px;
+      .ksf-copy-btn {
+        min-height:40px;
+        flex:none;
+        padding:8px 12px;
+        border:1px solid var(--ksf-line);
+        border-radius:10px;
+        background:var(--ksf-surface);
+        color:var(--ksf-text);
+        font-size:12px;
+        font-weight:800;
         cursor:pointer;
       }
 
-      .ksf-primary {
-        background:var(--primary-color, #2563eb);
-        color:#fff;
-        border:1px solid transparent;
+      .ksf-main-actions {
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:9px;
+        margin-top:13px;
+        position:relative;
+        z-index:1;
       }
 
-      .ksf-secondary {
-        background:var(--surface-2, rgba(127,127,127,.09));
-        color:var(--text-color, inherit);
-        border:1px solid var(--ksf-border);
+      .ksf-action {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        gap:7px;
+        min-width:0;
+        min-height:42px;
+        padding:9px 11px;
+        border:1px solid var(--ksf-line);
+        border-radius:11px;
+        font:inherit;
+        font-size:12px;
+        font-weight:800;
+        line-height:1.25;
+        cursor:pointer;
+        transition:transform .16s ease,opacity .16s ease;
+      }
+
+      .ksf-action:active {
+        transform:scale(.98);
       }
 
       .ksf-action:disabled {
@@ -925,50 +995,111 @@
         cursor:not-allowed;
       }
 
+      .ksf-primary {
+        border-color:transparent;
+        background:var(--ksf-primary);
+        color:#fff;
+      }
+
+      .ksf-secondary {
+        background:var(--ksf-soft);
+        color:var(--ksf-text);
+      }
+
+      .ksf-id-note {
+        margin:11px 0 0;
+        color:var(--ksf-muted);
+        font-size:10px;
+        line-height:1.6;
+        position:relative;
+        z-index:1;
+      }
+
       .ksf-stats {
         display:grid;
         grid-template-columns:repeat(3,minmax(0,1fr));
         gap:8px;
-        margin:12px 0;
+        margin:12px 0 15px;
       }
 
       .ksf-stat {
         min-width:0;
+        padding:12px 5px;
         text-align:center;
-        padding:13px 5px;
-        border:1px solid var(--ksf-border);
-        border-radius:14px;
-        background:var(--card-bg, var(--surface, #fff));
+        border:1px solid var(--ksf-line);
+        border-radius:13px;
+        background:var(--ksf-surface);
       }
 
       .ksf-stat strong {
         display:block;
+        color:var(--ksf-text);
         font-size:21px;
-        line-height:1.2;
-        font-weight:800;
+        line-height:1.15;
+        font-weight:850;
       }
 
       .ksf-stat span {
         display:block;
-        margin-top:4px;
-        font-size:11px;
+        margin-top:5px;
         color:var(--ksf-muted);
+        font-size:10px;
+        font-weight:700;
+      }
+
+      .ksf-search-wrap {
+        position:relative;
+        margin:0 0 12px;
+      }
+
+      .ksf-search-icon {
+        position:absolute;
+        left:13px;
+        top:50%;
+        transform:translateY(-50%);
+        font-size:15px;
+        color:var(--ksf-muted);
+        pointer-events:none;
+      }
+
+      .ksf-search {
+        width:100%;
+        min-height:44px;
+        margin:0;
+        padding:10px 13px 10px 38px;
+        border:1px solid var(--ksf-line);
+        border-radius:12px;
+        outline:none;
+        background:var(--ksf-soft);
+        color:var(--ksf-text);
+        font:inherit;
+        font-size:12px;
+      }
+
+      .ksf-search::placeholder {
+        color:var(--ksf-muted);
+        opacity:1;
+      }
+
+      .ksf-search:focus {
+        border-color:var(--ksf-primary);
+        box-shadow:0 0 0 3px rgba(37,99,235,.10);
       }
 
       .ksf-section {
+        padding:0;
         overflow:hidden;
       }
 
       .ksf-section summary {
-        list-style:none;
-        cursor:pointer;
         display:flex;
         align-items:center;
-        justify-content:space-between;
         gap:10px;
-        min-height:35px;
-        font-weight:800;
-        font-size:14px;
+        min-height:56px;
+        padding:12px 15px;
+        list-style:none;
+        cursor:pointer;
+        user-select:none;
       }
 
       .ksf-section summary::-webkit-details-marker {
@@ -977,258 +1108,317 @@
 
       .ksf-section summary::after {
         content:"＋";
-        font-size:17px;
+        margin-left:auto;
         color:var(--ksf-muted);
-        flex:none;
+        font-size:17px;
+        font-weight:500;
       }
 
       .ksf-section[open] summary::after {
         content:"−";
       }
 
-      .ksf-section summary .ksf-count {
-        margin-left:auto;
-        margin-right:5px;
-        min-width:25px;
-        text-align:center;
-        border-radius:20px;
-        padding:3px 7px;
-        font-size:11px;
-        background:rgba(127,127,127,.11);
+      .ksf-section-icon {
+        display:grid;
+        place-items:center;
+        width:34px;
+        height:34px;
+        flex:none;
+        border-radius:11px;
+        background:var(--ksf-soft);
+        font-size:16px;
+      }
+
+      .ksf-section-title {
+        min-width:0;
+        flex:1;
+      }
+
+      .ksf-section-title strong {
+        display:block;
+        color:var(--ksf-text);
+        font-size:13px;
+        font-weight:850;
+      }
+
+      .ksf-section-title small {
+        display:block;
+        margin-top:3px;
         color:var(--ksf-muted);
+        font-size:10px;
+        font-weight:500;
+      }
+
+      .ksf-count {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        min-width:25px;
+        height:23px;
+        padding:0 7px;
+        border-radius:20px;
+        background:var(--ksf-soft);
+        color:var(--ksf-text);
+        font-size:10px;
+        font-weight:850;
+      }
+
+      .ksf-count.ksf-count-alert {
+        background:rgba(225,70,70,.12);
+        color:#d44747;
       }
 
       .ksf-section-body {
-        border-top:1px solid var(--ksf-border);
-        margin-top:12px;
-        padding-top:10px;
+        padding:0 15px 13px;
+        border-top:1px solid var(--ksf-line);
+      }
+
+      .ksf-subheading {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        margin:13px 0 5px;
+        color:var(--ksf-muted);
+        font-size:10px;
+        font-weight:850;
+        letter-spacing:.35px;
+        text-transform:uppercase;
       }
 
       .ksf-item {
         display:flex;
         align-items:center;
         justify-content:space-between;
-        flex-wrap:wrap;
-        gap:10px;
+        gap:9px;
+        min-width:0;
         padding:11px 0;
-        border-bottom:1px solid var(--ksf-border);
+        border-bottom:1px solid var(--ksf-line);
       }
 
       .ksf-item:last-child {
         border-bottom:0;
       }
 
-      .ksf-item-id {
+      .ksf-item-main {
+        display:flex;
+        align-items:center;
+        gap:9px;
         min-width:0;
         flex:1;
+      }
+
+      .ksf-avatar {
+        display:grid;
+        place-items:center;
+        width:35px;
+        height:35px;
+        flex:none;
+        border-radius:50%;
+        background:var(--ksf-soft);
+        color:var(--ksf-text);
+        font-size:13px;
+        font-weight:850;
+        overflow:hidden;
+      }
+
+      .ksf-person-info {
+        min-width:0;
+        flex:1;
+      }
+
+      .ksf-person-info strong {
+        display:block;
+        color:var(--ksf-text);
+        font-size:11px;
+        font-weight:800;
         overflow-wrap:anywhere;
-        font-size:12px;
-        line-height:1.55;
+      }
+
+      .ksf-person-info small {
+        display:block;
+        margin-top:3px;
+        color:var(--ksf-muted);
+        font-size:9px;
+        line-height:1.4;
+        overflow-wrap:anywhere;
       }
 
       .ksf-item-actions {
         display:flex;
         align-items:center;
+        justify-content:flex-end;
         flex-wrap:wrap;
         gap:6px;
+        flex:none;
       }
 
       .ksf-small-btn {
-        min-height:33px;
+        min-height:32px;
+        padding:6px 9px;
         border-radius:9px;
-        padding:6px 10px;
-        font-size:11px;
-        font-weight:700;
+        font-size:10px;
       }
 
-      .ksf-search {
-        width:100%;
-        min-height:42px;
-        padding:10px 12px;
-        border-radius:12px;
-        border:1px solid var(--ksf-border);
-        background:var(--input-bg, var(--card-bg, #fff));
-        color:var(--text-color, inherit);
-        outline:none;
-        font:inherit;
-        font-size:13px;
-        margin:0 0 5px;
-      }
-
-      .ksf-search:focus {
-        border-color:var(--primary-color, #2563eb);
-        box-shadow:0 0 0 3px rgba(37,99,235,.10);
+      .ksf-danger-btn {
+        color:#c94444;
+        border-color:rgba(201,68,68,.2);
+        background:rgba(201,68,68,.06);
       }
 
       .ksf-empty {
-        text-align:center;
         padding:17px 8px;
+        text-align:center;
         color:var(--ksf-muted);
-        font-size:12px;
+        font-size:11px;
         line-height:1.6;
       }
 
+      .ksf-empty-icon {
+        display:block;
+        margin-bottom:5px;
+        font-size:22px;
+        opacity:.75;
+      }
+
       .ksf-note {
-        padding:12px 13px;
-        border-radius:12px;
-        background:rgba(127,127,127,.07);
+        margin-top:10px;
+        padding:10px 11px;
+        border-radius:10px;
+        background:var(--ksf-soft);
         color:var(--ksf-muted);
-        font-size:11px;
-        line-height:1.65;
-        margin-top:12px;
+        font-size:10px;
+        line-height:1.6;
       }
 
       .ksf-muted {
         color:var(--ksf-muted);
-        font-size:11px;
-      }
-
-      .ksf-danger {
-        color:#dc4444;
+        font-size:10px;
       }
 
       .ksf-hidden {
         display:none !important;
       }
 
-      @media(max-width:380px) {
+      .ksf-mutual-form {
+        display:flex;
+        align-items:center;
+        gap:7px;
+        margin:12px 0 5px;
+      }
+
+      .ksf-mutual-form .ksf-search {
+        padding-left:12px;
+      }
+
+      .ksf-mutual-form .ksf-action {
+        flex:none;
+        min-width:75px;
+      }
+
+      .ksf-legacy {
+        opacity:.9;
+      }
+
+      .ksf-legacy .ksf-section-icon {
+        background:var(--ksf-soft);
+      }
+
+      .ksf-page button:focus-visible,
+      .ksf-page input:focus-visible,
+      .ksf-page summary:focus-visible {
+        outline:2px solid var(--ksf-primary);
+        outline-offset:2px;
+      }
+
+      @media(max-width:390px) {
         .ksf-card { padding:12px; }
-        .ksf-heading h2 { font-size:18px; }
-        .ksf-action { font-size:12px; }
-        .ksf-item-actions { width:100%; }
-        .ksf-item-actions button { flex:1; }
+        .ksf-identity { padding:14px; }
+        .ksf-topbar h2 { font-size:19px; }
+        .ksf-action { font-size:11px; }
+        .ksf-item { flex-wrap:wrap; }
+        .ksf-item-actions { width:100%; padding-left:44px; }
+        .ksf-item-actions .ksf-action { flex:1; }
       }
 
-      /* FRIENDS PAGE — REAL LIGHT / DARK THEME SUPPORT */
-
-      .ksf-page {
-        color: var(--color-text);
-        --ksf-border: var(--color-border);
-        --ksf-muted: var(--color-muted);
-      }
-
-      .ksf-card,
-      .ksf-stat {
-        background: var(--color-surface);
-        color: var(--color-text);
-        border-color: var(--color-border);
-      }
-
-      .ksf-identity {
-        background: linear-gradient(
-          135deg,
-          var(--color-primary-soft),
-          var(--color-surface)
-        );
-        border-color: var(--color-border);
-      }
-
-      .ksf-id-value,
-      .ksf-section summary,
-      .ksf-item-id,
-      .ksf-stat strong,
-      .ksf-heading h2 {
-        color: var(--color-text);
-      }
-
-      .ksf-secondary {
-        background: var(--color-surface-secondary);
-        color: var(--color-text);
-        border-color: var(--color-border);
-      }
-
-      .ksf-primary {
-        background: var(--color-primary);
-        color: #ffffff;
-      }
-
-      .ksf-search {
-        background: var(--color-surface-secondary);
-        color: var(--color-text);
-        border-color: var(--color-border);
-        color-scheme: inherit;
-      }
-
-      .ksf-search::placeholder {
-        color: var(--color-muted);
-        opacity: 1;
-      }
-
-      .ksf-note,
-      .ksf-section summary .ksf-count {
-        background: var(--color-surface-secondary);
-        color: var(--color-text-secondary);
-      }
-
-      .ksf-item {
-        border-color: var(--color-border);
-      }
-
-      .ksf-section-body {
-        border-color: var(--color-border);
-      }
-
-      .ksf-empty,
-      .ksf-subtitle,
-      .ksf-muted,
-      .ksf-id-label,
-      .ksf-stat span {
-        color: var(--color-muted);
-      }
-
-      html[data-theme="dark"] .ksf-card,
-      html[data-theme="dark"] .ksf-stat {
-        background: var(--color-surface);
-        color: var(--color-text);
-      }
-
-      html[data-theme="dark"] .ksf-search {
-        background: var(--color-surface-secondary);
-        color: var(--color-text);
-      }
-
-      html[data-theme="dark"] .ksf-secondary {
-        background: var(--color-surface-secondary);
-        color: var(--color-text);
+      @media(prefers-reduced-motion:reduce) {
+        .ksf-page * { transition:none!important; }
       }
     `;
 
     global.document.head.appendChild(style);
   }
 
+  /* =======================================================
+     4. HTML HELPERS
+  ======================================================= */
+
   function actionButton(action, id, label, kind = "secondary") {
+    const extra = kind === "danger" ? "ksf-danger-btn" : "";
+
     return `
       <button
         type="button"
-        class="ksf-action ksf-small-btn ${kind === "primary" ? "ksf-primary" : "ksf-secondary"}"
+        class="ksf-action ksf-small-btn ${kind === "primary" ? "ksf-primary" : "ksf-secondary"} ${extra}"
         data-social-action="${escapeHTML(action)}"
         data-social-id="${escapeHTML(id)}"
       >${label}</button>
     `;
   }
 
-  function emptyMessage(message) {
+  function emptyMessage(message, icon = "👥") {
     return `
       <div class="ksf-empty">
+        <span class="ksf-empty-icon" aria-hidden="true">${icon}</span>
         ${escapeHTML(message)}
       </div>
     `;
   }
 
-  function searchableItem(id, content) {
+  function personItem(id, subtitle, actions = "") {
+    const safeId = escapeHTML(id);
+    const initial = escapeHTML(
+      String(id || "?").trim().charAt(0).toUpperCase() || "?"
+    );
+
     return `
       <div class="ksf-item ksf-searchable"
-        data-search="${escapeHTML(String(id).toLowerCase())}">
-        <div class="ksf-item-id">
-          <code>${escapeHTML(id)}</code>
+        data-search="${safeId.toLowerCase()}">
+        <div class="ksf-item-main">
+          <div class="ksf-avatar" aria-hidden="true">${initial}</div>
+          <div class="ksf-person-info">
+            <strong>${safeId}</strong>
+            <small>${escapeHTML(subtitle || "")}</small>
+          </div>
         </div>
-        ${content || ""}
+        ${actions ? `<div class="ksf-item-actions">${actions}</div>` : ""}
       </div>
     `;
   }
 
+  function section(title, subtitle, icon, count, content, options = {}) {
+    return `
+      <details class="ksf-card ksf-section ${options.className || ""}"
+        ${options.open ? "open" : ""}>
+        <summary>
+          <span class="ksf-section-icon" aria-hidden="true">${icon}</span>
+          <span class="ksf-section-title">
+            <strong>${title}</strong>
+            <small>${subtitle}</small>
+          </span>
+          <span class="ksf-count ${options.alert ? "ksf-count-alert" : ""}">
+            ${Number(count || 0)}
+          </span>
+        </summary>
+        <div class="ksf-section-body">
+          ${content}
+        </div>
+      </details>
+    `;
+  }
+
   /* =======================================================
-     REQUEST SECTIONS
+     5. FRIEND REQUESTS
   ======================================================= */
 
   function renderRequests(userId, english) {
@@ -1245,83 +1435,72 @@
     });
 
     const incomingHTML = incoming.length
-      ? incoming.map(item => `
-          <div class="ksf-item">
-            <div class="ksf-item-id">
-              <strong>${english ? "Request from" : "Request पठाउने ID"}</strong>
-              <div><code>${escapeHTML(item.fromUserId)}</code></div>
-            </div>
-
-            <div class="ksf-item-actions">
-              ${actionButton(
-                "accept-request",
-                item.id,
-                english ? "Accept" : "स्वीकार",
-                "primary"
-              )}
-
-              ${actionButton(
-                "reject-request",
-                item.id,
-                english ? "Reject" : "अस्वीकार"
-              )}
-            </div>
-          </div>
-        `).join("")
+      ? incoming.map(item => personItem(
+          item.fromUserId,
+          english ? "Wants to connect with you" : "तपाईंसँग साथी बन्न चाहन्छ",
+          actionButton(
+            "accept-request",
+            item.id,
+            english ? "Accept" : "स्वीकार",
+            "primary"
+          ) +
+          actionButton(
+            "reject-request",
+            item.id,
+            english ? "Decline" : "अस्वीकार",
+            "danger"
+          )
+        )).join("")
       : emptyMessage(
-          english
-            ? "No incoming requests."
-            : "अहिलेसम्म कुनै Request आएको छैन।"
+          english ? "No incoming requests right now." : "अहिले कुनै नयाँ Request आएको छैन।",
+          "📩"
         );
 
     const outgoingHTML = outgoing.length
-      ? outgoing.map(item => `
-          <div class="ksf-item">
-            <div class="ksf-item-id">
-              <strong>${english ? "Request sent to" : "Request पठाइएको ID"}</strong>
-              <div><code>${escapeHTML(item.toUserId)}</code></div>
-              <span class="ksf-muted">
-                ${english ? "Pending · Local only" : "प्रतीक्षामा · स्थानीय रेकर्ड"}
-              </span>
-            </div>
-
-            <div class="ksf-item-actions">
-              ${actionButton(
-                "cancel-request",
-                item.id,
-                english ? "Cancel" : "रद्द"
-              )}
-            </div>
-          </div>
-        `).join("")
+      ? outgoing.map(item => personItem(
+          item.toUserId,
+          english ? "Request pending · Local record" : "Request प्रतीक्षामा · स्थानीय रेकर्ड",
+          actionButton(
+            "cancel-request",
+            item.id,
+            english ? "Cancel" : "रद्द गर्नुहोस्",
+            "danger"
+          )
+        )).join("")
       : emptyMessage(
-          english
-            ? "No outgoing requests."
-            : "तपाईंले कुनै Request पठाउनुभएको छैन।"
+          english ? "You have not sent any requests." : "तपाईंले कुनै Request पठाउनुभएको छैन।",
+          "📤"
         );
 
-    return `
-      <details class="ksf-card ksf-section" ${incoming.length ? "open" : ""}>
-        <summary>
-          ${english ? "Friend Requests" : "Friend Requests"}
-          <span class="ksf-count">${incoming.length + outgoing.length}</span>
-        </summary>
+    const content = `
+      <div class="ksf-subheading">
+        <span>${english ? "Incoming requests" : "आएका Request"}</span>
+        <span>${incoming.length}</span>
+      </div>
+      ${incomingHTML}
 
-        <div class="ksf-section-body">
-          <strong>${english ? "Incoming" : "आएका Request"} (${incoming.length})</strong>
-          ${incomingHTML}
-
-          <div style="height:12px"></div>
-
-          <strong>${english ? "Outgoing" : "पठाएका Request"} (${outgoing.length})</strong>
-          ${outgoingHTML}
-        </div>
-      </details>
+      <div class="ksf-subheading">
+        <span>${english ? "Sent requests" : "पठाएका Request"}</span>
+        <span>${outgoing.length}</span>
+      </div>
+      ${outgoingHTML}
     `;
+
+    return section(
+      english ? "Friend Requests" : "Friend Requests",
+      english ? "Manage connection requests" : "आएका र पठाएका Request व्यवस्थापन",
+      "📨",
+      incoming.length + outgoing.length,
+      content,
+      {
+        open: incoming.length > 0,
+        alert: incoming.length > 0
+      }
+    );
   }
 
   /* =======================================================
-     RELATION SECTIONS
+     6. FRIENDS / FOLLOWERS / FOLLOWING / BLOCKED
   ======================================================= */
 
   function renderRelations(userId, english) {
@@ -1333,164 +1512,195 @@
     const blocked = social.getBlockedUsers(userId);
 
     const friendsHTML = friends.length
-      ? friends.map(item => searchableItem(
+      ? friends.map(item => personItem(
           item.userId,
-          `<div class="ksf-item-actions">
-            ${actionButton(
-              "remove-friend",
-              item.userId,
-              english ? "Remove" : "हटाउनुहोस्"
-            )}
-            ${actionButton(
-              "block-user",
-              item.userId,
-              "Block"
-            )}
-          </div>`
+          english ? "Friend" : "साथी",
+          actionButton(
+            "remove-friend",
+            item.userId,
+            english ? "Remove" : "हटाउनुहोस्",
+            "danger"
+          ) +
+          actionButton(
+            "block-user",
+            item.userId,
+            "Block",
+            "danger"
+          )
         )).join("")
       : emptyMessage(
-          english ? "No friends yet." : "अहिलेसम्म साथी छैनन्।"
+          english ? "Your friend list is empty." : "तपाईंको साथी सूची खाली छ।",
+          "👥"
         );
 
     const followersHTML = followers.length
-      ? followers.map(item => searchableItem(
+      ? followers.map(item => personItem(
           item.userId,
-          ""
+          english ? "Follows you" : "तपाईंलाई Follow गर्नुहुन्छ"
         )).join("")
       : emptyMessage(
-          english ? "No followers yet." : "अहिलेसम्म Followers छैनन्।"
+          english ? "No followers yet." : "अहिलेसम्म Followers छैनन्।",
+          "🌱"
         );
 
     const followingHTML = following.length
-      ? following.map(item => searchableItem(
+      ? following.map(item => personItem(
           item.userId,
-          `<div class="ksf-item-actions">
-            ${actionButton(
-              "unfollow",
-              item.userId,
-              "Unfollow"
-            )}
-            ${actionButton(
-              "block-user",
-              item.userId,
-              "Block"
-            )}
-          </div>`
+          english ? "You follow this profile" : "तपाईंले Follow गर्नुभएको छ",
+          actionButton(
+            "unfollow",
+            item.userId,
+            "Unfollow",
+            "danger"
+          ) +
+          actionButton(
+            "block-user",
+            item.userId,
+            "Block",
+            "danger"
+          )
         )).join("")
       : emptyMessage(
-          english
-            ? "You are not following anyone."
-            : "कसैलाई Follow गर्नुभएको छैन।"
+          english ? "You are not following anyone yet." : "तपाईंले अहिलेसम्म कसैलाई Follow गर्नुभएको छैन।",
+          "➕"
         );
 
     const blockedHTML = blocked.length
-      ? blocked.map(item => searchableItem(
+      ? blocked.map(item => personItem(
           item.userId,
-          `<div class="ksf-item-actions">
-            ${actionButton(
-              "unblock-user",
-              item.userId,
-              "Unblock"
-            )}
-          </div>`
+          english ? "Blocked on this device" : "यो डिभाइसमा Block गरिएको",
+          actionButton(
+            "unblock-user",
+            item.userId,
+            "Unblock",
+            "primary"
+          )
         )).join("")
       : emptyMessage(
-          english ? "No blocked users." : "कुनै Block गरिएको ID छैन।"
+          english ? "No blocked profiles." : "कुनै Profile Block गरिएको छैन।",
+          "🛡️"
         );
 
-    return `
-      <details class="ksf-card ksf-section" open>
-        <summary>
-          ${english ? "Friends" : "तपाईंका साथीहरू"}
-          <span class="ksf-count">${friends.length}</span>
-        </summary>
-        <div class="ksf-section-body">
-          ${friendsHTML}
-        </div>
-      </details>
+    return [
+      section(
+        english ? "Your Friends" : "तपाईंका साथीहरू",
+        english ? "People connected as friends" : "साथीका रूपमा जोडिएका Profile",
+        "👥",
+        friends.length,
+        friendsHTML,
+        { open: true }
+      ),
 
-      <details class="ksf-card ksf-section">
-        <summary>
-          Followers
-          <span class="ksf-count">${followers.length}</span>
-        </summary>
-        <div class="ksf-section-body">
-          ${followersHTML}
-        </div>
-      </details>
+      section(
+        "Followers",
+        english ? "Profiles following you" : "तपाईंलाई Follow गर्नेहरू",
+        "↙️",
+        followers.length,
+        followersHTML
+      ),
 
-      <details class="ksf-card ksf-section">
-        <summary>
-          Following
-          <span class="ksf-count">${following.length}</span>
-        </summary>
-        <div class="ksf-section-body">
-          ${followingHTML}
-        </div>
-      </details>
+      section(
+        "Following",
+        english ? "Profiles you follow" : "तपाईंले Follow गरेका Profile",
+        "↗️",
+        following.length,
+        followingHTML
+      ),
 
-      <details class="ksf-card ksf-section">
-        <summary>
-          ${english ? "Blocked Users" : "Block गरिएका प्रयोगकर्ता"}
-          <span class="ksf-count">${blocked.length}</span>
-        </summary>
-        <div class="ksf-section-body">
-          ${blockedHTML}
-        </div>
-      </details>
-    `;
+      section(
+        english ? "Blocked Profiles" : "Block गरिएका Profile",
+        english ? "Manage blocked IDs" : "Block सूची व्यवस्थापन",
+        "🛡️",
+        blocked.length,
+        blockedHTML
+      )
+    ].join("");
   }
 
   /* =======================================================
-     MUTUAL FRIENDS
+     7. MUTUAL FRIENDS
   ======================================================= */
 
   function renderMutualFriends(english) {
-    return `
-      <details class="ksf-card ksf-section">
-        <summary>
-          ${english ? "Mutual Friends" : "आपसी साथीहरू"}
-        </summary>
+    const content = `
+      <p class="ksf-muted" style="margin:12px 0 8px;line-height:1.6">
+        ${english
+          ? "Compare your local friend records with another profile ID."
+          : "अर्को Profile ID सँग तपाईंका साझा साथीहरू तुलना गर्नुहोस्।"}
+      </p>
 
-        <div class="ksf-section-body">
-          <p class="ksf-subtitle" style="margin:0 0 10px">
-            ${english
-              ? "Compare friend records with another local profile ID."
-              : "अर्को स्थानीय Profile ID सँग साझा साथीहरू तुलना गर्नुहोस्।"}
-          </p>
+      <div class="ksf-mutual-form">
+        <input
+          id="ksk-mutual-user-id"
+          class="ksf-search"
+          type="text"
+          maxlength="128"
+          autocomplete="off"
+          placeholder="${english ? "Enter another Profile ID" : "अर्को Profile ID राख्नुहोस्"}"
+          aria-label="${english ? "Other profile ID" : "अर्को Profile ID"}"
+        />
 
-          <div style="display:flex;gap:8px">
-            <input
-              id="ksk-mutual-user-id"
-              class="ksf-search"
-              type="text"
-              maxlength="128"
-              autocomplete="off"
-              placeholder="${english ? "Other profile ID" : "अर्को Profile ID"}"
-            />
+        <button
+          type="button"
+          class="ksf-action ksf-primary"
+          data-mutual-search
+        >${english ? "Find" : "खोज्नुहोस्"}</button>
+      </div>
 
-            <button
-              type="button"
-              class="ksf-action ksf-secondary"
-              data-mutual-search
-              style="min-width:75px"
-            >${english ? "Find" : "खोज्नुहोस्"}</button>
-          </div>
-
-          <div id="ksk-mutual-results" aria-live="polite">
-            ${emptyMessage(
-              english
-                ? "Enter an ID to compare."
-                : "तुलना गर्न अर्को ID राख्नुहोस्।"
-            )}
-          </div>
-        </div>
-      </details>
+      <div id="ksk-mutual-results" aria-live="polite">
+        ${emptyMessage(
+          english ? "Enter an ID to compare friends." : "साझा साथी हेर्न Profile ID राख्नुहोस्।",
+          "🤝"
+        )}
+      </div>
     `;
+
+    return section(
+      english ? "Mutual Friends" : "आपसी साथीहरू",
+      english ? "Find friends you have in common" : "तपाईंसँग साझा साथी खोज्नुहोस्",
+      "🤝",
+      "↔",
+      content
+    );
   }
 
   /* =======================================================
-     MAIN PAGE
+     8. LEGACY FRIENDS
+  ======================================================= */
+
+  function renderLegacyFriends(english) {
+    const oldFriends = DATA()?.getFriends?.() || [];
+
+    if (!oldFriends.length) return "";
+
+    const content = `
+      <p class="ksf-muted" style="line-height:1.6;margin:10px 0">
+        ${english
+          ? "Older locally saved entries. These are not verified social connections."
+          : "पहिले सुरक्षित गरिएका स्थानीय रेकर्ड हुन्। यी प्रमाणित Social Connection होइनन्।"}
+      </p>
+
+      ${oldFriends.map(friend => `
+        <div class="ksf-item">
+          <div class="ksf-person-info">
+            <strong>${escapeHTML(friend.name || "Friend")}</strong>
+          </div>
+        </div>
+      `).join("")}
+    `;
+
+    return section(
+      english ? "Previously Saved Friends" : "पुराना सुरक्षित साथीहरू",
+      english ? "Legacy local records" : "पुराना स्थानीय रेकर्ड",
+      "🗂️",
+      oldFriends.length,
+      content,
+      { className: "ksf-legacy" }
+    );
+  }
+
+  /* =======================================================
+     9. MAIN PAGE
   ======================================================= */
 
   function render(options = {}) {
@@ -1514,50 +1724,29 @@
           blocked: 0
         };
 
-    const oldFriends = DATA()?.getFriends?.() || [];
-
-    const oldFriendsHTML = oldFriends.length
-      ? `
-        <details class="ksf-card ksf-section">
-          <summary>
-            ${english ? "Previously saved friends" : "पुराना सुरक्षित साथीहरू"}
-            <span class="ksf-count">${oldFriends.length}</span>
-          </summary>
-
-          <div class="ksf-section-body">
-            <p class="ksf-subtitle">
-              ${english
-                ? "Legacy local entries. These are not verified social connections."
-                : "यी पुराना स्थानीय रेकर्ड हुन्, प्रमाणित साथी सम्बन्ध होइनन्।"}
-            </p>
-
-            ${oldFriends.map(friend => `
-              <div class="ksf-item">
-                <strong>${escapeHTML(friend.name || "Friend")}</strong>
-              </div>
-            `).join("")}
-          </div>
-        </details>
-      `
-      : "";
-
     return `
       <section class="page-section ksf-page">
 
-        <header class="ksf-heading">
+        <header class="ksf-topbar">
           <div>
             <h2>${english ? "Friends" : "साथीहरू"}</h2>
-            <p class="ksf-subtitle">
+            <p>
               ${english
-                ? "Manage your local social connections."
-                : "आफ्ना सामाजिक सम्बन्धहरू व्यवस्थित गर्नुहोस्।"}
+                ? "Your connections, requests and community."
+                : "तपाईंका साथी, Request र सामाजिक सम्बन्धहरू।"}
             </p>
           </div>
         </header>
 
         <section class="ksf-card ksf-identity">
-          <div class="ksf-id-label">
-            ${english ? "YOUR LOCAL PROFILE ID" : "तपाईंको स्थानीय PROFILE ID"}
+
+          <div class="ksf-id-top">
+            <span class="ksf-id-label">
+              ${english ? "YOUR PROFILE ID" : "तपाईंको PROFILE ID"}
+            </span>
+            <span class="ksf-local-tag">
+              ${english ? "LOCAL ID" : "स्थानीय ID"}
+            </span>
           </div>
 
           <div class="ksf-id-line">
@@ -1567,23 +1756,23 @@
 
             <button
               type="button"
-              class="ksf-action ksf-secondary"
+              class="ksf-copy-btn"
               data-copy-social-id
               ${userId ? "" : "disabled"}
-              style="min-height:36px;flex:none"
             >
               ${english ? "Copy" : "कपी"}
             </button>
           </div>
 
-          <div class="ksf-actions">
+          <div class="ksf-main-actions">
             <button
               type="button"
               class="ksf-action ksf-primary"
               data-add-friend-open
               ${userId ? "" : "disabled"}
             >
-              ＋ ${english ? "Add Friend" : "साथी थप्नुहोस्"}
+              <span aria-hidden="true">＋</span>
+              ${english ? "Add Friend" : "साथी थप्नुहोस्"}
             </button>
 
             <button
@@ -1592,15 +1781,16 @@
               data-open-follow
               ${userId ? "" : "disabled"}
             >
+              <span aria-hidden="true">↗</span>
               ${english ? "Follow by ID" : "ID बाट Follow"}
             </button>
           </div>
 
-          <div class="ksf-note">
+          <p class="ksf-id-note">
             ${english
-              ? "Local prototype only. Your ID and social records are stored in this browser. Requests and follows are not delivered to other devices or real accounts."
-              : "यो LocalStorage Prototype मात्र हो। तपाईंको ID र सामाजिक रेकर्ड यही ब्राउजरमा सुरक्षित हुन्छन्। Request वा Follow अर्को मोबाइल वा वास्तविक Account मा पुग्दैन।"}
-          </div>
+              ? "Local prototype only. Your ID and social records stay in this browser. Requests and follows are not delivered to other devices or real accounts."
+              : "यो LocalStorage Prototype मात्र हो। ID र सामाजिक रेकर्ड यही ब्राउजरमा सुरक्षित हुन्छन्। Request वा Follow अर्को मोबाइल वा वास्तविक Account मा पुग्दैन।"}
+          </p>
         </section>
 
         <div class="ksf-stats">
@@ -1620,25 +1810,28 @@
           </div>
         </div>
 
-        <input
-          type="search"
-          class="ksf-search"
-          data-friends-filter
-          placeholder="${english ? "Search an ID in opened lists..." : "खोलिएका सूचीमा ID खोज्नुहोस्..."}"
-          aria-label="${english ? "Search social lists" : "सामाजिक सूची खोज्नुहोस्"}"
-        />
+        <div class="ksf-search-wrap">
+          <span class="ksf-search-icon" aria-hidden="true">⌕</span>
+          <input
+            type="search"
+            class="ksf-search"
+            data-friends-filter
+            placeholder="${english ? "Search IDs in your lists..." : "आफ्नो सूचीमा ID खोज्नुहोस्..."}"
+            aria-label="${english ? "Search friends and social lists" : "साथी र सामाजिक सूची खोज्नुहोस्"}"
+          />
+        </div>
 
         ${renderRequests(userId, english)}
         ${renderRelations(userId, english)}
         ${renderMutualFriends(english)}
-        ${oldFriendsHTML}
+        ${renderLegacyFriends(english)}
 
       </section>
     `;
   }
 
   /* =======================================================
-     MODAL
+     10. MODAL
   ======================================================= */
 
   function closeModal() {
@@ -1669,7 +1862,7 @@
         : (english ? "Add Friend" : "साथी थप्नुहोस्"),
 
       content: `
-        <div>
+        <div class="ksf-modal-content">
           <p style="line-height:1.6;font-size:13px">
             ${isFollow
               ? (
@@ -1694,7 +1887,7 @@
             maxlength="128"
             autocomplete="off"
             placeholder="${english ? "Paste user ID" : "User ID यहाँ राख्नुहोस्"}"
-            style="width:100%;box-sizing:border-box"
+            style="width:100%;box-sizing:border-box;min-height:43px;padding:10px;border:1px solid var(--color-border,#ddd);border-radius:10px;background:var(--color-surface-secondary,#fff);color:var(--color-text,inherit)"
           />
 
           <p style="margin-top:10px;font-size:11px;line-height:1.6;color:var(--text-muted)">
@@ -1728,7 +1921,7 @@
   }
 
   /* =======================================================
-     COPY LOCAL ID
+     11. COPY LOCAL ID
   ======================================================= */
 
   async function copyLocalId() {
@@ -1793,7 +1986,7 @@
   }
 
   /* =======================================================
-     ACTION FEEDBACK
+     12. ACTION FEEDBACK
   ======================================================= */
 
   function showActionResult(result, action) {
@@ -1930,7 +2123,7 @@
   }
 
   /* =======================================================
-     MUTUAL FRIEND SEARCH
+     13. MUTUAL FRIEND SEARCH
   ======================================================= */
 
   function handleMutualSearch(event) {
@@ -1984,27 +2177,27 @@
 
     resultBox.innerHTML = mutual.length
       ? `
-        <p class="ksf-subtitle">
+        <p class="ksf-muted" style="margin:12px 0 5px">
           ${isEnglish()
             ? mutual.length + " mutual friend(s) found."
             : mutual.length + " जना साझा साथी भेटिए।"}
         </p>
 
-        ${mutual.map(item => `
-          <div class="ksf-item">
-            <code>${escapeHTML(item.userId)}</code>
-          </div>
-        `).join("")}
+        ${mutual.map(item => personItem(
+          item.userId,
+          isEnglish() ? "Mutual friend" : "साझा साथी"
+        )).join("")}
       `
       : emptyMessage(
           isEnglish()
             ? "No mutual friends found in local records."
-            : "स्थानीय रेकर्डमा आपसी साथी भेटिएनन्।"
+            : "स्थानीय रेकर्डमा आपसी साथी भेटिएनन्।",
+          "🔎"
         );
   }
 
   /* =======================================================
-     LIST SEARCH
+     14. LIST SEARCH
   ======================================================= */
 
   function handleListSearch(event) {
@@ -2019,9 +2212,10 @@
       .toLowerCase();
 
     global.document
-      .querySelectorAll(".ksf-searchable")
+      .querySelectorAll(".ksf-page .ksf-searchable")
       .forEach(item => {
         const value = item.getAttribute("data-search") || "";
+
         item.classList.toggle(
           "ksf-hidden",
           Boolean(query) && !value.includes(query)
@@ -2030,7 +2224,7 @@
   }
 
   /* =======================================================
-     CLICK HANDLER
+     15. CLICK HANDLER
   ======================================================= */
 
   function handleClick(event) {
@@ -2140,7 +2334,7 @@
   }
 
   /* =======================================================
-     INITIALIZATION
+     16. INITIALIZATION
   ======================================================= */
 
   global.document?.addEventListener("click", handleClick);
