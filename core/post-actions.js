@@ -6,11 +6,10 @@
  * KSK — POST ACTIONS MODULE
  * Mero-Sansar
  *
- * RESPONSIBILITY:
  * - Open post options menu
  * - Edit and delete posts
+ * - Custom delete confirmation modal
  * - Save and unsave posts
- * - Handle post menu and save button clicks
  *
  * LIKE / REACTION:
  * Owned by core/reactions.js
@@ -38,10 +37,6 @@
     toast: () => {},
     refreshCurrentPage: () => {}
   };
-
-  /* =======================================================
-     HELPERS
-  ======================================================= */
 
   function escapeHTML(value = "") {
     if (typeof UTILS()?.escapeHTML === "function") {
@@ -92,16 +87,11 @@
   function isReady() {
     if (initialized) return true;
 
-    console.error(
-      "KSKPostActions is not initialized."
-    );
-
+    console.error("KSKPostActions is not initialized.");
     return false;
   }
 
-  /* =======================================================
-     INITIALIZATION
-  ======================================================= */
+  /* INITIALIZATION */
 
   function initialize(options = {}) {
     if (options && typeof options === "object") {
@@ -141,18 +131,14 @@
     return true;
   }
 
-  /* =======================================================
-     SAVE / UNSAVE POST
-  ======================================================= */
+  /* SAVE / UNSAVE */
 
   function isPostSaved(id) {
     const saved = DATA()?.getSavedPosts?.() || [];
 
     return (
       Array.isArray(saved) &&
-      saved.some(
-        item => String(item) === String(id)
-      )
+      saved.some(item => String(item) === String(id))
     );
   }
 
@@ -189,24 +175,22 @@
       return false;
     }
 
-    if (wasSaved) {
-      toast(
-        isEnglish()
-          ? "Post removed from saved."
-          : "सेभबाट हटाइयो।",
-        "success"
-      );
-    } else {
-      toast(
-        isEnglish()
-          ? "Post saved."
-          : "पोस्ट सेभ भयो।",
-        "success"
-      );
-    }
+    toast(
+      wasSaved
+        ? (
+            isEnglish()
+              ? "Post removed from saved."
+              : "सेभबाट हटाइयो।"
+          )
+        : (
+            isEnglish()
+              ? "Post saved."
+              : "पोस्ट सेभ भयो।"
+          ),
+      "success"
+    );
 
     /*
-     * No manual refresh here.
      * KSKData emits ksk:data-change.
      * KSKDataRefresh handles the affected page.
      */
@@ -214,9 +198,7 @@
     return true;
   }
 
-  /* =======================================================
-     EDIT POST
-  ======================================================= */
+  /* EDIT POST */
 
   function editPost(id) {
     if (!isReady()) return false;
@@ -241,14 +223,12 @@
 
       content: `
         <form id="kskEditPostForm">
-
           <textarea
             id="kskEditPostText"
             class="form-textarea"
             rows="5"
             maxlength="10000"
             required>${escapeHTML(post.text || "")}</textarea>
-
         </form>
       `,
 
@@ -297,7 +277,6 @@
         );
 
         textarea?.focus();
-
         return;
       }
 
@@ -316,10 +295,6 @@
         return;
       }
 
-      /*
-       * Data change event already handles refresh.
-       */
-
       closeModal();
 
       toast(
@@ -333,9 +308,7 @@
     return true;
   }
 
-  /* =======================================================
-     OPEN POST MENU
-  ======================================================= */
+  /* POST OPTIONS MENU */
 
   function openPostMenu(id) {
     if (!isReady()) return false;
@@ -356,24 +329,20 @@
             class="dropdown-item"
             type="button"
             data-edit-post="${escapeHTML(id)}">
-
             ✏️
             ${isEnglish()
               ? "Edit post"
               : "पोस्ट सम्पादन"}
-
           </button>
 
           <button
             class="dropdown-item"
             type="button"
             data-delete-post="${escapeHTML(id)}">
-
             🗑️
             ${isEnglish()
               ? "Delete post"
               : "पोस्ट मेटाउनुहोस्"}
-
           </button>
 
         </div>
@@ -392,64 +361,140 @@
     return true;
   }
 
-  /* =======================================================
-     DELETE POST
-  ======================================================= */
+  /* DELETE CONFIRMATION */
 
-  function deletePost(id) {
+  function confirmDeletePost(id) {
     if (!isReady()) return false;
 
-    const message = isEnglish()
-      ? "Are you sure you want to delete this post?"
-      : "के तपाईं यो पोस्ट मेटाउन चाहनुहुन्छ?";
+    const post = DATA()?.getPost?.(id);
 
-    if (!global.confirm(message)) {
+    if (!post) {
+      toast(
+        isEnglish()
+          ? "Post could not be found."
+          : "पोस्ट भेटिएन।",
+        "warning"
+      );
+
       return false;
     }
 
-    const success = DATA()?.deletePost?.(id);
+    const modal = openModal({
+      title: isEnglish()
+        ? "Delete post?"
+        : "पोस्ट मेटाउने?",
 
-    if (!success) {
+      content: `
+        <div class="ksk-delete-confirm">
+
+          <div
+            class="ksk-delete-confirm-icon"
+            aria-hidden="true">
+            🗑️
+          </div>
+
+          <h3>
+            ${isEnglish()
+              ? "Are you sure?"
+              : "के तपाईं निश्चित हुनुहुन्छ?"}
+          </h3>
+
+          <p>
+            ${isEnglish()
+              ? "This post will be removed from this app's local data. This action cannot be undone."
+              : "यो पोस्ट एपको स्थानीय डाटाबाट हटाइनेछ। यो कार्य फिर्ता गर्न मिल्दैन।"}
+          </p>
+
+        </div>
+      `,
+
+      footer: `
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-modal-close>
+          ${isEnglish()
+            ? "Cancel"
+            : "रद्द गर्नुहोस्"}
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-danger"
+          data-confirm-delete-post>
+          ${isEnglish()
+            ? "Delete Post"
+            : "पोस्ट मेटाउनुहोस्"}
+        </button>
+      `
+    });
+
+    if (!modal?.element) return false;
+
+    const confirmButton = modal.element.querySelector(
+      "[data-confirm-delete-post]"
+    );
+
+    if (!confirmButton) {
+      closeModal();
+
       toast(
         isEnglish()
-          ? "Could not delete post."
-          : "पोस्ट मेटाउन सकिएन।",
+          ? "Could not open delete confirmation."
+          : "Delete Confirmation खोल्न सकिएन।",
         "error"
       );
 
       return false;
     }
 
-    /*
-     * Data change event already handles refresh.
-     */
+    confirmButton.addEventListener("click", () => {
+      if (confirmButton.disabled) return;
 
-    closeModal();
+      confirmButton.disabled = true;
 
-    toast(
-      isEnglish()
-        ? "Post deleted."
-        : "पोस्ट मेटाइयो।",
-      "success"
-    );
+      const success = DATA()?.deletePost?.(id);
+
+      if (!success) {
+        closeModal();
+
+        toast(
+          isEnglish()
+            ? "Could not delete post."
+            : "पोस्ट मेटाउन सकिएन।",
+          "error"
+        );
+
+        return;
+      }
+
+      closeModal();
+
+      toast(
+        isEnglish()
+          ? "Post deleted successfully."
+          : "पोस्ट सफलतापूर्वक मेटाइयो।",
+        "success"
+      );
+    });
 
     return true;
   }
 
-  /* =======================================================
-     DOCUMENT CLICK HANDLER
-  ======================================================= */
+  /* DELETE POST */
+
+  function deletePost(id) {
+    if (!isReady()) return false;
+
+    return confirmDeletePost(id);
+  }
+
+  /* SAVE BUTTON CAPTURE HANDLER */
 
   function onDocumentClick(event) {
     const target = event.target;
 
     if (!target?.closest || !isReady()) return;
-
-    /*
-     * Save button is handled here in capture phase.
-     * This prevents the old app.js save handler
-     * from processing the same click again.
-     */
 
     const saveButton = target.closest(
       '[data-post-action="save"]'
@@ -460,14 +505,10 @@
       event.stopImmediatePropagation();
 
       toggleSave(saveButton.dataset.postId);
-
-      return;
     }
   }
 
-  /* =======================================================
-     POST MENU CLICK HANDLER
-  ======================================================= */
+  /* DELEGATED POST MENU ACTIONS */
 
   function handleClick(target) {
     if (!isReady()) return false;
@@ -485,7 +526,6 @@
 
     if (postMenu) {
       openPostMenu(postMenu.dataset.postMenu);
-
       return true;
     }
 
@@ -508,16 +548,13 @@
 
     if (deleteButton) {
       deletePost(deleteButton.dataset.deletePost);
-
       return true;
     }
 
     return false;
   }
 
-  /* =======================================================
-     CLEANUP
-  ======================================================= */
+  /* CLEANUP */
 
   function destroy() {
     document.removeEventListener(
@@ -531,9 +568,7 @@
     return true;
   }
 
-  /* =======================================================
-     PUBLIC API
-  ======================================================= */
+  /* PUBLIC API */
 
   global.KSKPostActions = Object.freeze({
     initialize,
