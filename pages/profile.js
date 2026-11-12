@@ -1,12 +1,9 @@
-
 "use strict";
 
 /*
- * KSK — PROFILE PAGE MODULE
- * Own-profile presentation, social statistics, Posts / Photos / About tabs,
- * and a shareable profile deep link.
- *
- * Data ownership remains in KSKData. This module only reads and presents it.
+ * MERO SANSAR — PROFILE PAGE
+ * Clean profile layout + grouped profile tools.
+ * Data remains owned by KSKData.
  */
 
 (function (global) {
@@ -17,42 +14,36 @@
   const VALID_TABS = new Set(["posts", "photos", "about"]);
   const STYLE_ID = "ksk-profile-upgrade-styles";
 
-  /*
-   * PROFILE PAGE STYLES
-   * Inject once so this module does not require an app.css replacement.
-   */
   function ensureStyles() {
-    const doc = global.document;
+    if (document.getElementById(STYLE_ID)) return;
 
-    if (!doc || doc.getElementById(STYLE_ID)) return;
-
-    const style = doc.createElement("style");
+    const style = document.createElement("style");
     style.id = STYLE_ID;
 
     style.textContent = `
       .profile-section {
         width: 100%;
+        min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 16px;
-        min-width: 0;
+        gap: 14px;
       }
 
       .profile-section .profile-card {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 12px;
+        gap: 11px;
         min-width: 0;
-        padding: 22px 16px;
+        padding: 22px 16px 18px;
         text-align: center;
+        overflow: hidden;
       }
 
       .profile-section .profile-avatar {
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 2px;
       }
 
       .profile-section .profile-avatar .avatar {
@@ -60,26 +51,33 @@
         height: 104px;
         flex-basis: 104px;
         font-size: 34px;
+        border: 4px solid var(--color-surface);
+        box-shadow: 0 0 0 2px var(--color-primary-soft);
       }
 
       .profile-section .profile-avatar img {
         width: 100%;
         height: 100%;
         object-fit: cover;
+        border-radius: inherit;
       }
 
       .profile-section .profile-card h2 {
-        margin: 0;
         max-width: 100%;
+        margin: 2px 0 0;
+        color: var(--color-text);
+        font-size: 22px;
+        font-weight: 850;
+        line-height: 1.3;
         overflow-wrap: anywhere;
-        font-size: 21px;
-        font-weight: 800;
       }
 
       .profile-section .profile-card > p {
         max-width: 560px;
         margin: 0;
         color: var(--color-text-secondary);
+        font-size: 13px;
+        line-height: 1.55;
         overflow-wrap: anywhere;
       }
 
@@ -100,14 +98,14 @@
         gap: 3px;
         padding: 11px 5px;
         border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
+        border-radius: 13px;
         background: var(--color-surface-secondary);
       }
 
       .profile-section .profile-stat strong {
         color: var(--color-text);
         font-size: 19px;
-        font-weight: 800;
+        font-weight: 850;
         line-height: 1.3;
       }
 
@@ -121,23 +119,135 @@
       .profile-section .profile-post-count {
         color: var(--color-muted);
         font-size: 12px;
-        font-weight: 700;
+        font-weight: 750;
       }
 
-      .profile-section .profile-actions,
-      .profile-section .profile-secondary-actions {
-        width: 100%;
+      .profile-section .profile-main-actions {
+        width: min(100%, 460px);
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+        margin-top: 3px;
+      }
+
+      .profile-section .profile-action-btn {
+        min-width: 0;
+        min-height: 46px;
         display: flex;
         align-items: center;
         justify-content: center;
-        flex-wrap: wrap;
+        gap: 7px;
+        padding: 10px 9px;
+        border: 1px solid var(--color-border);
+        border-radius: 12px;
+        background: var(--color-surface-secondary);
+        color: var(--color-text);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1.3;
+        cursor: pointer;
+        transition:
+          transform .16s ease,
+          border-color .16s ease,
+          background .16s ease;
+      }
+
+      .profile-section .profile-action-btn.primary {
+        border-color: var(--color-primary);
+        background: var(--color-primary);
+        color: #fff;
+      }
+
+      .profile-section .profile-action-btn:hover {
+        border-color: var(--color-primary);
+        transform: translateY(-1px);
+      }
+
+      .profile-section .profile-action-btn:active {
+        transform: scale(.98);
+      }
+
+      .profile-section .profile-action-btn:focus-visible,
+      .profile-section .profile-tool-grid > button:focus-visible {
+        outline: 3px solid var(--color-primary);
+        outline-offset: 3px;
+      }
+
+      .profile-section .profile-tools-card {
+        min-width: 0;
+        padding: 15px;
+      }
+
+      .profile-section .profile-tools-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 0 0 12px;
+      }
+
+      .profile-section .profile-tools-heading h3 {
+        margin: 0;
+        color: var(--color-text);
+        font-size: 15px;
+        font-weight: 850;
+      }
+
+      .profile-section .profile-tools-heading p {
+        margin: 3px 0 0;
+        color: var(--color-muted);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+
+      .profile-section .profile-tool-grid {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 9px;
       }
 
-      .profile-section .profile-actions .btn,
-      .profile-section .profile-secondary-actions .btn {
-        max-width: 100%;
-        white-space: normal;
+      .profile-section .profile-tool-grid > button {
+        min-width: 0;
+        min-height: 54px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 9px;
+        padding: 10px 11px;
+        border: 1px solid var(--color-border);
+        border-radius: 12px;
+        background: var(--color-surface-secondary);
+        color: var(--color-text);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 750;
+        line-height: 1.35;
+        text-align: left;
+        overflow-wrap: anywhere;
+        cursor: pointer;
+        transition:
+          border-color .16s ease,
+          background .16s ease,
+          transform .16s ease;
+      }
+
+      .profile-section .profile-tool-grid > button:hover {
+        border-color: var(--color-primary);
+        background: var(--color-surface-hover);
+        transform: translateY(-1px);
+      }
+
+      .profile-section .profile-tool-grid > button:active {
+        transform: scale(.98);
+      }
+
+      .profile-section .profile-tool-note {
+        margin: 11px 2px 0;
+        color: var(--color-muted);
+        font-size: 10px;
+        line-height: 1.5;
       }
 
       .profile-section .profile-tabs {
@@ -147,7 +257,7 @@
         gap: 5px;
         padding: 5px;
         border: 1px solid var(--color-border);
-        border-radius: var(--radius-lg);
+        border-radius: 13px;
         background: var(--color-surface);
       }
 
@@ -156,16 +266,16 @@
         min-height: 42px;
         padding: 8px 5px;
         border: 1px solid transparent;
-        border-radius: var(--radius-md);
+        border-radius: 10px;
         background: transparent;
         color: var(--color-muted);
-        font-size: 13px;
-        font-weight: 700;
+        font-size: 12px;
+        font-weight: 750;
         cursor: pointer;
         transition:
-          background var(--transition-fast),
-          color var(--transition-fast),
-          border-color var(--transition-fast);
+          background .16s ease,
+          color .16s ease,
+          border-color .16s ease;
       }
 
       .profile-section .profile-tab:hover {
@@ -177,11 +287,6 @@
         border-color: var(--color-primary);
         background: var(--color-primary-soft);
         color: var(--color-primary);
-      }
-
-      .profile-section .profile-tab:focus-visible {
-        outline: 3px solid var(--color-primary);
-        outline-offset: 2px;
       }
 
       .profile-section .profile-tab-panel {
@@ -229,7 +334,7 @@
         flex: 0 0 36px;
         display: grid;
         place-items: center;
-        border-radius: 50%;
+        border-radius: 11px;
         background: var(--color-surface-secondary);
         font-size: 17px;
       }
@@ -244,7 +349,7 @@
         margin-bottom: 3px;
         color: var(--color-muted);
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 750;
       }
 
       .profile-section .profile-about-item p {
@@ -257,12 +362,12 @@
 
       @media (max-width: 480px) {
         .profile-section {
-          gap: 12px;
+          gap: 11px;
         }
 
         .profile-section .profile-card {
-          padding: 17px 12px;
-          gap: 10px;
+          padding: 18px 12px 15px;
+          gap: 9px;
         }
 
         .profile-section .profile-avatar .avatar {
@@ -287,32 +392,48 @@
           font-size: 10px;
         }
 
-        .profile-section .profile-actions,
-        .profile-section .profile-secondary-actions {
+        .profile-section .profile-tools-card {
+          padding: 12px;
+        }
+
+        .profile-section .profile-tool-grid {
           gap: 7px;
         }
 
-        .profile-section .profile-actions .btn,
-        .profile-section .profile-secondary-actions .btn {
-          flex: 1 1 135px;
-          padding: 8px 9px;
-          font-size: 12px;
+        .profile-section .profile-tool-grid > button {
+          min-height: 52px;
+          padding: 9px 8px;
+          font-size: 11px;
+        }
+
+        .profile-section .profile-action-btn {
+          min-height: 44px;
+          padding: 9px 6px;
+          font-size: 11px;
         }
 
         .profile-section .profile-tab {
           min-height: 40px;
-          font-size: 12px;
+          font-size: 11px;
+        }
+      }
+
+      @media (max-width: 340px) {
+        .profile-section .profile-tool-grid {
+          grid-template-columns: 1fr;
         }
       }
 
       @media (prefers-reduced-motion: reduce) {
+        .profile-section .profile-action-btn,
+        .profile-section .profile-tool-grid > button,
         .profile-section .profile-tab {
           transition: none;
         }
       }
     `;
 
-    (doc.head || doc.documentElement).appendChild(style);
+    (document.head || document.documentElement).appendChild(style);
   }
 
   function escapeHTML(value) {
@@ -368,7 +489,14 @@
     const avatar = String(user?.avatar || "").trim();
 
     if (/^(https?:\/\/|data:image\/|blob:)/i.test(avatar)) {
-      return `<div class="avatar avatar-xl"><img src="${escapeHTML(avatar)}" alt="${escapeHTML(name)}" loading="lazy"></div>`;
+      return `
+        <div class="avatar avatar-xl">
+          <img
+            src="${escapeHTML(avatar)}"
+            alt="${escapeHTML(name)}"
+            loading="lazy">
+        </div>
+      `;
     }
 
     return `<div class="avatar avatar-xl">${escapeHTML(name.charAt(0) || "स")}</div>`;
@@ -441,7 +569,9 @@
         <div class="post-header">
           <strong>${escapeHTML(post.author || "")}</strong>
         </div>
-        ${post.text ? `<div class="post-content">${escapeHTML(post.text)}</div>` : ""}
+        ${post.text
+          ? `<div class="post-content">${escapeHTML(post.text)}</div>`
+          : ""}
         <small class="post-time">${escapeHTML(
           global.KSKUtils?.formatDateTime?.(
             post.createdAt,
@@ -589,22 +719,27 @@
 
     return `
       <section class="profile-section" data-profile-section>
-        <div class="card profile-card">
+
+        <section class="card profile-card" aria-label="${t(
+          "मेरो प्रोफाइल",
+          "My profile"
+        )}">
+
           <div class="profile-avatar">
             ${renderAvatar(user)}
           </div>
 
-          <h2 class="text-center">
-            ${escapeHTML(getDisplayName(user))}
-          </h2>
+          <h2>${escapeHTML(getDisplayName(user))}</h2>
 
           ${user.bio
-            ? `<p class="text-center">${escapeHTML(user.bio)}</p>`
-            : ""}
+            ? `<p>${escapeHTML(user.bio)}</p>`
+            : ""
+          }
 
           ${user.location
-            ? `<p class="text-center text-muted">📍 ${escapeHTML(user.location)}</p>`
-            : ""}
+            ? `<p>📍 ${escapeHTML(user.location)}</p>`
+            : ""
+          }
 
           <div
             class="profile-stats"
@@ -630,42 +765,67 @@
             ${posts.length} ${t("पोस्ट", "Posts")}
           </div>
 
-          <div class="flex-center profile-actions">
+          <div class="profile-main-actions">
             <button
-              class="btn btn-primary"
+              class="profile-action-btn primary"
               type="button"
               data-edit-profile
             >
-              ✏️ ${t("प्रोफाइल सम्पादन", "Edit Profile")}
+              <span aria-hidden="true">✏️</span>
+              <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
             </button>
 
             <button
-              class="btn btn-secondary"
+              class="profile-action-btn"
               type="button"
               data-open-settings
             >
-              ⚙️ ${t("व्यवस्थापन", "Manage")}
+              <span aria-hidden="true">⚙️</span>
+              <span>${t("सेटिङ", "Settings")}</span>
             </button>
           </div>
+        </section>
 
-          <div class="flex-center profile-secondary-actions">
+        <section class="card profile-tools-card">
+          <div class="profile-tools-heading">
+            <div>
+              <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
+              <p>${t(
+                "आफ्नो प्रोफाइल र सामग्री व्यवस्थापन गर्नुहोस्।",
+                "Manage your profile and saved content."
+              )}</p>
+            </div>
+          </div>
+
+          <div
+            class="profile-tool-grid"
+            data-profile-extras
+            aria-label="${t("प्रोफाइलका विकल्पहरू", "Profile options")}"
+          >
             <button
-              class="btn btn-secondary"
               type="button"
+              class="profile-tool-button"
               data-copy-profile-link
             >
               🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
             </button>
 
             <button
-              class="btn btn-secondary"
               type="button"
+              class="profile-tool-button"
               data-page="saved"
             >
               🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
             </button>
           </div>
-        </div>
+
+          <p class="profile-tool-note">
+            ${t(
+              "QR, उपलब्धि र Insights का विकल्पहरू यही सेक्सनमा देखिन्छन्।",
+              "QR, achievements and insights appear in this section."
+            )}
+          </p>
+        </section>
 
         <div
           class="profile-tabs"
@@ -744,6 +904,7 @@
             ${renderAbout(user)}
           </div>
         </div>
+
       </section>
     `;
   }
@@ -778,7 +939,6 @@
 
     section.querySelectorAll("[data-profile-panel]").forEach(panel => {
       const active = panel.dataset.profilePanel === selected;
-
       panel.classList.toggle("hidden", !active);
     });
 
@@ -793,7 +953,6 @@
         t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."),
         "error"
       );
-
       return false;
     }
 
@@ -829,9 +988,7 @@
       field.select();
 
       try {
-        copied = Boolean(
-          global.document.execCommand("copy")
-        );
+        copied = Boolean(global.document.execCommand("copy"));
       } catch (error) {
         copied = false;
       }
