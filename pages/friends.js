@@ -1,3 +1,4 @@
+
 "use strict";
 
 /* =========================================================
@@ -1096,6 +1097,99 @@
         .ksf-action { font-size:12px; }
         .ksf-item-actions { width:100%; }
         .ksf-item-actions button { flex:1; }
+      }
+
+      /* FRIENDS PAGE — REAL LIGHT / DARK THEME SUPPORT */
+
+      .ksf-page {
+        color: var(--color-text);
+        --ksf-border: var(--color-border);
+        --ksf-muted: var(--color-muted);
+      }
+
+      .ksf-card,
+      .ksf-stat {
+        background: var(--color-surface);
+        color: var(--color-text);
+        border-color: var(--color-border);
+      }
+
+      .ksf-identity {
+        background: linear-gradient(
+          135deg,
+          var(--color-primary-soft),
+          var(--color-surface)
+        );
+        border-color: var(--color-border);
+      }
+
+      .ksf-id-value,
+      .ksf-section summary,
+      .ksf-item-id,
+      .ksf-stat strong,
+      .ksf-heading h2 {
+        color: var(--color-text);
+      }
+
+      .ksf-secondary {
+        background: var(--color-surface-secondary);
+        color: var(--color-text);
+        border-color: var(--color-border);
+      }
+
+      .ksf-primary {
+        background: var(--color-primary);
+        color: #ffffff;
+      }
+
+      .ksf-search {
+        background: var(--color-surface-secondary);
+        color: var(--color-text);
+        border-color: var(--color-border);
+        color-scheme: inherit;
+      }
+
+      .ksf-search::placeholder {
+        color: var(--color-muted);
+        opacity: 1;
+      }
+
+      .ksf-note,
+      .ksf-section summary .ksf-count {
+        background: var(--color-surface-secondary);
+        color: var(--color-text-secondary);
+      }
+
+      .ksf-item {
+        border-color: var(--color-border);
+      }
+
+      .ksf-section-body {
+        border-color: var(--color-border);
+      }
+
+      .ksf-empty,
+      .ksf-subtitle,
+      .ksf-muted,
+      .ksf-id-label,
+      .ksf-stat span {
+        color: var(--color-muted);
+      }
+
+      html[data-theme="dark"] .ksf-card,
+      html[data-theme="dark"] .ksf-stat {
+        background: var(--color-surface);
+        color: var(--color-text);
+      }
+
+      html[data-theme="dark"] .ksf-search {
+        background: var(--color-surface-secondary);
+        color: var(--color-text);
+      }
+
+      html[data-theme="dark"] .ksf-secondary {
+        background: var(--color-surface-secondary);
+        color: var(--color-text);
       }
     `;
 
