@@ -2,11 +2,11 @@
 "use strict";
 
 /* =========================================================
-   HAMRO SANSAR — SERVICE WORKER
-   Version: v32
+   MERO SANSAR — SERVICE WORKER
+   Version: v33
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v32";
+const CACHE_NAME = "hamro-sansar-v33";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -65,6 +65,10 @@ const APP_FILES = [
   "./core/design-system.css"
 ];
 
+/* =========================================================
+   URL HELPERS
+========================================================= */
+
 function getAppURL(path) {
   return new URL(path, self.registration.scope);
 }
@@ -77,6 +81,10 @@ function isAppURL(url) {
     url.pathname.startsWith(scope.pathname)
   );
 }
+
+/* =========================================================
+   ASSET DISCOVERY
+========================================================= */
 
 function discoverAssets(html) {
   const discovered = new Set();
@@ -112,6 +120,10 @@ function discoverAssets(html) {
   return Array.from(discovered);
 }
 
+/* =========================================================
+   FETCH AND CACHE
+========================================================= */
+
 async function fetchAndCache(cache, url) {
   const response = await fetch(new Request(url, {
     method: "GET",
@@ -131,10 +143,13 @@ async function fetchAndCache(cache, url) {
   }
 
   await cache.put(url, response.clone());
+
   return response;
 }
 
-/* INSTALL */
+/* =========================================================
+   INSTALL
+========================================================= */
 
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
@@ -142,7 +157,12 @@ self.addEventListener("install", event => {
 
     try {
       const indexURL = getAppURL("./index.html").href;
-      const indexResponse = await fetchAndCache(cache, indexURL);
+
+      const indexResponse = await fetchAndCache(
+        cache,
+        indexURL
+      );
+
       const html = await indexResponse.clone().text();
 
       const allFiles = new Set([
@@ -159,23 +179,30 @@ self.addEventListener("install", event => {
               await fetchAndCache(cache, url);
               return null;
             } catch (error) {
-              return { url, reason: error };
+              return {
+                url,
+                reason: error
+              };
             }
           })
         )
       ).filter(Boolean);
 
       if (failures.length) {
-        console.error("Incomplete app shell:", failures);
+        console.error(
+          "Incomplete app shell:",
+          failures
+        );
 
         throw new Error(
           "PWA installation cancelled because " +
-          failures.length + " asset(s) could not be cached."
+          failures.length +
+          " asset(s) could not be cached."
         );
       }
 
       console.info(
-        "Hamro Sansar v32 cached:",
+        "Mero Sansar v33 cached:",
         allFiles.size + 1,
         "files"
       );
@@ -187,7 +214,9 @@ self.addEventListener("install", event => {
   })());
 });
 
-/* ACTIVATE */
+/* =========================================================
+   ACTIVATE
+========================================================= */
 
 self.addEventListener("activate", event => {
   event.waitUntil((async () => {
@@ -206,11 +235,15 @@ self.addEventListener("activate", event => {
 
     await self.clients.claim();
 
-    console.info("Hamro Sansar Service Worker v32 activated.");
+    console.info(
+      "Mero Sansar Service Worker v33 activated."
+    );
   })());
 });
 
-/* NAVIGATION */
+/* =========================================================
+   NAVIGATION REQUEST
+========================================================= */
 
 async function handleNavigationRequest(request, cache) {
   try {
@@ -222,9 +255,15 @@ async function handleNavigationRequest(request, cache) {
       response.status === 200
     ) {
       try {
-        await cache.put(request, response.clone());
+        await cache.put(
+          request,
+          response.clone()
+        );
       } catch (error) {
-        console.warn("Navigation cache update failed:", error);
+        console.warn(
+          "Navigation cache update failed:",
+          error
+        );
       }
     }
 
@@ -232,23 +271,33 @@ async function handleNavigationRequest(request, cache) {
 
   } catch (error) {
     const exactMatch = await cache.match(request);
-    if (exactMatch) return exactMatch;
+
+    if (exactMatch) {
+      return exactMatch;
+    }
 
     const indexMatch = await cache.match(
       getAppURL("./index.html").href
     );
 
-    if (indexMatch) return indexMatch;
+    if (indexMatch) {
+      return indexMatch;
+    }
 
     return offlineResponse();
   }
 }
 
-/* ASSETS */
+/* =========================================================
+   ASSET REQUEST
+========================================================= */
 
 async function handleAssetRequest(request, cache) {
   const cached = await cache.match(request);
-  if (cached) return cached;
+
+  if (cached) {
+    return cached;
+  }
 
   try {
     const response = await fetch(request);
@@ -259,9 +308,15 @@ async function handleAssetRequest(request, cache) {
       response.status === 200
     ) {
       try {
-        await cache.put(request, response.clone());
+        await cache.put(
+          request,
+          response.clone()
+        );
       } catch (error) {
-        console.warn("Asset cache update failed:", error);
+        console.warn(
+          "Asset cache update failed:",
+          error
+        );
       }
     }
 
@@ -272,7 +327,9 @@ async function handleAssetRequest(request, cache) {
   }
 }
 
-/* OFFLINE RESPONSE */
+/* =========================================================
+   OFFLINE RESPONSE
+========================================================= */
 
 function offlineResponse() {
   return new Response(
@@ -288,31 +345,48 @@ function offlineResponse() {
   );
 }
 
-/* FETCH */
+/* =========================================================
+   FETCH
+========================================================= */
 
 self.addEventListener("fetch", event => {
   const request = event.request;
 
-  if (request.method !== "GET") return;
+  if (request.method !== "GET") {
+    return;
+  }
 
   const url = new URL(request.url);
-  if (!isAppURL(url)) return;
+
+  if (!isAppURL(url)) {
+    return;
+  }
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
 
     if (request.mode === "navigate") {
-      return handleNavigationRequest(request, cache);
+      return handleNavigationRequest(
+        request,
+        cache
+      );
     }
 
-    return handleAssetRequest(request, cache);
+    return handleAssetRequest(
+      request,
+      cache
+    );
   })());
 });
 
-/* UPDATE ACTIVATION */
+/* =========================================================
+   UPDATE ACTIVATION
+========================================================= */
 
 self.addEventListener("message", event => {
   if (event.data?.type === "SKIP_WAITING") {
-    event.waitUntil(self.skipWaiting());
+    event.waitUntil(
+      self.skipWaiting()
+    );
   }
 });
