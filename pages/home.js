@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -95,21 +94,26 @@
         font-weight: 700;
       }
 
-      .ksk-story-manager-trigger {
-        display:inline-flex;
-        align-items:center;
-        gap:7px;
-        margin:10px 0 4px;
-        padding:8px 12px;
-        border:1px solid var(--color-border);
-        border-radius:999px;
-        background:var(--color-surface-secondary);
-        color:var(--color-text);
-        font:inherit;
-        font-size:12px;
-        font-weight:700;
-        cursor:pointer;
-      }
+      /* Compact Instagram-style Stories */
+      .stories-section { margin-bottom:12px !important; }
+      .ksk-stories-toolbar { display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px; }
+      .ksk-stories-toolbar .section-title { margin:0 !important; }
+      .ksk-story-manager-trigger { display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;margin:0;padding:0;border:1px solid var(--color-border);border-radius:50%;background:var(--color-surface-secondary);color:var(--color-text);font-size:23px;line-height:1;font-weight:700;cursor:pointer; }
+      .stories-section .stories-row { display:flex;align-items:flex-start;gap:13px;padding:2px 1px 7px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none; }
+      .stories-section .stories-row::-webkit-scrollbar,.ksk-story-highlight-list::-webkit-scrollbar { display:none; }
+      .stories-section .story-card { display:flex;flex:0 0 66px;width:66px;min-width:66px;min-height:0;height:auto;align-items:center;flex-direction:column;gap:5px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;transform:none; }
+      .stories-section .story-card:hover,.stories-section .story-card:active { border:0;background:transparent;transform:none; }
+      .stories-section .story-avatar { display:grid;place-items:center;flex:0 0 62px;width:62px;height:62px;padding:2px;overflow:hidden;border:2px solid var(--color-primary);border-radius:50%;background:var(--color-surface-secondary); }
+      .stories-section .story-card:first-child .story-avatar { border:2px dashed var(--color-primary);background:var(--color-primary-soft);font-size:27px; }
+      .stories-section .story-name { display:block;width:66px;max-width:66px;margin:0;overflow:hidden;font-size:10px;line-height:1.25;text-align:center;text-overflow:ellipsis;white-space:nowrap; }
+      .stories-section .story-avatar .ksk-story-thumbnail { width:100%;height:100%;display:block;object-fit:cover;border-radius:50%; }
+      .ksk-story-highlights { margin:7px 0 2px; }
+      .ksk-story-highlights h3 { margin:0 0 8px;font-size:13px; }
+      .ksk-story-highlight-list { display:flex;gap:13px;overflow-x:auto;padding:1px 1px 7px;scrollbar-width:none; }
+      .ksk-story-highlight { display:flex;flex:0 0 66px;width:66px;min-width:66px;align-items:center;flex-direction:column;gap:5px;padding:0;border:0;border-radius:0;background:transparent;color:var(--color-text);text-align:center;cursor:pointer; }
+      .ksk-story-highlight-avatar { display:grid;place-items:center;width:62px;height:62px;border:2px solid var(--color-primary);border-radius:50%;background:var(--color-surface-secondary);color:var(--color-text);font-size:20px;font-weight:800; }
+      .ksk-story-highlight strong { display:block;width:66px;overflow:hidden;font-size:10px;line-height:1.25;text-overflow:ellipsis;white-space:nowrap; }
+      .ksk-story-highlight span { display:none; }
 
       .ksk-story-feature-note {
         margin:8px 0;
@@ -688,6 +692,7 @@
       '</div>';
   }
 
+```javascript
   function openStoryManager() {
     storyModal({
       title: isEnglish()
@@ -710,69 +715,55 @@
 
   function renderStoryHighlights() {
     const section = $("#storiesList")?.closest(".stories-section");
-
     if (!section) return;
-
     let panel = section.querySelector("[data-story-highlights]");
-
     if (!panel) {
       panel = document.createElement("div");
       panel.className = "ksk-story-highlights";
       panel.dataset.storyHighlights = "true";
-
-      const manager = section.querySelector("[data-story-manage]");
-
-      (manager || $("#storiesList", section))
-        ?.insertAdjacentElement("afterend", panel);
+      $("#storiesList", section)?.insertAdjacentElement("afterend", panel);
     }
-
-    const highlights = managedStories().filter(story =>
-      getStoryFeature(story.id).highlight
-    );
-
+    const highlights = managedStories().filter(story => getStoryFeature(story.id).highlight);
     panel.innerHTML = highlights.length
-      ? '<h3>Story Highlights</h3>' +
-        '<div class="ksk-story-highlight-list">' +
-
-        highlights.map(story =>
-          '<button type="button" class="ksk-story-highlight" data-home-story-view="' +
-          escapeHTML(story.id) +
-          '"><strong>' +
-          escapeHTML(story.author || "सदस्य") +
-          '</strong><span>' +
-          escapeHTML(
-            String(story.text || "").slice(0, 55) ||
-            (isEnglish() ? "Photo Story" : "फोटो Story")
-          ) +
-          '</span></button>'
-        ).join("") +
-
-        '</div>'
+      ? '<h3>Highlights</h3><div class="ksk-story-highlight-list">' +
+        highlights.map(story => {
+          const name = String(story.author || "सदस्य");
+          const initial = Array.from(name.trim())[0] || "S";
+          return '<button type="button" class="ksk-story-highlight" data-home-story-view="' +
+            escapeHTML(story.id) + '" aria-label="' + escapeHTML(name) + '">' +
+            '<span class="ksk-story-highlight-avatar">' + escapeHTML(initial) +
+            '</span><strong>' + escapeHTML(name) + '</strong><span>' +
+            escapeHTML(String(story.text || "").slice(0,55) || (isEnglish() ? "Photo Story" : "फोटो Story")) +
+            '</span></button>';
+        }).join("") + '</div>'
       : "";
-
     panel.hidden = !highlights.length;
   }
 
   function ensureStoryManagerButton() {
     const section = $("#storiesList")?.closest(".stories-section");
-
-    if (!section) return;
-
-    if (!section.querySelector("[data-story-manage]")) {
-      const button = document.createElement("button");
-
+    const storiesList = $("#storiesList", section);
+    if (!section || !storiesList) return;
+    let toolbar = section.querySelector("[data-stories-toolbar]");
+    if (!toolbar) {
+      toolbar = document.createElement("div");
+      toolbar.className = "ksk-stories-toolbar";
+      toolbar.dataset.storiesToolbar = "true";
+      section.insertBefore(toolbar, storiesList);
+      const heading = section.querySelector(".section-title, h2");
+      if (heading) toolbar.appendChild(heading);
+    }
+    let button = section.querySelector("[data-story-manage]");
+    if (!button) {
+      button = document.createElement("button");
       button.type = "button";
       button.className = "ksk-story-manager-trigger";
       button.dataset.storyManage = "true";
-
-      button.textContent = isEnglish()
-        ? "⚙ Manage Stories"
-        : "⚙ Story व्यवस्थापन";
-
-      $("#storiesList", section)
-        ?.insertAdjacentElement("afterend", button);
+      button.setAttribute("aria-label", isEnglish() ? "Manage stories" : "स्टोरी व्यवस्थापन");
+      button.setAttribute("title", isEnglish() ? "Manage stories" : "स्टोरी व्यवस्थापन");
+      button.textContent = "⋯";
     }
-
+    if (button.parentElement !== toolbar) toolbar.appendChild(button);
     renderStoryHighlights();
   }
 
