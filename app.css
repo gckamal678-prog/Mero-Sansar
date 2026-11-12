@@ -2156,6 +2156,74 @@ body.ksk-compact-mode .stories-section {
   }
 }
 
+
+/* =========================================================
+   MERO SANSAR — CUSTOM POST DELETE CONFIRMATION
+========================================================= */
+
+.ksk-delete-confirm {
+  padding: 14px 8px 18px;
+  text-align: center;
+}
+
+.ksk-delete-confirm-icon {
+  width: 68px;
+  height: 68px;
+  margin: 4px auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 22px;
+  background: rgba(239, 68, 68, 0.12);
+  font-size: 30px;
+}
+
+.ksk-delete-confirm h3 {
+  margin: 0 0 10px;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--color-text, inherit);
+}
+
+.ksk-delete-confirm p {
+  max-width: 360px;
+  margin: 0 auto;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text-muted, #888);
+}
+
+.ksk-delete-confirm [data-confirm-delete-post] {
+  min-width: 125px;
+  background: #dc3545;
+  border-color: #dc3545;
+  color: #fff;
+}
+
+.ksk-delete-confirm [data-confirm-delete-post]:hover {
+  background: #bb2d3b;
+  border-color: #bb2d3b;
+}
+
+.ksk-delete-confirm [data-confirm-delete-post]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .ksk-delete-confirm {
+    padding: 8px 2px 14px;
+  }
+
+  .ksk-delete-confirm h3 {
+    font-size: 17px;
+  }
+
+  .ksk-delete-confirm p {
+    font-size: 13px;
+  }
+}
+
 /* =========================================================
    END — KSK APPLICATION LAYOUT
 ========================================================= */
