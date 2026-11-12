@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -354,21 +353,61 @@
         scrollbar-width: thin;
       }
 
+      /* ===================================================
+         MESSAGE TABS — DARK / LIGHT THEME SUPPORT
+      =================================================== */
+
       .ksk-msg-tab {
-        border: 1px solid var(--border-color, #d8dce3);
-        background: var(--card-bg, #fff);
-        color: var(--text-color, inherit);
+        flex: 0 0 auto;
+        border: 1px solid var(--color-border-strong, #3b4c64);
+        background: var(--color-surface-secondary, #172438);
+        color: var(--color-text, #e5edf8);
         border-radius: 999px;
         padding: 8px 13px;
         white-space: nowrap;
         cursor: pointer;
         font: inherit;
+        font-weight: 600;
+        opacity: 1;
+        -webkit-text-fill-color: currentColor;
+        transition: background-color .18s ease,
+          color .18s ease,
+          border-color .18s ease;
       }
 
-      .ksk-msg-tab.is-active {
-        background: var(--primary-color, #2563eb);
-        border-color: var(--primary-color, #2563eb);
-        color: #fff;
+      .ksk-msg-tab:hover {
+        background: var(--color-surface-hover, #1e2d43);
+        border-color: var(--color-primary, #60a5fa);
+        color: var(--color-text, #e5edf8);
+      }
+
+      .ksk-msg-tab.is-active,
+      .ksk-msg-tab.is-active:hover {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #ffffff;
+        -webkit-text-fill-color: #ffffff;
+      }
+
+      html[data-theme="light"] .ksk-msg-tab {
+        border-color: var(--color-border-strong, #cbd5e1);
+        background: var(--color-surface-secondary, #f8fafc);
+        color: var(--color-text, #172033);
+        -webkit-text-fill-color: var(--color-text, #172033);
+      }
+
+      html[data-theme="light"] .ksk-msg-tab:hover {
+        background: var(--color-surface-hover, #f1f5f9);
+        color: var(--color-text, #172033);
+        -webkit-text-fill-color: var(--color-text, #172033);
+      }
+
+      html[data-theme="light"] .ksk-msg-tab.is-active,
+      html[data-theme="light"] .ksk-msg-tab.is-active:hover {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #ffffff;
+        -webkit-text-fill-color: #ffffff;
       }
 
       .ksk-msg-list {
