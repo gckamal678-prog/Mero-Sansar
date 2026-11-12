@@ -3,8 +3,9 @@
 
 /*
  * MERO SANSAR — STORY UI UPGRADE
- * Story tools and Highlights stay inside the Story strip.
- * Adds local Story deletion without changing core/data.js.
+ * Reliable Story deletion controls.
+ * Story tools and Highlights remain inside the Story strip.
+ * Local-only; no backend or core/data.js changes.
  */
 
 (function (global) {
@@ -16,6 +17,7 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   let observer = null;
   let decorating = false;
+  let scanQueued = false;
 
   function isEnglish() {
     return global.KSKLanguage?.getLanguage?.() === "en";
@@ -39,7 +41,7 @@
   }
 
   function profileId() {
-    return String(global.KSKData?.getProfile?.()?.id || "local-device");
+    return String(global.KSKData?.getProfile?.()?.id || "");
   }
 
   function toast(message, type = "success") {
@@ -56,119 +58,58 @@
     style.textContent = `
       #storiesList .ksk-story-manager-trigger,
       #storiesList .ksk-story-tool-card {
-        flex:0 0 72px;
-        width:72px;
-        min-width:72px;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        gap:5px;
-        margin:0;
-        padding:0;
-        border:0;
-        border-radius:0;
-        background:transparent;
-        color:var(--color-text);
-        font:inherit;
-        cursor:pointer;
+        flex:0 0 72px;width:72px;min-width:72px;
+        display:flex;flex-direction:column;align-items:center;
+        gap:5px;margin:0;padding:0;border:0;border-radius:0;
+        background:transparent;color:var(--color-text);font:inherit;cursor:pointer;
       }
-
       #storiesList .ksk-story-manager-trigger .story-avatar,
       #storiesList .ksk-story-tool-card .story-avatar {
-        width:62px;
-        height:62px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        border:1px solid var(--color-border);
-        border-radius:50%;
-        background:var(--color-surface-secondary);
-        color:var(--color-text);
-        font-size:22px;
+        width:62px;height:62px;display:flex;align-items:center;
+        justify-content:center;border:1px solid var(--color-border);
+        border-radius:50%;background:var(--color-surface-secondary);
+        color:var(--color-text);font-size:22px;
       }
-
       #storiesList .ksk-story-manager-trigger .story-name,
       #storiesList .ksk-story-tool-card .story-name {
-        display:block;
-        width:100%;
-        overflow:hidden;
-        color:var(--color-text-secondary);
-        font-size:11px;
-        text-align:center;
-        text-overflow:ellipsis;
-        white-space:nowrap;
+        display:block;width:100%;overflow:hidden;
+        color:var(--color-text-secondary);font-size:11px;
+        text-align:center;text-overflow:ellipsis;white-space:nowrap;
       }
-
       #storiesList .ksk-story-highlight-card {
-        flex:0 0 72px;
-        width:72px;
-        min-width:72px;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        gap:5px;
-        padding:0;
-        border:0;
-        border-radius:0;
-        background:transparent;
-        color:var(--color-text);
-        text-align:center;
+        flex:0 0 72px;width:72px;min-width:72px;display:flex;
+        flex-direction:column;align-items:center;gap:5px;padding:0;
+        border:0;border-radius:0;background:transparent;
+        color:var(--color-text);text-align:center;
       }
-
       #storiesList .ksk-story-highlight-card .story-avatar {
-        width:62px;
-        height:62px;
-        padding:3px;
-        overflow:hidden;
-        border:2px solid transparent;
-        border-radius:50%;
-        background:
-          linear-gradient(var(--color-surface),var(--color-surface)) padding-box,
-          linear-gradient(135deg,#feda75,#fa7e1e,#d62976,#962fbf,#4f5bd5) border-box;
+        width:62px;height:62px;padding:3px;overflow:hidden;
+        border:2px solid transparent;border-radius:50%;
+        background:linear-gradient(var(--color-surface),var(--color-surface)) padding-box,
+        linear-gradient(135deg,#feda75,#fa7e1e,#d62976,#962fbf,#4f5bd5) border-box;
       }
-
       #storiesList .ksk-story-highlight-card .story-avatar img,
       #storiesList .ksk-story-highlight-card .story-avatar .story-text-preview {
-        width:100%;
-        height:100%;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        border-radius:50%;
-        object-fit:cover;
-        overflow:hidden;
+        width:100%;height:100%;display:flex;align-items:center;
+        justify-content:center;border-radius:50%;object-fit:cover;overflow:hidden;
       }
-
       #storiesList .ksk-story-highlight-card .story-name {
-        width:100%;
-        overflow:hidden;
-        color:var(--color-text-secondary);
-        font-size:11px;
-        text-overflow:ellipsis;
-        white-space:nowrap;
+        width:100%;overflow:hidden;color:var(--color-text-secondary);
+        font-size:11px;text-overflow:ellipsis;white-space:nowrap;
       }
-
       .ksk-story-ui-delete {
-        min-height:36px;
-        margin-left:auto;
-        padding:7px 11px;
-        border:1px solid #dc3545;
-        border-radius:9px;
-        background:transparent;
-        color:#dc3545;
-        font:inherit;
-        font-size:12px;
-        font-weight:700;
-        cursor:pointer;
+        min-height:38px;margin-left:auto;padding:8px 13px;
+        border:1px solid #dc3545;border-radius:9px;
+        background:rgba(220,53,69,.08);color:#dc3545;
+        font:inherit;font-size:13px;font-weight:700;cursor:pointer;
       }
-
+      .ksk-story-ui-delete:focus-visible {
+        outline:2px solid #dc3545;outline-offset:2px;
+      }
       @media(max-width:480px) {
-        #storiesList .story-card,
-        #storiesList .ksk-story-highlight-card,
-        #storiesList .ksk-story-manager-trigger,
-        #storiesList .ksk-story-tool-card {
-          flex:0 0 72px;
-          min-width:72px;
+        #storiesList .story-card,#storiesList .ksk-story-highlight-card,
+        #storiesList .ksk-story-manager-trigger,#storiesList .ksk-story-tool-card {
+          flex:0 0 72px;min-width:72px;
         }
       }
     `;
@@ -181,19 +122,18 @@
     if (button.dataset.highlightImageLoaded === "true") return;
 
     button.dataset.highlightImageLoaded = "true";
-    global.KSKMedia.getImageURL(story.mediaId).then(url => {
-      if (!url || !button.isConnected) return;
-      const avatar = button.querySelector(".story-avatar");
-      if (!avatar) return;
-
-      const image = document.createElement("img");
-      image.src = url;
-      image.alt = isEnglish() ? "Story highlight" : "Story Highlight";
-      image.loading = "lazy";
-      avatar.replaceChildren(image);
-    }).catch(error => {
-      console.warn("Story Highlight thumbnail unavailable.", error);
-    });
+    Promise.resolve(global.KSKMedia.getImageURL(story.mediaId))
+      .then(url => {
+        if (!url || !button.isConnected) return;
+        const avatar = button.querySelector(".story-avatar");
+        if (!avatar) return;
+        const image = document.createElement("img");
+        image.src = url;
+        image.alt = isEnglish() ? "Story highlight" : "Story Highlight";
+        image.loading = "lazy";
+        avatar.replaceChildren(image);
+      })
+      .catch(error => console.warn("Story Highlight thumbnail unavailable.", error));
   }
 
   function decorateStoryStrip() {
@@ -216,10 +156,7 @@
           button.innerHTML =
             '<span class="story-avatar"><span class="story-text-preview">' +
             escapeHTML(preview.slice(0, 32)) +
-            '</span></span><span class="story-name">' +
-            escapeHTML(isEnglish() ? "Highlight" : "Highlight") +
-            '</span>';
-
+            '</span></span><span class="story-name">Highlight</span>';
           button.dataset.homeStoryView = id;
           button.removeAttribute("data-story-media");
           list.appendChild(button);
@@ -239,55 +176,75 @@
             '</span>';
           manager.dataset.storyUiReady = "true";
         }
-
         if (manager.parentElement !== list || list.lastElementChild !== manager) {
           list.appendChild(manager);
         }
       }
+    } catch (error) {
+      console.error("Story strip decoration failed.", error);
     } finally {
       decorating = false;
     }
   }
 
+  function canShowDelete(story) {
+    if (!story || !story.authorId) return Boolean(story);
+    const ownId = profileId();
+    return !ownId || String(story.authorId) === ownId;
+  }
+
+  function makeDeleteButton(id, label) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ksk-story-ui-delete";
+    button.dataset.storyUiDelete = String(id);
+    button.textContent = label;
+    button.setAttribute("aria-label", label);
+    return button;
+  }
+
   function addDeleteButtons() {
-    const body = $(".modal-backdrop .modal-body");
-    if (!body) return;
+    const backdrops = document.querySelectorAll(".modal-backdrop");
+    backdrops.forEach(backdrop => {
+      const body = backdrop.querySelector(".modal-body");
+      if (!body) return;
 
-    body.querySelectorAll(".ksk-story-manager-item").forEach(item => {
-      const select = item.querySelector("[data-home-story-privacy]");
-      const id = select?.getAttribute("data-home-story-privacy");
-      if (!id || item.querySelector("[data-story-ui-delete]")) return;
+      body.querySelectorAll(".ksk-story-manager-item").forEach(item => {
+        const select = item.querySelector("[data-home-story-privacy]");
+        const id = select?.getAttribute("data-home-story-privacy");
+        const actions = item.querySelector(".ksk-story-manager-actions");
+        if (!id || !actions || actions.querySelector("[data-story-ui-delete]")) return;
+
+        const story = getStory(id);
+        if (!canShowDelete(story)) return;
+        actions.appendChild(makeDeleteButton(
+          id,
+          isEnglish() ? "Delete Story" : "Story मेटाउनुहोस्"
+        ));
+      });
+
+      const viewer = body.querySelector(".ksk-story-feature-view");
+      const replyForm = viewer?.querySelector("[data-home-story-reply]");
+      const id = replyForm?.getAttribute("data-home-story-reply");
+      const actions = viewer?.querySelector(".ksk-story-view-actions");
+      if (!id || !actions || actions.querySelector("[data-story-ui-delete]")) return;
 
       const story = getStory(id);
-      if (story?.authorId && String(story.authorId) !== profileId()) return;
-
-      const actions = item.querySelector(".ksk-story-manager-actions");
-      if (!actions) return;
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "ksk-story-ui-delete";
-      button.dataset.storyUiDelete = id;
-      button.textContent = isEnglish() ? "Delete" : "मेटाउनुहोस्";
-      actions.appendChild(button);
+      if (!canShowDelete(story)) return;
+      actions.appendChild(makeDeleteButton(
+        id,
+        isEnglish() ? "Delete Story" : "Story मेटाउनुहोस्"
+      ));
     });
+  }
 
-    const viewer = body.querySelector(".ksk-story-feature-view");
-    const replyForm = viewer?.querySelector("[data-home-story-reply]");
-    const id = replyForm?.getAttribute("data-home-story-reply");
-    const actions = viewer?.querySelector(".ksk-story-view-actions");
-
-    if (id && actions && !actions.querySelector("[data-story-ui-delete]")) {
-      const story = getStory(id);
-      if (!story?.authorId || String(story.authorId) === profileId()) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "ksk-story-ui-delete";
-        button.dataset.storyUiDelete = id;
-        button.textContent = isEnglish() ? "Delete Story" : "Story मेटाउनुहोस्";
-        actions.appendChild(button);
-      }
-    }
+  function scheduleDeleteButtonScan() {
+    if (scanQueued) return;
+    scanQueued = true;
+    global.setTimeout(() => {
+      scanQueued = false;
+      addDeleteButtons();
+    }, 0);
   }
 
   function deleteStory(id) {
@@ -300,7 +257,8 @@
       return;
     }
 
-    if (story.authorId && String(story.authorId) !== profileId()) {
+    const ownId = profileId();
+    if (story.authorId && ownId && String(story.authorId) !== ownId) {
       toast(
         isEnglish() ? "You can delete only your own Story." : "आफ्नो Story मात्र मेटाउन सकिन्छ।",
         "error"
@@ -340,26 +298,39 @@
   function handleDelete(event) {
     const button = event.target?.closest?.("[data-story-ui-delete]");
     if (!button) return;
-
     event.preventDefault();
     event.stopImmediatePropagation();
     deleteStory(button.dataset.storyUiDelete);
   }
 
+  function handleStoryOpen(event) {
+    const trigger = event.target?.closest?.(
+      "[data-story-manage], [data-home-story-view]"
+    );
+    if (!trigger) return;
+    scheduleDeleteButtonScan();
+  }
+
   function startObserver() {
-    if (observer || !document.body) return;
+    if (!document.body) return;
 
-    observer = new MutationObserver(() => {
-      decorateStoryStrip();
-      addDeleteButtons();
-    });
+    if (!observer && typeof global.MutationObserver === "function") {
+      observer = new MutationObserver(() => {
+        try {
+          decorateStoryStrip();
+        } finally {
+          addDeleteButtons();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
 
-    observer.observe(document.body, { childList: true, subtree: true });
     decorateStoryStrip();
     addDeleteButtons();
   }
 
   document.addEventListener("click", handleDelete, true);
+  document.addEventListener("click", handleStoryOpen, true);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", startObserver, { once: true });
@@ -368,7 +339,11 @@
   }
 
   global.KSKStoryUIUpgrade = Object.freeze({
-    refresh: decorateStoryStrip,
+    refresh() {
+      decorateStoryStrip();
+      addDeleteButtons();
+      return true;
+    },
     deleteStory
   });
 
