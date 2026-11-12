@@ -3,10 +3,10 @@
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v29
+   Version: v30
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v29";
+const CACHE_NAME = "hamro-sansar-v30";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -96,10 +96,7 @@ function discoverAssets(html) {
     try {
       const url = new URL(value, self.registration.scope);
 
-      if (
-        isAppURL(url) &&
-        !url.pathname.endsWith("/")
-      ) {
+      if (isAppURL(url) && !url.pathname.endsWith("/")) {
         discovered.add(url.href);
       }
     } catch (error) {
@@ -111,13 +108,11 @@ function discoverAssets(html) {
 }
 
 async function fetchAndCache(cache, url) {
-  const response = await fetch(
-    new Request(url, {
-      method: "GET",
-      cache: "reload",
-      credentials: "same-origin"
-    })
-  );
+  const response = await fetch(new Request(url, {
+    method: "GET",
+    cache: "reload",
+    credentials: "same-origin"
+  }));
 
   if (
     !response.ok ||
@@ -166,30 +161,22 @@ self.addEventListener("install", event => {
       ).filter(Boolean);
 
       if (failures.length) {
-        console.error(
-          "PWA installation cancelled; incomplete app shell:",
-          failures
-        );
+        console.error("Incomplete app shell:", failures);
 
         throw new Error(
           "PWA installation cancelled because " +
-          failures.length + " app asset(s) could not be cached."
+          failures.length + " asset(s) could not be cached."
         );
       }
 
       console.info(
-        "Hamro Sansar v29 app shell cached:",
+        "Hamro Sansar v30 cached:",
         allFiles.size + 1,
         "files"
       );
 
     } catch (error) {
-      try {
-        await caches.delete(CACHE_NAME);
-      } catch (cleanupError) {
-        console.error("Cache cleanup failed:", cleanupError);
-      }
-
+      await caches.delete(CACHE_NAME);
       throw error;
     }
   })());
@@ -214,7 +201,7 @@ self.addEventListener("activate", event => {
 
     await self.clients.claim();
 
-    console.info("Hamro Sansar Service Worker v29 activated.");
+    console.info("Hamro Sansar Service Worker v30 activated.");
   })());
 });
 
@@ -317,13 +304,10 @@ self.addEventListener("fetch", event => {
   })());
 });
 
-/* EXPLICIT UPDATE ACTIVATION */
+/* UPDATE ACTIVATION */
 
 self.addEventListener("message", event => {
-  if (
-    event.data &&
-    event.data.type === "SKIP_WAITING"
-  ) {
+  if (event.data?.type === "SKIP_WAITING") {
     event.waitUntil(self.skipWaiting());
   }
 });
