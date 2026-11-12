@@ -1,13 +1,10 @@
 
 "use strict";
 
-/*
- * KSK — SOCIAL DATA + FRIENDS PAGE
- *
- * Local development adapter only.
- * No demo users, no fake profiles, no server sync.
- * Local IDs are not authenticated identities.
- */
+/* =========================================================
+   KSK SOCIAL DATA
+   LocalStorage adapter — no backend / no server sync.
+========================================================= */
 
 (function (global) {
   "use strict";
@@ -17,57 +14,38 @@
   const STORAGE_KEY = "ksk_social_state_v1";
   const VERSION = 1;
 
-  const VALID_DIRECTIONS = new Set([
-    "all", "incoming", "outgoing"
-  ]);
+  const emptyState = () => ({
+    version: VERSION,
+    localUserId: "",
+    friendRequests: [],
+    friendships: [],
+    follows: []
+  });
 
-  const VALID_STATUSES = new Set([
-    "pending", "accepted", "rejected", "cancelled"
-  ]);
-
-  function emptyState() {
-    return {
-      version: VERSION,
-      localUserId: "",
-      friendRequests: [],
-      friendships: [],
-      follows: []
-    };
-  }
-
-  function clone(value) {
-    return JSON.parse(JSON.stringify(value));
-  }
-
-  function normalizeId(value) {
-    if (
-      typeof value !== "string" &&
-      typeof value !== "number"
-    ) return "";
-
-    const id = String(value).trim();
-
-    if (
-      !id ||
-      id.length > 128 ||
-      /[\u0000-\u001f\u007f]/.test(id)
-    ) return "";
-
-    return id;
-  }
-
-  function makeId(prefix = "social") {
+  function makeId(prefix) {
     try {
       if (global.crypto?.randomUUID) {
         return prefix + "_" + global.crypto.randomUUID();
       }
-    } catch (error) {
-      // Fallback below.
+    } catch (error) {}
+
+    return prefix + "_" + Date.now().toString(36) +
+      "_" + Math.random().toString(36).slice(2, 12);
+  }
+
+  function normalizeId(value) {
+    if (typeof value !== "string" && typeof value !== "number") {
+      return "";
     }
 
-    return prefix + "_" +
-      Date.now().toString(36) + "_" +
-      Math.random().toString(36).slice(2, 12);
+    const id = String(value).trim();
+
+    if (!id || id.length > 128 ||
+        /[\u0000-\u001f\u007f]/.test(id)) {
+      return "";
+    }
+
+    return id;
   }
 
   function readState() {
@@ -78,23 +56,23 @@
         return { ok: true, state: emptyState() };
       }
 
-      const parsed = JSON.parse(raw);
+      const state = JSON.parse(raw);
 
       if (
-        !parsed ||
-        parsed.version !== VERSION ||
-        !Array.isArray(parsed.friendRequests) ||
-        !Array.isArray(parsed.friendships) ||
-        !Array.isArray(parsed.follows)
+        !state ||
+        state.version !== VERSION ||
+        !Array.isArray(state.friendRequests) ||
+        !Array.isArray(state.friendships) ||
+        !Array.isArray(state.follows)
       ) {
         return { ok: false, code: "CORRUPT_DATA" };
       }
 
-      if (typeof parsed.localUserId !== "string") {
-        parsed.localUserId = "";
+      if (typeof state.localUserId !== "string") {
+        state.localUserId = "";
       }
 
-      return { ok: true, state: parsed };
+      return { ok: true, state };
     } catch (error) {
       return { ok: false, code: "STORAGE_UNAVAILABLE" };
     }
@@ -104,7 +82,7 @@
     return { ok: false, code, data: null };
   }
 
-  function commit(state, code, data) {
+  function saveState(state, code, data) {
     try {
       global.localStorage.setItem(
         STORAGE_KEY,
@@ -112,81 +90,61 @@
       );
 
       try {
-        global.dispatchEvent(new CustomEvent(
-          "ksk:social-change",
-          {
-            detail: {
-              type: code || "UPDATED",
-              at: new Date().toISOString()
-            }
-          }
-        ));
-      } catch (error) {
-        // The storage write has already succeeded.
-      }
+        global.dispatchEvent(new CustomEvent("ksk:social-change", {
+          detail: { type: code || "UPDATED" }
+        }));
+      } catch (error) {}
 
       return {
         ok: true,
         code: code || "OK",
-        data: data === undefined ? null : clone(data)
+        data: data === undefined
+          ? null
+          : JSON.parse(JSON.stringify(data))
       };
     } catch (error) {
       return failure("STORAGE_UNAVAILABLE");
     }
   }
 
-  /*
-   * A stable ID for this browser's local profile.
-   * It is not an account ID and cannot identify a
-   * person on another device.
-   */
   function getLocalUserId() {
-    const loaded = readState();
+    const result = readState();
+    if (!result.ok) return "";
 
-    if (!loaded.ok) return "";
+    const state = result.state;
 
-    const state = loaded.state;
-
-    if (state.localUserId) {
-      return state.localUserId;
-    }
+    if (state.localUserId) return state.localUserId;
 
     state.localUserId = makeId("local-user");
 
-    const saved = commit(
+    return saveState(
       state,
       "LOCAL_USER_ID_CREATED",
       { userId: state.localUserId }
-    );
-
-    return saved.ok ? state.localUserId : "";
+    ).ok ? state.localUserId : "";
   }
 
-  function pairKey(firstId, secondId) {
-    return [firstId, secondId].sort().join("\u0000");
+  function pairKey(a, b) {
+    return [a, b].sort().join("\u0000");
   }
 
-  function findFriendship(state, firstId, secondId) {
-    const key = pairKey(firstId, secondId);
+  function findFriendship(state, a, b) {
+    const key = pairKey(a, b);
 
     return state.friendships.find(item =>
       pairKey(item.userAId, item.userBId) === key
     );
   }
 
-  /* FRIENDSHIPS */
-
   function getFriends(userId) {
     const id = normalizeId(userId);
     if (!id) return [];
 
-    const loaded = readState();
-    if (!loaded.ok) return [];
+    const result = readState();
+    if (!result.ok) return [];
 
-    return loaded.state.friendships
-      .filter(item =>
-        item.userAId === id || item.userBId === id
-      )
+    return result.state.friendships
+      .filter(item => item.userAId === id || item.userBId === id)
       .map(item => ({
         userId: item.userAId === id
           ? item.userBId
@@ -202,22 +160,19 @@
     if (!user || !friend) return failure("INVALID_USER_ID");
     if (user === friend) return failure("SELF_RELATION_NOT_ALLOWED");
 
-    const loaded = readState();
-    if (!loaded.ok) return failure(loaded.code);
+    const result = readState();
+    if (!result.ok) return failure(result.code);
 
-    const state = loaded.state;
+    const state = result.state;
     const index = state.friendships.findIndex(item =>
-      pairKey(item.userAId, item.userBId) ===
-      pairKey(user, friend)
+      pairKey(item.userAId, item.userBId) === pairKey(user, friend)
     );
 
     if (index < 0) return failure("FRIENDSHIP_NOT_FOUND");
 
     const removed = state.friendships.splice(index, 1)[0];
-    return commit(state, "FRIEND_REMOVED", removed);
+    return saveState(state, "FRIEND_REMOVED", removed);
   }
-
-  /* FRIEND REQUESTS */
 
   function sendFriendRequest(fromUserId, toUserId) {
     const from = normalizeId(fromUserId);
@@ -226,54 +181,55 @@
     if (!from || !to) return failure("INVALID_USER_ID");
     if (from === to) return failure("SELF_REQUEST_NOT_ALLOWED");
 
-    const loaded = readState();
-    if (!loaded.ok) return failure(loaded.code);
+    const result = readState();
+    if (!result.ok) return failure(result.code);
 
-    const state = loaded.state;
+    const state = result.state;
 
     if (findFriendship(state, from, to)) {
       return failure("ALREADY_FRIENDS");
     }
 
-    if (state.friendRequests.some(request =>
-      request.fromUserId === to &&
-      request.toUserId === from &&
-      request.status === "pending"
+    if (state.friendRequests.some(item =>
+      item.fromUserId === to &&
+      item.toUserId === from &&
+      item.status === "pending"
     )) {
       return failure("REQUEST_ALREADY_RECEIVED");
     }
 
-    if (state.friendRequests.some(request =>
-      request.fromUserId === from &&
-      request.toUserId === to &&
-      request.status === "pending"
+    if (state.friendRequests.some(item =>
+      item.fromUserId === from &&
+      item.toUserId === to &&
+      item.status === "pending"
     )) {
       return failure("DUPLICATE_REQUEST");
     }
-
-    const now = new Date().toISOString();
 
     const request = {
       id: makeId("request"),
       fromUserId: from,
       toUserId: to,
       status: "pending",
-      createdAt: now,
-      updatedAt: now
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     state.friendRequests.push(request);
 
-    return commit(state, "FRIEND_REQUEST_SENT", request);
+    return saveState(state, "FRIEND_REQUEST_SENT", request);
   }
 
   function getFriendRequests(userId, options = {}) {
     const id = normalizeId(userId);
     if (!id) return [];
 
-    const direction = VALID_DIRECTIONS.has(options.direction)
-      ? options.direction
-      : "all";
+    const result = readState();
+    if (!result.ok) return [];
+
+    const direction = ["all", "incoming", "outgoing"].includes(
+      options.direction
+    ) ? options.direction : "all";
 
     const status = options.status === undefined
       ? "pending"
@@ -281,107 +237,75 @@
 
     if (
       status !== "all" &&
-      !VALID_STATUSES.has(status)
+      !["pending", "accepted", "rejected", "cancelled"].includes(status)
     ) return [];
 
-    const loaded = readState();
-    if (!loaded.ok) return [];
-
-    return loaded.state.friendRequests
-      .filter(request => {
+    return result.state.friendRequests
+      .filter(item => {
         const belongs = direction === "incoming"
-          ? request.toUserId === id
+          ? item.toUserId === id
           : direction === "outgoing"
-            ? request.fromUserId === id
-            : (
-                request.fromUserId === id ||
-                request.toUserId === id
-              );
+            ? item.fromUserId === id
+            : item.fromUserId === id || item.toUserId === id;
 
-        return belongs &&
-          (status === "all" || request.status === status);
+        return belongs && (status === "all" || item.status === status);
       })
-      .map(clone);
+      .map(item => ({ ...item }));
   }
 
-  function updateRequest(
-    requestId,
-    currentUserId,
-    nextStatus,
-    ownerField
-  ) {
+  function updateRequest(requestId, currentUserId, nextStatus, ownerField) {
     const rid = normalizeId(requestId);
     const actor = normalizeId(currentUserId);
 
     if (!rid || !actor) return failure("INVALID_ARGUMENT");
 
-    const loaded = readState();
-    if (!loaded.ok) return failure(loaded.code);
+    const result = readState();
+    if (!result.ok) return failure(result.code);
 
-    const state = loaded.state;
-    const request = state.friendRequests.find(
-      item => item.id === rid
-    );
+    const state = result.state;
+    const request = state.friendRequests.find(item => item.id === rid);
 
     if (!request) return failure("REQUEST_NOT_FOUND");
-
     if (request[ownerField] !== actor) {
       return failure("NOT_AUTHORIZED_FOR_REQUEST");
     }
-
     if (request.status !== "pending") {
       return failure("REQUEST_NOT_PENDING");
     }
 
-    if (nextStatus === "accepted") {
-      if (!findFriendship(
-        state,
-        request.fromUserId,
-        request.toUserId
-      )) {
-        const ids = [
-          request.fromUserId,
-          request.toUserId
-        ].sort();
+    if (nextStatus === "accepted" &&
+        !findFriendship(state, request.fromUserId, request.toUserId)) {
+      const ids = [request.fromUserId, request.toUserId].sort();
 
-        state.friendships.push({
-          id: makeId("friendship"),
-          userAId: ids[0],
-          userBId: ids[1],
-          createdAt: new Date().toISOString()
-        });
-      }
+      state.friendships.push({
+        id: makeId("friendship"),
+        userAId: ids[0],
+        userBId: ids[1],
+        createdAt: new Date().toISOString()
+      });
     }
 
     request.status = nextStatus;
     request.updatedAt = new Date().toISOString();
 
-    return commit(
+    return saveState(
       state,
       "FRIEND_REQUEST_" + nextStatus.toUpperCase(),
       request
     );
   }
 
-  function acceptFriendRequest(requestId, currentUserId) {
-    return updateRequest(
-      requestId, currentUserId, "accepted", "toUserId"
-    );
+  function acceptFriendRequest(id, userId) {
+    return updateRequest(id, userId, "accepted", "toUserId");
   }
 
-  function rejectFriendRequest(requestId, currentUserId) {
-    return updateRequest(
-      requestId, currentUserId, "rejected", "toUserId"
-    );
+  function rejectFriendRequest(id, userId) {
+    return updateRequest(id, userId, "rejected", "toUserId");
   }
 
-  function cancelFriendRequest(requestId, currentUserId) {
-    return updateRequest(
-      requestId, currentUserId, "cancelled", "fromUserId"
-    );
+  function cancelFriendRequest(id, userId) {
+    return updateRequest(id, userId, "cancelled", "fromUserId");
   }
-
-  /* FOLLOW SYSTEM */
 
   function followUser(followerId, followingId) {
     const follower = normalizeId(followerId);
@@ -390,10 +314,10 @@
     if (!follower || !following) return failure("INVALID_USER_ID");
     if (follower === following) return failure("SELF_FOLLOW_NOT_ALLOWED");
 
-    const loaded = readState();
-    if (!loaded.ok) return failure(loaded.code);
+    const result = readState();
+    if (!result.ok) return failure(result.code);
 
-    const state = loaded.state;
+    const state = result.state;
 
     if (state.follows.some(item =>
       item.followerId === follower &&
@@ -408,7 +332,7 @@
     };
 
     state.follows.push(relation);
-    return commit(state, "USER_FOLLOWED", relation);
+    return saveState(state, "USER_FOLLOWED", relation);
   }
 
   function unfollowUser(followerId, followingId) {
@@ -418,10 +342,10 @@
     if (!follower || !following) return failure("INVALID_USER_ID");
     if (follower === following) return failure("SELF_RELATION_NOT_ALLOWED");
 
-    const loaded = readState();
-    if (!loaded.ok) return failure(loaded.code);
+    const result = readState();
+    if (!result.ok) return failure(result.code);
 
-    const state = loaded.state;
+    const state = result.state;
     const index = state.follows.findIndex(item =>
       item.followerId === follower &&
       item.followingId === following
@@ -430,17 +354,17 @@
     if (index < 0) return failure("NOT_FOLLOWING");
 
     const removed = state.follows.splice(index, 1)[0];
-    return commit(state, "USER_UNFOLLOWED", removed);
+    return saveState(state, "USER_UNFOLLOWED", removed);
   }
 
   function getFollowing(userId) {
     const id = normalizeId(userId);
     if (!id) return [];
 
-    const loaded = readState();
-    if (!loaded.ok) return [];
+    const result = readState();
+    if (!result.ok) return [];
 
-    return loaded.state.follows
+    return result.state.follows
       .filter(item => item.followerId === id)
       .map(item => ({
         userId: item.followingId,
@@ -452,18 +376,16 @@
     const id = normalizeId(userId);
     if (!id) return [];
 
-    const loaded = readState();
-    if (!loaded.ok) return [];
+    const result = readState();
+    if (!result.ok) return [];
 
-    return loaded.state.follows
+    return result.state.follows
       .filter(item => item.followingId === id)
       .map(item => ({
         userId: item.followerId,
         createdAt: item.createdAt
       }));
   }
-
-  /* MUTUAL FRIENDS */
 
   function getMutualFriends(userId, otherUserId) {
     const first = normalizeId(userId);
@@ -475,12 +397,10 @@
       getFriends(first).map(item => item.userId)
     );
 
-    return getFriends(second).filter(
-      item => firstFriends.has(item.userId)
+    return getFriends(second).filter(item =>
+      firstFriends.has(item.userId)
     );
   }
-
-  /* COUNTS */
 
   function getCounts(userId) {
     const id = normalizeId(userId);
@@ -495,10 +415,10 @@
 
     if (!id) return empty;
 
-    const loaded = readState();
-    if (!loaded.ok) return empty;
+    const result = readState();
+    if (!result.ok) return empty;
 
-    const state = loaded.state;
+    const state = result.state;
 
     return {
       friends: state.friendships.filter(item =>
@@ -523,13 +443,12 @@
     };
   }
 
-  global.addEventListener?.("storage", event => {
-    if (event?.key !== STORAGE_KEY) return;
+  global.addEventListener("storage", event => {
+    if (event.key !== STORAGE_KEY) return;
 
-    global.dispatchEvent(new CustomEvent(
-      "ksk:social-change",
-      { detail: { type: "STORAGE_SYNC" } }
-    ));
+    global.dispatchEvent(new CustomEvent("ksk:social-change", {
+      detail: { type: "STORAGE_SYNC" }
+    }));
   });
 
   global.KSKSocialData = Object.freeze({
@@ -553,7 +472,9 @@
 })(window);
 
 
-/* FRIENDS PAGE */
+/* =========================================================
+   KSK FRIENDS PAGE
+========================================================= */
 
 (function (global) {
   "use strict";
@@ -570,16 +491,6 @@
     return LANG()?.getLanguage?.() === "en";
   }
 
-  function showToast(message, type = "info") {
-    const toast = TOAST();
-
-    if (typeof toast?.[type] === "function") {
-      toast[type](message);
-    } else {
-      toast?.show?.(message, type);
-    }
-  }
-
   function escapeHTML(value) {
     if (typeof global.KSKUtils?.escapeHTML === "function") {
       return global.KSKUtils.escapeHTML(value);
@@ -594,6 +505,16 @@
     })[char]);
   }
 
+  function toast(message, type = "info") {
+    const api = TOAST();
+
+    if (typeof api?.[type] === "function") {
+      api[type](message);
+    } else {
+      api?.show?.(message, type);
+    }
+  }
+
   function render(options = {}) {
     const english = typeof options.isEnglish === "boolean"
       ? options.isEnglish
@@ -601,6 +522,7 @@
 
     const social = SOCIAL();
     const userId = social?.getLocalUserId?.() || "";
+
     const counts = userId
       ? social.getCounts(userId)
       : {
@@ -611,7 +533,7 @@
           outgoingRequests: 0
         };
 
-    const legacyFriends = DATA()?.getFriends?.() || [];
+    const oldFriends = DATA()?.getFriends?.() || [];
 
     const stats = [
       {
@@ -628,7 +550,7 @@
       }
     ];
 
-    const legacyHTML = legacyFriends.length
+    const oldFriendsHTML = oldFriends.length
       ? `
         <section class="card" style="margin-top:16px;padding:16px">
           <h3>${english
@@ -636,11 +558,11 @@
             : "पहिले सुरक्षित गरिएका साथीहरू"}</h3>
           <p class="text-muted" style="font-size:13px">
             ${english
-              ? "These are old local entries, not verified friend connections."
-              : "यी पुराना स्थानीय रेकर्ड हुन्, प्रमाणित Friend Connection होइनन्।"}
+              ? "Old local entries — not verified connections."
+              : "पुराना स्थानीय रेकर्ड — प्रमाणित साथी सम्बन्ध होइनन्।"}
           </p>
           <div class="friends-list">
-            ${legacyFriends.map(friend => `
+            ${oldFriends.map(friend => `
               <article class="friend-card">
                 <strong>${escapeHTML(friend.name || "Friend")}</strong>
               </article>
@@ -653,10 +575,27 @@
     return `
       <section class="page-section ksk-social-page">
 
-        <div class="flex-between">
-          <h3 class="section-title">
+        <div style="
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:12px;
+          flex-wrap:wrap;
+          margin-bottom:14px;
+        ">
+          <h3 class="section-title" style="margin:0">
             ${english ? "Friends & Social" : "साथी तथा सामाजिक सम्बन्ध"}
           </h3>
+
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-add-friend-open
+            ${userId ? "" : "disabled"}
+          >
+            <span aria-hidden="true">＋</span>
+            ${english ? "Add Friend" : "साथी थप्नुहोस्"}
+          </button>
         </div>
 
         <div class="card" style="
@@ -739,8 +678,8 @@
             color:var(--text-muted);
           ">
             ${english
-              ? "Friend requests, follow actions and cross-device connections will be enabled after secure account and server setup."
-              : "Friend Request, Follow र अर्को डिभाइससँगको सम्बन्ध सुरक्षित Account तथा Server जडान भएपछि सक्रिय हुनेछन्।"}
+              ? "Friend requests and follow actions between different users require secure account and server setup."
+              : "फरक प्रयोगकर्ताबीच Friend Request र Follow चलाउन सुरक्षित Account तथा Server जोड्नुपर्छ।"}
           </p>
           <p style="
             margin:12px 0 0;
@@ -753,7 +692,7 @@
           </p>
         </div>
 
-        ${legacyHTML}
+        ${oldFriendsHTML}
 
       </section>
     `;
@@ -763,10 +702,8 @@
     const id = SOCIAL()?.getLocalUserId?.();
 
     if (!id) {
-      showToast(
-        isEnglish()
-          ? "Local ID could not be read."
-          : "स्थानीय ID पढ्न सकिएन।",
+      toast(
+        isEnglish() ? "Local ID is unavailable." : "स्थानीय ID उपलब्ध छैन।",
         "error"
       );
       return false;
@@ -782,9 +719,7 @@
         await global.navigator.clipboard.writeText(id);
         copied = true;
       }
-    } catch (error) {
-      copied = false;
-    }
+    } catch (error) {}
 
     if (!copied && global.document?.body) {
       const field = global.document.createElement("textarea");
@@ -797,14 +732,12 @@
 
       try {
         copied = Boolean(global.document.execCommand("copy"));
-      } catch (error) {
-        copied = false;
-      }
+      } catch (error) {}
 
       field.remove();
     }
 
-    showToast(
+    toast(
       copied
         ? (isEnglish() ? "Local ID copied." : "स्थानीय ID कपी भयो।")
         : (isEnglish() ? "Could not copy ID." : "ID कपी गर्न सकिएन।"),
@@ -816,11 +749,11 @@
 
   function openAddFriend() {
     const english = isEnglish();
-    const modalAPI = MODAL();
+    const modal = MODAL();
     const id = SOCIAL()?.getLocalUserId?.() || "";
 
-    if (typeof modalAPI?.openModal !== "function") {
-      showToast(
+    if (typeof modal?.openModal !== "function") {
+      toast(
         english
           ? "Social information is unavailable."
           : "सामाजिक जानकारी उपलब्ध छैन।",
@@ -829,16 +762,25 @@
       return false;
     }
 
-    const modal = modalAPI.openModal({
-      title: english ? "Your Social ID" : "तपाईंको Social ID",
+    return modal.openModal({
+      title: english ? "Add Friend" : "साथी थप्नुहोस्",
 
       content: `
         <div style="padding:4px 0">
           <p style="line-height:1.6">
             ${english
-              ? "Your local ID is ready. Friend requests between different users will work after server authentication is connected."
-              : "तपाईंको स्थानीय ID तयार छ। फरक प्रयोगकर्ताबीच Friend Request चलाउन Server Authentication जोड्नुपर्छ।"}
+              ? "Your local profile ID is ready. Copy it to keep it available. Sending a request to another person will be enabled after secure server authentication is connected."
+              : "तपाईंको स्थानीय Profile ID तयार छ। यसलाई सुरक्षित राख्न Copy गर्नुहोस्। अर्को व्यक्तिलाई वास्तविक Request पठाउने सुविधा सुरक्षित Server Authentication जोडेपछि सक्रिय हुन्छ।"}
           </p>
+
+          <label style="
+            display:block;
+            margin:14px 0 7px;
+            font-weight:600;
+          ">
+            ${english ? "Your Local ID" : "तपाईंको Local ID"}
+          </label>
+
           <code style="
             display:block;
             padding:12px;
@@ -846,6 +788,16 @@
             overflow-wrap:anywhere;
             background:var(--surface-2,rgba(127,127,127,.12));
           ">${escapeHTML(id || "Unavailable")}</code>
+
+          <p style="
+            margin-top:12px;
+            font-size:12px;
+            color:var(--text-muted);
+          ">
+            ${english
+              ? "LocalStorage does not deliver requests to another device."
+              : "LocalStorage ले अर्को मोबाइलमा Friend Request पुर्‍याउँदैन।"}
+          </p>
         </div>
       `,
 
@@ -856,6 +808,7 @@
           data-modal-close>
           ${english ? "Close" : "बन्द गर्नुहोस्"}
         </button>
+
         <button
           class="btn btn-primary"
           type="button"
@@ -864,8 +817,6 @@
         </button>
       `
     });
-
-    return Boolean(modal?.element);
   }
 
   function handleClick(event) {
