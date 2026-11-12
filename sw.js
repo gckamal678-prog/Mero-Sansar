@@ -1,12 +1,11 @@
-
 "use strict";
 
 /* =========================================================
    MERO SANSAR — SERVICE WORKER
-   Version: v34
+   Version: v35
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v34";
+const CACHE_NAME = "hamro-sansar-v35";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -65,9 +64,7 @@ const APP_FILES = [
   "./core/design-system.css"
 ];
 
-/* =========================================================
-   URL HELPERS
-========================================================= */
+/* URL HELPERS */
 
 function getAppURL(path) {
   return new URL(path, self.registration.scope);
@@ -82,9 +79,7 @@ function isAppURL(url) {
   );
 }
 
-/* =========================================================
-   ASSET DISCOVERY
-========================================================= */
+/* ASSET DISCOVERY */
 
 function discoverAssets(html) {
   const discovered = new Set();
@@ -120,9 +115,7 @@ function discoverAssets(html) {
   return Array.from(discovered);
 }
 
-/* =========================================================
-   FETCH AND CACHE
-========================================================= */
+/* FETCH AND CACHE */
 
 async function fetchAndCache(cache, url) {
   const response = await fetch(new Request(url, {
@@ -147,9 +140,7 @@ async function fetchAndCache(cache, url) {
   return response;
 }
 
-/* =========================================================
-   INSTALL
-========================================================= */
+/* INSTALL */
 
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
@@ -202,7 +193,7 @@ self.addEventListener("install", event => {
       }
 
       console.info(
-        "Mero Sansar v34 cached:",
+        "Mero Sansar v35 cached:",
         allFiles.size + 1,
         "files"
       );
@@ -214,9 +205,7 @@ self.addEventListener("install", event => {
   })());
 });
 
-/* =========================================================
-   ACTIVATE
-========================================================= */
+/* ACTIVATE */
 
 self.addEventListener("activate", event => {
   event.waitUntil((async () => {
@@ -236,14 +225,12 @@ self.addEventListener("activate", event => {
     await self.clients.claim();
 
     console.info(
-      "Mero Sansar Service Worker v34 activated."
+      "Mero Sansar Service Worker v35 activated."
     );
   })());
 });
 
-/* =========================================================
-   NAVIGATION REQUEST
-========================================================= */
+/* NAVIGATION REQUEST */
 
 async function handleNavigationRequest(request, cache) {
   try {
@@ -288,9 +275,7 @@ async function handleNavigationRequest(request, cache) {
   }
 }
 
-/* =========================================================
-   ASSET REQUEST
-========================================================= */
+/* ASSET REQUEST */
 
 async function handleAssetRequest(request, cache) {
   const cached = await cache.match(request);
@@ -327,9 +312,7 @@ async function handleAssetRequest(request, cache) {
   }
 }
 
-/* =========================================================
-   OFFLINE RESPONSE
-========================================================= */
+/* OFFLINE RESPONSE */
 
 function offlineResponse() {
   return new Response(
@@ -345,9 +328,7 @@ function offlineResponse() {
   );
 }
 
-/* =========================================================
-   FETCH
-========================================================= */
+/* FETCH */
 
 self.addEventListener("fetch", event => {
   const request = event.request;
@@ -379,9 +360,7 @@ self.addEventListener("fetch", event => {
   })());
 });
 
-/* =========================================================
-   UPDATE ACTIVATION
-========================================================= */
+/* UPDATE ACTIVATION */
 
 self.addEventListener("message", event => {
   if (event.data?.type === "SKIP_WAITING") {
