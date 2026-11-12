@@ -3,10 +3,10 @@
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v30
+   Version: v31
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v30";
+const CACHE_NAME = "hamro-sansar-v31";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -170,7 +170,7 @@ self.addEventListener("install", event => {
       }
 
       console.info(
-        "Hamro Sansar v30 cached:",
+        "Hamro Sansar v31 cached:",
         allFiles.size + 1,
         "files"
       );
@@ -201,7 +201,7 @@ self.addEventListener("activate", event => {
 
     await self.clients.claim();
 
-    console.info("Hamro Sansar Service Worker v30 activated.");
+    console.info("Hamro Sansar Service Worker v31 activated.");
   })());
 });
 
