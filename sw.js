@@ -3,10 +3,10 @@
 
 /* =========================================================
    HAMRO SANSAR — SERVICE WORKER
-   Version: v31
+   Version: v32
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v31";
+const CACHE_NAME = "hamro-sansar-v32";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -91,12 +91,17 @@ function discoverAssets(html) {
       !value ||
       value.startsWith("#") ||
       /^(data:|blob:|javascript:|mailto:|tel:)/i.test(value)
-    ) continue;
+    ) {
+      continue;
+    }
 
     try {
       const url = new URL(value, self.registration.scope);
 
-      if (isAppURL(url) && !url.pathname.endsWith("/")) {
+      if (
+        isAppURL(url) &&
+        !url.pathname.endsWith("/")
+      ) {
         discovered.add(url.href);
       }
     } catch (error) {
@@ -170,7 +175,7 @@ self.addEventListener("install", event => {
       }
 
       console.info(
-        "Hamro Sansar v31 cached:",
+        "Hamro Sansar v32 cached:",
         allFiles.size + 1,
         "files"
       );
@@ -201,7 +206,7 @@ self.addEventListener("activate", event => {
 
     await self.clients.claim();
 
-    console.info("Hamro Sansar Service Worker v31 activated.");
+    console.info("Hamro Sansar Service Worker v32 activated.");
   })());
 });
 
