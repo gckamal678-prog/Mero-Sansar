@@ -14,13 +14,15 @@
   const STORAGE_KEY = "ksk_social_state_v1";
   const VERSION = 1;
 
-  const emptyState = () => ({
-    version: VERSION,
-    localUserId: "",
-    friendRequests: [],
-    friendships: [],
-    follows: []
-  });
+  function emptyState() {
+    return {
+      version: VERSION,
+      localUserId: "",
+      friendRequests: [],
+      friendships: [],
+      follows: []
+    };
+  }
 
   function makeId(prefix) {
     try {
@@ -117,11 +119,13 @@
 
     state.localUserId = makeId("local-user");
 
-    return saveState(
+    const saved = saveState(
       state,
       "LOCAL_USER_ID_CREATED",
       { userId: state.localUserId }
-    ).ok ? state.localUserId : "";
+    );
+
+    return saved.ok ? state.localUserId : "";
   }
 
   function pairKey(a, b) {
@@ -206,13 +210,15 @@
       return failure("DUPLICATE_REQUEST");
     }
 
+    const now = new Date().toISOString();
+
     const request = {
       id: makeId("request"),
       fromUserId: from,
       toUserId: to,
       status: "pending",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: now,
+      updatedAt: now
     };
 
     state.friendRequests.push(request);
@@ -248,12 +254,18 @@
             ? item.fromUserId === id
             : item.fromUserId === id || item.toUserId === id;
 
-        return belongs && (status === "all" || item.status === status);
+        return belongs &&
+          (status === "all" || item.status === status);
       })
       .map(item => ({ ...item }));
   }
 
-  function updateRequest(requestId, currentUserId, nextStatus, ownerField) {
+  function updateRequest(
+    requestId,
+    currentUserId,
+    nextStatus,
+    ownerField
+  ) {
     const rid = normalizeId(requestId);
     const actor = normalizeId(currentUserId);
 
@@ -266,15 +278,19 @@
     const request = state.friendRequests.find(item => item.id === rid);
 
     if (!request) return failure("REQUEST_NOT_FOUND");
+
     if (request[ownerField] !== actor) {
       return failure("NOT_AUTHORIZED_FOR_REQUEST");
     }
+
     if (request.status !== "pending") {
       return failure("REQUEST_NOT_PENDING");
     }
 
-    if (nextStatus === "accepted" &&
-        !findFriendship(state, request.fromUserId, request.toUserId)) {
+    if (
+      nextStatus === "accepted" &&
+      !findFriendship(state, request.fromUserId, request.toUserId)
+    ) {
       const ids = [request.fromUserId, request.toUserId].sort();
 
       state.friendships.push({
@@ -322,7 +338,9 @@
     if (state.follows.some(item =>
       item.followerId === follower &&
       item.followingId === following
-    )) return failure("ALREADY_FOLLOWING");
+    )) {
+      return failure("ALREADY_FOLLOWING");
+    }
 
     const relation = {
       id: makeId("follow"),
@@ -332,6 +350,7 @@
     };
 
     state.follows.push(relation);
+
     return saveState(state, "USER_FOLLOWED", relation);
   }
 
@@ -354,6 +373,7 @@
     if (index < 0) return failure("NOT_FOLLOWING");
 
     const removed = state.follows.splice(index, 1)[0];
+
     return saveState(state, "USER_UNFOLLOWED", removed);
   }
 
@@ -473,7 +493,7 @@
 
 
 /* =========================================================
-   KSK FRIENDS PAGE
+   KSK FRIENDS PAGE — REQUESTS AND FOLLOW UI
 ========================================================= */
 
 (function (global) {
@@ -515,6 +535,231 @@
     }
   }
 
+  function refreshPage() {
+    if (typeof global.KSKApp?.refreshCurrentPage === "function") {
+      global.KSKApp.refreshCurrentPage();
+    }
+  }
+
+  function emptyMessage(message) {
+    return `
+      <p style="
+        margin:12px 0 0;
+        color:var(--text-muted);
+        font-size:13px;
+        text-align:center;
+      ">${message}</p>
+    `;
+  }
+
+  function actionButton(action, id, label, className = "btn-secondary") {
+    return `
+      <button
+        type="button"
+        class="btn ${className} btn-sm"
+        data-social-action="${escapeHTML(action)}"
+        data-social-id="${escapeHTML(id)}"
+      >${label}</button>
+    `;
+  }
+
+  function renderRequests(userId, english) {
+    const social = SOCIAL();
+
+    const incoming = social.getFriendRequests(userId, {
+      direction: "incoming",
+      status: "pending"
+    });
+
+    const outgoing = social.getFriendRequests(userId, {
+      direction: "outgoing",
+      status: "pending"
+    });
+
+    const incomingHTML = incoming.length
+      ? incoming.map(item => `
+          <article class="card" style="
+            padding:13px;
+            margin-top:9px;
+            display:flex;
+            flex-wrap:wrap;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+          ">
+            <div style="min-width:0;flex:1">
+              <strong>${english ? "Request from" : "Request पठाउने ID"}</strong>
+              <div style="font-size:12px;overflow-wrap:anywhere">
+                ${escapeHTML(item.fromUserId)}
+              </div>
+            </div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              ${actionButton(
+                "accept-request",
+                item.id,
+                english ? "Accept" : "स्वीकार",
+                "btn-primary"
+              )}
+              ${actionButton(
+                "reject-request",
+                item.id,
+                english ? "Reject" : "अस्वीकार",
+                "btn-secondary"
+              )}
+            </div>
+          </article>
+        `).join("")
+      : emptyMessage(
+          english
+            ? "No incoming requests."
+            : "अहिलेसम्म कुनै Incoming Request छैन।"
+        );
+
+    const outgoingHTML = outgoing.length
+      ? outgoing.map(item => `
+          <article class="card" style="
+            padding:13px;
+            margin-top:9px;
+            display:flex;
+            flex-wrap:wrap;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+          ">
+            <div style="min-width:0;flex:1">
+              <strong>${english ? "Request to" : "Request पठाइएको ID"}</strong>
+              <div style="font-size:12px;overflow-wrap:anywhere">
+                ${escapeHTML(item.toUserId)}
+              </div>
+              <small style="color:var(--text-muted)">
+                ${english ? "Pending — local only" : "प्रतीक्षामा — स्थानीय रेकर्ड मात्र"}
+              </small>
+            </div>
+            ${actionButton(
+              "cancel-request",
+              item.id,
+              english ? "Cancel" : "रद्द",
+              "btn-secondary"
+            )}
+          </article>
+        `).join("")
+      : emptyMessage(
+          english
+            ? "No outgoing requests."
+            : "अहिलेसम्म कुनै Outgoing Request छैन।"
+        );
+
+    return `
+      <section class="card" style="padding:16px;margin-top:14px">
+        <h3 style="margin:0">
+          ${english ? "Incoming Requests" : "आएका Request"}
+          <span style="font-size:13px">(${incoming.length})</span>
+        </h3>
+        ${incomingHTML}
+      </section>
+
+      <section class="card" style="padding:16px;margin-top:14px">
+        <h3 style="margin:0">
+          ${english ? "Outgoing Requests" : "पठाएका Request"}
+          <span style="font-size:13px">(${outgoing.length})</span>
+        </h3>
+        ${outgoingHTML}
+      </section>
+    `;
+  }
+
+  function renderRelations(userId, english) {
+    const social = SOCIAL();
+
+    const friends = social.getFriends(userId);
+    const followers = social.getFollowers(userId);
+    const following = social.getFollowing(userId);
+
+    const friendsHTML = friends.length
+      ? friends.map(item => `
+          <article class="card" style="
+            padding:12px;
+            margin-top:8px;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+          ">
+            <code style="overflow-wrap:anywhere">
+              ${escapeHTML(item.userId)}
+            </code>
+            ${actionButton(
+              "remove-friend",
+              item.userId,
+              english ? "Remove" : "हटाउनुहोस्",
+              "btn-secondary"
+            )}
+          </article>
+        `).join("")
+      : emptyMessage(english ? "No friends yet." : "अहिलेसम्म साथी छैनन्।");
+
+    const followersHTML = followers.length
+      ? followers.map(item => `
+          <div style="
+            padding:9px 0;
+            border-bottom:1px solid var(--border-color,rgba(127,127,127,.15));
+            overflow-wrap:anywhere;
+          ">
+            <code>${escapeHTML(item.userId)}</code>
+          </div>
+        `).join("")
+      : emptyMessage(english ? "No followers yet." : "अहिलेसम्म Followers छैनन्।");
+
+    const followingHTML = following.length
+      ? following.map(item => `
+          <article style="
+            padding:9px 0;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:8px;
+            border-bottom:1px solid var(--border-color,rgba(127,127,127,.15));
+          ">
+            <code style="overflow-wrap:anywhere">
+              ${escapeHTML(item.userId)}
+            </code>
+            ${actionButton(
+              "unfollow",
+              item.userId,
+              english ? "Unfollow" : "Unfollow",
+              "btn-secondary"
+            )}
+          </article>
+        `).join("")
+      : emptyMessage(english ? "Not following anyone." : "कसैलाई Follow गर्नुभएको छैन।");
+
+    return `
+      <section class="card" style="padding:16px;margin-top:14px">
+        <h3 style="margin:0">
+          ${english ? "Your Friends" : "तपाईंका साथीहरू"}
+          <span style="font-size:13px">(${friends.length})</span>
+        </h3>
+        ${friendsHTML}
+      </section>
+
+      <section class="card" style="padding:16px;margin-top:14px">
+        <h3 style="margin:0">
+          ${english ? "Followers" : "Followers"}
+          <span style="font-size:13px">(${followers.length})</span>
+        </h3>
+        ${followersHTML}
+      </section>
+
+      <section class="card" style="padding:16px;margin-top:14px">
+        <h3 style="margin:0">
+          ${english ? "Following" : "Following"}
+          <span style="font-size:13px">(${following.length})</span>
+        </h3>
+        ${followingHTML}
+      </section>
+    `;
+  }
+
   function render(options = {}) {
     const english = typeof options.isEnglish === "boolean"
       ? options.isEnglish
@@ -552,22 +797,20 @@
 
     const oldFriendsHTML = oldFriends.length
       ? `
-        <section class="card" style="margin-top:16px;padding:16px">
+        <section class="card" style="padding:16px;margin-top:14px">
           <h3>${english
             ? "Previously saved friends"
             : "पहिले सुरक्षित गरिएका साथीहरू"}</h3>
-          <p class="text-muted" style="font-size:13px">
+          <p style="font-size:13px;color:var(--text-muted)">
             ${english
-              ? "Old local entries — not verified connections."
-              : "पुराना स्थानीय रेकर्ड — प्रमाणित साथी सम्बन्ध होइनन्।"}
+              ? "Old local entries; not verified friend connections."
+              : "पुराना स्थानीय रेकर्ड हुन्, प्रमाणित साथी सम्बन्ध होइनन्।"}
           </p>
-          <div class="friends-list">
-            ${oldFriends.map(friend => `
-              <article class="friend-card">
-                <strong>${escapeHTML(friend.name || "Friend")}</strong>
-              </article>
-            `).join("")}
-          </div>
+          ${oldFriends.map(friend => `
+            <div style="padding:7px 0">
+              ${escapeHTML(friend.name || "Friend")}
+            </div>
+          `).join("")}
         </section>
       `
       : "";
@@ -579,7 +822,7 @@
           display:flex;
           align-items:center;
           justify-content:space-between;
-          gap:12px;
+          gap:10px;
           flex-wrap:wrap;
           margin-bottom:14px;
         ">
@@ -587,15 +830,25 @@
             ${english ? "Friends & Social" : "साथी तथा सामाजिक सम्बन्ध"}
           </h3>
 
-          <button
-            type="button"
-            class="btn btn-primary"
-            data-add-friend-open
-            ${userId ? "" : "disabled"}
-          >
-            <span aria-hidden="true">＋</span>
-            ${english ? "Add Friend" : "साथी थप्नुहोस्"}
-          </button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button
+              type="button"
+              class="btn btn-primary"
+              data-add-friend-open
+              ${userId ? "" : "disabled"}
+            >
+              ＋ ${english ? "Add Friend" : "साथी थप्नुहोस्"}
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-open-follow
+              ${userId ? "" : "disabled"}
+            >
+              ${english ? "Follow by ID" : "ID बाट Follow"}
+            </button>
+          </div>
         </div>
 
         <div class="card" style="
@@ -638,8 +891,8 @@
             line-height:1.6;
           ">
             ${english
-              ? "This ID is stored only in this browser. It is not a login account and cannot receive requests from other devices yet."
-              : "यो ID यही ब्राउजरमा मात्र सुरक्षित हुन्छ। यो Login Account होइन र अहिले अर्को मोबाइलबाट Request प्राप्त गर्न सक्दैन।"}
+              ? "This ID and all social records are stored only in this browser. Requests are not delivered to other devices."
+              : "यो ID र सामाजिक रेकर्ड यही ब्राउजरमा मात्र सुरक्षित हुन्छन्। Request अर्को मोबाइलमा पुग्दैन।"}
           </p>
         </div>
 
@@ -662,40 +915,110 @@
           `).join("")}
         </div>
 
-        <div class="card" style="
-          padding:18px;
-          margin-top:14px;
-          text-align:center;
-        ">
-          <div style="font-size:30px" aria-hidden="true">👥</div>
-          <h3 style="margin:10px 0 6px">
-            ${english ? "Friend connections" : "साथी सम्बन्ध"}
-          </h3>
+        <div class="card" style="padding:14px;margin-top:14px">
+          <strong>${english ? "Local prototype" : "स्थानीय Prototype"}</strong>
           <p style="
-            margin:0;
+            margin:6px 0 0;
             font-size:13px;
             line-height:1.6;
             color:var(--text-muted);
           ">
             ${english
-              ? "Friend requests and follow actions between different users require secure account and server setup."
-              : "फरक प्रयोगकर्ताबीच Friend Request र Follow चलाउन सुरक्षित Account तथा Server जोड्नुपर्छ।"}
-          </p>
-          <p style="
-            margin:12px 0 0;
-            font-size:12px;
-            color:var(--text-muted);
-          ">
-            ${english
-              ? "No sample users or fake connections are displayed."
-              : "यहाँ कुनै Demo User वा नक्कली सम्बन्ध देखाइएको छैन।"}
+              ? "You can record a request or follow relation using an ID. This does not verify that the ID belongs to a real account."
+              : "ID प्रयोग गरेर Request वा Follow को स्थानीय रेकर्ड बनाउन सकिन्छ। यसले त्यो ID वास्तविक Account को हो भनेर प्रमाणित गर्दैन।"}
           </p>
         </div>
 
+        ${renderRequests(userId, english)}
+        ${renderRelations(userId, english)}
         ${oldFriendsHTML}
 
       </section>
     `;
+  }
+
+  function closeModal() {
+    MODAL()?.closeModal?.();
+  }
+
+  function openIdModal(kind) {
+    const english = isEnglish();
+    const social = SOCIAL();
+    const localId = social?.getLocalUserId?.() || "";
+    const modal = MODAL();
+
+    if (!localId || typeof modal?.openModal !== "function") {
+      toast(
+        english ? "Social feature is unavailable." : "Social सुविधा उपलब्ध छैन।",
+        "error"
+      );
+      return false;
+    }
+
+    const isFollow = kind === "follow";
+
+    return modal.openModal({
+      title: isFollow
+        ? (english ? "Follow a User ID" : "User ID Follow गर्नुहोस्")
+        : (english ? "Add Friend" : "साथी थप्नुहोस्"),
+
+      content: `
+        <div>
+          <p style="line-height:1.6">
+            ${isFollow
+              ? (
+                  english
+                    ? "Enter the other profile ID to create a local follow record."
+                    : "स्थानीय Follow रेकर्ड बनाउन अर्को Profile ID राख्नुहोस्।"
+                )
+              : (
+                  english
+                    ? "Enter the other profile ID to create a local outgoing friend request."
+                    : "स्थानीय Outgoing Friend Request बनाउन अर्को Profile ID राख्नुहोस्।"
+                )}
+          </p>
+
+          <label for="ksk-social-target-id">
+            ${english ? "Other User ID" : "अर्को User ID"}
+          </label>
+
+          <input
+            id="ksk-social-target-id"
+            type="text"
+            maxlength="128"
+            autocomplete="off"
+            placeholder="${english ? "Paste user ID" : "User ID यहाँ राख्नुहोस्"}"
+          />
+
+          <p style="
+            margin-top:10px;
+            font-size:12px;
+            line-height:1.6;
+            color:var(--text-muted);
+          ">
+            ${english
+              ? "LocalStorage only: this record is not sent to another device or user."
+              : "LocalStorage मात्र: यो रेकर्ड अर्को मोबाइल वा प्रयोगकर्तालाई पठाइँदैन।"}
+          </p>
+        </div>
+      `,
+
+      footer: `
+        <button
+          class="btn btn-secondary"
+          type="button"
+          data-modal-close
+        >${english ? "Close" : "बन्द गर्नुहोस्"}</button>
+
+        <button
+          class="btn btn-primary"
+          type="button"
+          data-submit-social="${isFollow ? "follow" : "friend"}"
+        >${isFollow
+          ? (english ? "Follow" : "Follow")
+          : (english ? "Send Request" : "Request पठाउनुहोस्")}</button>
+      `
+    });
   }
 
   async function copyLocalId() {
@@ -747,76 +1070,61 @@
     return copied;
   }
 
-  function openAddFriend() {
+  function showActionResult(result, action) {
     const english = isEnglish();
-    const modal = MODAL();
-    const id = SOCIAL()?.getLocalUserId?.() || "";
 
-    if (typeof modal?.openModal !== "function") {
-      toast(
-        english
-          ? "Social information is unavailable."
-          : "सामाजिक जानकारी उपलब्ध छैन।",
-        "error"
-      );
-      return false;
+    if (result?.ok) {
+      const messages = {
+        friend: english
+          ? "Local friend request record created."
+          : "स्थानीय Friend Request रेकर्ड बन्यो।",
+        follow: english
+          ? "Local follow record created."
+          : "स्थानीय Follow रेकर्ड बन्यो।",
+        accept: english
+          ? "Request accepted locally."
+          : "स्थानीय Request स्वीकार भयो।",
+        reject: english
+          ? "Request rejected locally."
+          : "स्थानीय Request अस्वीकार भयो।",
+        cancel: english
+          ? "Request cancelled locally."
+          : "स्थानीय Request रद्द भयो।",
+        remove: english
+          ? "Friend removed locally."
+          : "स्थानीय साथी हटाइयो।",
+        unfollow: english
+          ? "Unfollowed locally."
+          : "स्थानीय Unfollow भयो।"
+      };
+
+      toast(messages[action] || "Updated.", "success");
+      closeModal();
+      refreshPage();
+      return;
     }
 
-    return modal.openModal({
-      title: english ? "Add Friend" : "साथी थप्नुहोस्",
+    const errors = {
+      INVALID_USER_ID: english ? "Enter a valid user ID." : "सही User ID राख्नुहोस्।",
+      SELF_REQUEST_NOT_ALLOWED: english ? "You cannot add yourself." : "आफैँलाई साथी बनाउन मिल्दैन।",
+      SELF_FOLLOW_NOT_ALLOWED: english ? "You cannot follow yourself." : "आफैँलाई Follow गर्न मिल्दैन।",
+      ALREADY_FRIENDS: english ? "Already friends." : "पहिल्यै साथी हुनुहुन्छ।",
+      DUPLICATE_REQUEST: english ? "A request is already pending." : "Request पहिल्यै पठाइएको छ।",
+      REQUEST_ALREADY_RECEIVED: english ? "This user has already requested you." : "यो User ले तपाईंलाई Request पठाइसकेको छ।",
+      ALREADY_FOLLOWING: english ? "Already following this ID." : "यो ID पहिल्यै Follow गरिएको छ।",
+      REQUEST_NOT_FOUND: english ? "Request not found." : "Request भेटिएन।",
+      REQUEST_NOT_PENDING: english ? "This request is no longer pending." : "यो Request अब Pending छैन।",
+      FRIENDSHIP_NOT_FOUND: english ? "Friend connection not found." : "साथी सम्बन्ध भेटिएन।",
+      NOT_FOLLOWING: english ? "You are not following this ID." : "यो ID Follow गरिएको छैन।",
+      STORAGE_UNAVAILABLE: english ? "Local storage is unavailable." : "LocalStorage उपलब्ध छैन।",
+      CORRUPT_DATA: english ? "Social data is invalid." : "Social डाटा बिग्रिएको छ।"
+    };
 
-      content: `
-        <div style="padding:4px 0">
-          <p style="line-height:1.6">
-            ${english
-              ? "Your local profile ID is ready. Copy it to keep it available. Sending a request to another person will be enabled after secure server authentication is connected."
-              : "तपाईंको स्थानीय Profile ID तयार छ। यसलाई सुरक्षित राख्न Copy गर्नुहोस्। अर्को व्यक्तिलाई वास्तविक Request पठाउने सुविधा सुरक्षित Server Authentication जोडेपछि सक्रिय हुन्छ।"}
-          </p>
-
-          <label style="
-            display:block;
-            margin:14px 0 7px;
-            font-weight:600;
-          ">
-            ${english ? "Your Local ID" : "तपाईंको Local ID"}
-          </label>
-
-          <code style="
-            display:block;
-            padding:12px;
-            border-radius:10px;
-            overflow-wrap:anywhere;
-            background:var(--surface-2,rgba(127,127,127,.12));
-          ">${escapeHTML(id || "Unavailable")}</code>
-
-          <p style="
-            margin-top:12px;
-            font-size:12px;
-            color:var(--text-muted);
-          ">
-            ${english
-              ? "LocalStorage does not deliver requests to another device."
-              : "LocalStorage ले अर्को मोबाइलमा Friend Request पुर्‍याउँदैन।"}
-          </p>
-        </div>
-      `,
-
-      footer: `
-        <button
-          class="btn btn-secondary"
-          type="button"
-          data-modal-close>
-          ${english ? "Close" : "बन्द गर्नुहोस्"}
-        </button>
-
-        <button
-          class="btn btn-primary"
-          type="button"
-          data-copy-social-id>
-          ${english ? "Copy ID" : "ID कपी"}
-        </button>
-      `
-    });
+    toast(
+      errors[result?.code] ||
+        (english ? "The action could not be completed." : "काम पूरा गर्न सकिएन।"),
+      "error"
+    );
   }
 
   function handleClick(event) {
@@ -826,7 +1134,89 @@
     if (target.closest("[data-copy-social-id]")) {
       event.preventDefault();
       copyLocalId();
+      return;
     }
+
+    if (target.closest("[data-open-follow]")) {
+      event.preventDefault();
+      openIdModal("follow");
+      return;
+    }
+
+    const submit = target.closest("[data-submit-social]");
+
+    if (submit) {
+      event.preventDefault();
+
+      const kind = submit.getAttribute("data-submit-social");
+      const input = global.document.getElementById(
+        "ksk-social-target-id"
+      );
+
+      const targetId = input?.value?.trim() || "";
+      const social = SOCIAL();
+      const localId = social?.getLocalUserId?.() || "";
+
+      if (!targetId) {
+        toast(
+          isEnglish() ? "Enter a user ID." : "User ID राख्नुहोस्।",
+          "warning"
+        );
+        input?.focus();
+        return;
+      }
+
+      const result = kind === "follow"
+        ? social.followUser(localId, targetId)
+        : social.sendFriendRequest(localId, targetId);
+
+      showActionResult(result, kind);
+      return;
+    }
+
+    const actionButton = target.closest("[data-social-action]");
+
+    if (!actionButton) return;
+
+    event.preventDefault();
+
+    const action = actionButton.getAttribute("data-social-action");
+    const id = actionButton.getAttribute("data-social-id");
+    const social = SOCIAL();
+    const localId = social?.getLocalUserId?.() || "";
+
+    let result;
+
+    switch (action) {
+      case "accept-request":
+        result = social.acceptFriendRequest(id, localId);
+        showActionResult(result, "accept");
+        break;
+
+      case "reject-request":
+        result = social.rejectFriendRequest(id, localId);
+        showActionResult(result, "reject");
+        break;
+
+      case "cancel-request":
+        result = social.cancelFriendRequest(id, localId);
+        showActionResult(result, "cancel");
+        break;
+
+      case "remove-friend":
+        result = social.removeFriend(localId, id);
+        showActionResult(result, "remove");
+        break;
+
+      case "unfollow":
+        result = social.unfollowUser(localId, id);
+        showActionResult(result, "unfollow");
+        break;
+    }
+  }
+
+  function openAddFriend() {
+    return openIdModal("friend");
   }
 
   global.document?.addEventListener("click", handleClick);
