@@ -17,8 +17,7 @@
  * COMMENTS      : KSKComments
  * TOAST         : KSKToast
  *
- * This file integrates the application.
- * Feature modules own their own interfaces.
+ * Authentication is required before starting the app.
  * =========================================================
  */
 
@@ -47,6 +46,8 @@
   const UI_ACTIONS = () => global.KSKUIActions;
 
   let initialized = false;
+  let authStarted = false;
+  let authListenerRegistered = false;
 
   const els = {};
 
@@ -300,7 +301,7 @@
   }
 
   /* =======================================================
-     INITIALIZATION
+     MAIN APPLICATION INITIALIZATION
   ======================================================= */
 
   function initialize() {
@@ -310,6 +311,13 @@
       console.error(
         "KSKAppEvents is unavailable. Check index.html script order."
       );
+
+      toast(
+        "एपका केही आवश्यक भाग तयार छैनन्। पृष्ठ पुनः खोल्नुहोस्।",
+        "error",
+        5000
+      );
+
       return;
     }
 
@@ -411,6 +419,96 @@
   }
 
   /* =======================================================
+     AUTHENTICATION
+  ======================================================= */
+
+  function showAuth(mode = "welcome") {
+    global.KSKAuthPage?.show?.(mode);
+  }
+
+  function completeAuthentication() {
+    global.KSKAuthPage?.hide?.();
+    initialize();
+  }
+
+  function handleAuthStateChange(event, session) {
+    if (session?.user) {
+      completeAuthentication();
+      return;
+    }
+
+    if (event === "SIGNED_OUT") {
+      global.KSKAuthPage?.show?.("welcome");
+    }
+  }
+
+  async function startWithAuthentication() {
+    if (authStarted) return;
+
+    authStarted = true;
+
+    try {
+      if (!global.KSKSupabase) {
+        throw new Error("AUTH_NOT_READY");
+      }
+
+      if (!global.KSKAuthPage) {
+        throw new Error("AUTH_PAGE_NOT_READY");
+      }
+
+      global.KSKAuthPage.initialize({
+        show: false
+      });
+
+      global.KSKSupabase.initialize();
+
+      /*
+       * Register the listener before checking the session.
+       * This prevents missing a login event during startup.
+       */
+
+      if (!authListenerRegistered) {
+        global.KSKSupabase.onAuthStateChange(
+          handleAuthStateChange
+        );
+
+        authListenerRegistered = true;
+      }
+
+      const session = await global.KSKSupabase.getSession();
+
+      if (session?.user) {
+        completeAuthentication();
+      } else {
+        showAuth("welcome");
+      }
+
+    } catch (error) {
+      console.error(
+        "Authentication startup failed:",
+        error
+      );
+
+      showAuth("welcome");
+
+      toast(
+        "प्रवेश प्रणालीमा जडान हुन सकेन। इन्टरनेट जाँच गरेर फेरि प्रयास गर्नुहोस्।",
+        "error",
+        6000
+      );
+    }
+  }
+
+  /* =======================================================
+     AUTHENTICATION EVENTS
+  ======================================================= */
+
+  global.addEventListener(
+    "ksk:auth-complete",
+    completeAuthentication
+  );
+
+  /* =======================================================
      PUBLIC APPLICATION API
   ======================================================= */
 
@@ -465,17 +563,17 @@
   });
 
   /* =======================================================
-     START APPLICATION
+     START APPLICATION AFTER AUTH CHECK
   ======================================================= */
 
   if (document.readyState === "loading") {
     document.addEventListener(
       "DOMContentLoaded",
-      initialize,
+      startWithAuthentication,
       { once: true }
     );
   } else {
-    initialize();
+    startWithAuthentication();
   }
 
 })(window);
