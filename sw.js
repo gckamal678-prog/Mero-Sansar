@@ -1,11 +1,12 @@
+
 "use strict";
 
 /* =========================================================
    MERO SANSAR — SERVICE WORKER
-   Version: v49
+   Version: v50
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v49";
+const CACHE_NAME = "hamro-sansar-v50";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -28,6 +29,7 @@ const APP_FILES = [
   "./core/media.js",
   "./core/modal.js",
   "./core/data.js",
+  "./core/content-safety.js",
   "./core/data-saver.js",
   "./core/navigation.js",
 
@@ -46,6 +48,7 @@ const APP_FILES = [
   "./components/post-card.js",
 
   "./pages/home.js",
+  "./pages/story-ui-upgrade.js",
   "./pages/friends.js",
   "./pages/messages.js",
   "./pages/profile.js",
@@ -174,20 +177,14 @@ self.addEventListener("install", event => {
               await fetchAndCache(cache, url);
               return null;
             } catch (error) {
-              return {
-                url,
-                reason: error
-              };
+              return { url, reason: error };
             }
           })
         )
       ).filter(Boolean);
 
       if (failures.length) {
-        console.error(
-          "Incomplete app shell:",
-          failures
-        );
+        console.error("Incomplete app shell:", failures);
 
         throw new Error(
           "PWA installation cancelled because " +
@@ -197,7 +194,7 @@ self.addEventListener("install", event => {
       }
 
       console.info(
-        "Mero Sansar v49 cached:",
+        "Mero Sansar v50 cached:",
         allFiles.size + 1,
         "files"
       );
@@ -228,9 +225,7 @@ self.addEventListener("activate", event => {
 
     await self.clients.claim();
 
-    console.info(
-      "Mero Sansar Service Worker v49 activated."
-    );
+    console.info("Mero Sansar Service Worker v50 activated.");
   })());
 });
 
@@ -246,15 +241,9 @@ async function handleNavigationRequest(request, cache) {
       response.status === 200
     ) {
       try {
-        await cache.put(
-          request,
-          response.clone()
-        );
+        await cache.put(request, response.clone());
       } catch (error) {
-        console.warn(
-          "Navigation cache update failed:",
-          error
-        );
+        console.warn("Navigation cache update failed:", error);
       }
     }
 
@@ -263,17 +252,13 @@ async function handleNavigationRequest(request, cache) {
   } catch (error) {
     const exactMatch = await cache.match(request);
 
-    if (exactMatch) {
-      return exactMatch;
-    }
+    if (exactMatch) return exactMatch;
 
     const indexMatch = await cache.match(
       getAppURL("./index.html").href
     );
 
-    if (indexMatch) {
-      return indexMatch;
-    }
+    if (indexMatch) return indexMatch;
 
     return offlineResponse();
   }
@@ -284,9 +269,7 @@ async function handleNavigationRequest(request, cache) {
 async function handleAssetRequest(request, cache) {
   const cached = await cache.match(request);
 
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
 
   try {
     const response = await fetch(request);
@@ -297,15 +280,9 @@ async function handleAssetRequest(request, cache) {
       response.status === 200
     ) {
       try {
-        await cache.put(
-          request,
-          response.clone()
-        );
+        await cache.put(request, response.clone());
       } catch (error) {
-        console.warn(
-          "Asset cache update failed:",
-          error
-        );
+        console.warn("Asset cache update failed:", error);
       }
     }
 
@@ -337,30 +314,20 @@ function offlineResponse() {
 self.addEventListener("fetch", event => {
   const request = event.request;
 
-  if (request.method !== "GET") {
-    return;
-  }
+  if (request.method !== "GET") return;
 
   const url = new URL(request.url);
 
-  if (!isAppURL(url)) {
-    return;
-  }
+  if (!isAppURL(url)) return;
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
 
     if (request.mode === "navigate") {
-      return handleNavigationRequest(
-        request,
-        cache
-      );
+      return handleNavigationRequest(request, cache);
     }
 
-    return handleAssetRequest(
-      request,
-      cache
-    );
+    return handleAssetRequest(request, cache);
   })());
 });
 
@@ -368,8 +335,6 @@ self.addEventListener("fetch", event => {
 
 self.addEventListener("message", event => {
   if (event.data?.type === "SKIP_WAITING") {
-    event.waitUntil(
-      self.skipWaiting()
-    );
+    event.waitUntil(self.skipWaiting());
   }
 });
