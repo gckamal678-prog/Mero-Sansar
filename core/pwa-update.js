@@ -2,14 +2,9 @@
 "use strict";
 
 /*
- * =========================================================
- * MERO SANSAR — PWA UPDATE v2
- *
- * Compact floating update notice
- * Expandable "What's new" release notes
- * Safe Service Worker activation
- * Reduced-motion and keyboard accessibility
- * =========================================================
+ * MERO SANSAR — INLINE PWA UPDATE
+ * Compact inline notice; never covers posts or images.
+ * Expandable release notes and safe update activation.
  */
 
 (function (global) {
@@ -19,96 +14,88 @@
 
   const doc = global.document;
   const nav = global.navigator;
-  const STYLE_ID = "ksk-pwa-update-v2-style";
-  const ACTIVATION_TIMEOUT = 30000;
+  const STYLE_ID = "ksk-pwa-inline-update-style";
 
   let registration = null;
   let pendingWorker = null;
   let initialized = false;
   let updateRequested = false;
-  let dismissedThisPage = false;
+  let dismissed = false;
   let activationTimer = null;
 
-  let banner = null;
-  let titleElement = null;
-  let messageElement = null;
-  let updateButton = null;
-  let laterButton = null;
-  let whatsNewButton = null;
-  let detailsPanel = null;
+  let banner;
+  let title;
+  let message;
+  let updateButton;
+  let laterButton;
+  let whatsNewButton;
+  let detailsPanel;
 
-  const monitoredWorkers = new WeakSet();
+  const monitored = new WeakSet();
 
-  const RELEASE_NOTES = {
+  const NOTES = {
     ne: [
-      ["प्रोफाइल सुधार", "प्रोफाइलका बटन, टुल्स र जानकारी व्यवस्थित।"],
-      ["साथी तथा Follow", "Friend Requests, Followers र Following व्यवस्थापन सुधार।"],
-      ["Story सुधार", "Story Viewer, Highlights र Story व्यवस्थापन सजिलो।"],
-      ["सुरक्षा र गोपनीयता", "Content Safety, Hide र Report विकल्प थप।"],
-      ["Drafts र Insights", "Drafts तथा आफ्ना गतिविधिको विवरण हेर्न सकिने।"],
-      ["Data Saver", "कम डेटा प्रयोग गर्न स्थानीय सेटिङ र Image Loading सुधार।"],
-      ["Messages र Notifications", "सन्देश तथा सूचनाका विकल्प व्यवस्थित।"],
-      ["मोबाइल अनुभव", "UI, Toast र PWA Update अनुभव सुधार।"]
+      ["प्रोफाइल", "प्रोफाइल बटन र टुल्स व्यवस्थित।"],
+      ["Friends", "Friend Requests, Followers र Following सुधार।"],
+      ["Stories", "Story Viewer, Highlights र Delete विकल्प सुधार।"],
+      ["Safety", "Content Safety, Hide र Report विकल्प।"],
+      ["Drafts र Insights", "Drafts र व्यक्तिगत गतिविधिको विवरण।"],
+      ["Data Saver", "Image Loading र Data Saver सुधार।"],
+      ["Messages", "सन्देश र Notifications विकल्प व्यवस्थित।"],
+      ["Mobile र PWA", "मोबाइल UI, Toast र Update अनुभव सुधार।"]
     ],
     en: [
-      ["Profile improvements", "Profile buttons, tools and information are better organized."],
-      ["Friends and Follow", "Friend requests, followers and following management improved."],
-      ["Stories", "Story viewer, highlights and story management improved."],
-      ["Safety and Privacy", "Content safety, hide and report options added."],
-      ["Drafts and Insights", "Drafts and personal activity insights available."],
-      ["Data Saver", "Local data-saving controls and image loading improvements."],
-      ["Messages and Notifications", "Messaging and notification options improved."],
-      ["Mobile experience", "UI, toast messages and PWA update experience improved."]
+      ["Profile", "Profile buttons and tools reorganized."],
+      ["Friends", "Friend requests, followers and following improved."],
+      ["Stories", "Story viewer, highlights and delete options improved."],
+      ["Safety", "Content safety, hide and report options."],
+      ["Drafts and Insights", "Drafts and personal activity insights."],
+      ["Data Saver", "Image loading and data saver improvements."],
+      ["Messages", "Messaging and notification options improved."],
+      ["Mobile and PWA", "Mobile UI, toast and update experience improved."]
     ]
   };
 
-  const TEXT = {
+  const LABELS = {
     ne: {
-      title: "✨ नयाँ अपडेट आएको छ",
+      title: "✨ नयाँ अपडेट उपलब्ध",
       message: "नयाँ सुधारहरू हेर्नुहोस्",
-      whatsNew: "के नयाँ छ?",
-      hideNotes: "विवरण बन्द",
+      notes: "के नयाँ छ?",
+      closeNotes: "विवरण बन्द",
+      notesTitle: "यस अपडेटमा भएका सुधारहरू",
       update: "अपडेट",
       later: "पछि",
       updating: "अपडेट हुँदैछ…",
       waiting: "पर्खनुहोस्",
-      updatingMessage: "कृपया केही क्षण पर्खनुहोस्।",
-      notesTitle: "यस संस्करणमा भएका सुधारहरू"
+      waitMessage: "कृपया केही क्षण पर्खनुहोस्।"
     },
     en: {
-      title: "✨ New update available",
+      title: "✨ Update available",
       message: "See what's improved",
-      whatsNew: "What's new?",
-      hideNotes: "Close details",
+      notes: "What's new?",
+      closeNotes: "Close details",
+      notesTitle: "Improvements in this update",
       update: "Update",
       later: "Later",
       updating: "Updating…",
       waiting: "Please wait",
-      updatingMessage: "Please wait a moment.",
-      notesTitle: "What's included in this update"
+      waitMessage: "Please wait a moment."
     }
   };
 
-  function getLanguage() {
+  function language() {
     try {
       return global.KSKLanguage?.getLanguage?.() === "en" ? "en" : "ne";
-    } catch (error) {
+    } catch (_) {
       return "ne";
     }
   }
 
-  function getText() {
-    return TEXT[getLanguage()];
+  function labels() {
+    return LABELS[language()];
   }
 
-  function createElement(tag, className, text) {
-    const element = doc.createElement(tag);
-    if (className) element.className = className;
-    if (text !== undefined) element.textContent = text;
-    return element;
-  }
-
-  function injectStyles() {
+  function addStyles() {
     if (doc.getElementById(STYLE_ID)) return;
 
     const style = doc.createElement("style");
@@ -116,85 +103,94 @@
 
     style.textContent = `
       #pwaUpdateBanner.pwa-update-banner {
-        position: fixed !important;
-        top: auto !important;
+        position: relative !important;
+        inset: auto !important;
+        left: auto !important;
         right: auto !important;
-        bottom: calc(var(--app-bottom-height, 78px) + 9px + env(safe-area-inset-bottom, 0px)) !important;
-        left: 50% !important;
-        transform: translateX(-50%) translateY(8px) !important;
-        z-index: 10020 !important;
+        top: auto !important;
+        bottom: auto !important;
+        transform: none !important;
+        z-index: 2 !important;
         box-sizing: border-box !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: stretch !important;
-        justify-content: flex-start !important;
+        justify-content: center !important;
         flex-wrap: nowrap !important;
         gap: 0 !important;
-        width: min(470px, calc(100% - 20px)) !important;
-        max-width: 470px !important;
+        width: calc(100% - 24px) !important;
+        max-width: 760px !important;
         min-height: 0 !important;
         height: auto !important;
-        max-height: min(62vh, 420px) !important;
-        overflow: hidden !important;
-        margin: 0 !important;
+        max-height: min(65vh, 420px) !important;
+        margin: 7px auto 9px !important;
         padding: 0 !important;
+        overflow: hidden !important;
         border: 1px solid var(--color-border, #334155) !important;
         border-left: 3px solid var(--color-primary, #3b82f6) !important;
-        border-radius: 14px !important;
+        border-radius: 11px !important;
         background: var(--color-surface, #111827) !important;
         color: var(--color-text, #f8fafc) !important;
-        box-shadow: 0 8px 28px rgba(0,0,0,.25) !important;
-        text-align: left !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-        transition:
-          opacity .2s ease,
-          transform .2s ease,
-          max-height .2s ease !important;
+        box-shadow: 0 2px 9px rgba(0,0,0,.12) !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        animation: kskPwaInlineIn .2s ease-out both !important;
       }
 
       #pwaUpdateBanner[hidden] {
         display: none !important;
       }
 
-      #pwaUpdateBanner.pwa-update-visible {
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        transform: translateX(-50%) translateY(0) !important;
+      #pwaUpdateBanner .pwa-update-content {
+        display: flex !important;
+        flex: 1 1 auto !important;
+        align-items: center !important;
+        min-width: 0 !important;
+        padding: 7px 9px 0 !important;
       }
 
-      #pwaUpdateBanner .pwa-update-content {
+      #pwaUpdateBanner .pwa-update-content strong {
+        display: block !important;
+        margin: 0 !important;
+        font-size: 11px !important;
+        font-weight: 800 !important;
+        line-height: 1.35 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+
+      #pwaUpdateBanner .pwa-update-content p {
         display: none !important;
       }
 
       #pwaUpdateBanner .pwa-update-actions {
         display: flex !important;
-        flex: 0 0 auto !important;
         flex-direction: row !important;
         align-items: center !important;
-        justify-content: space-between !important;
+        justify-content: flex-end !important;
         flex-wrap: nowrap !important;
-        gap: 7px !important;
+        gap: 5px !important;
         width: 100% !important;
-        min-height: 46px !important;
+        min-height: 37px !important;
         box-sizing: border-box !important;
-        padding: 6px 8px !important;
+        padding: 3px 7px 6px !important;
       }
 
       #pwaUpdateBanner .pwa-update-button {
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
-        box-sizing: border-box !important;
+        flex: 0 0 auto !important;
         min-width: 0 !important;
-        min-height: 31px !important;
-        height: 31px !important;
+        min-height: 27px !important;
+        height: 27px !important;
         margin: 0 !important;
-        padding: 5px 9px !important;
+        padding: 4px 8px !important;
         border: 1px solid var(--color-border, #334155) !important;
-        border-radius: 8px !important;
-        font-family: inherit !important;
-        font-size: 11px !important;
+        border-radius: 7px !important;
+        font: inherit !important;
+        font-size: 10px !important;
         font-weight: 750 !important;
         line-height: 1.2 !important;
         white-space: nowrap !important;
@@ -202,27 +198,22 @@
       }
 
       #pwaUpdateBanner .pwa-update-later {
-        order: 3 !important;
         background: var(--color-surface-secondary, #1e293b) !important;
         color: var(--color-text-secondary, #cbd5e1) !important;
       }
 
       #pwaUpdateBanner .pwa-update-now {
-        order: 2 !important;
         border-color: var(--color-primary, #3b82f6) !important;
         background: var(--color-primary, #3b82f6) !important;
         color: #fff !important;
       }
 
       #pwaUpdateBanner .pwa-update-whats-new {
-        order: 1 !important;
         margin-right: auto !important;
-        padding-inline: 5px !important;
         border: 0 !important;
+        padding-inline: 4px !important;
         background: transparent !important;
         color: var(--color-primary, #60a5fa) !important;
-        font-size: 11px !important;
-        font-weight: 750 !important;
       }
 
       #pwaUpdateBanner .pwa-update-details {
@@ -230,49 +221,44 @@
         max-height: 0 !important;
         overflow: hidden !important;
         border-top: 0 solid var(--color-border, #334155) !important;
-        transition:
-          max-height .24s ease,
-          border-width .2s ease !important;
+        transition: max-height .22s ease, border-width .2s ease !important;
       }
 
       #pwaUpdateBanner .pwa-update-details[data-open="true"] {
-        max-height: min(52vh, 330px) !important;
+        max-height: min(48vh, 290px) !important;
         overflow-y: auto !important;
         border-top-width: 1px !important;
       }
 
       #pwaUpdateBanner .pwa-update-details-inner {
-        padding: 10px 13px 12px !important;
+        padding: 9px 11px 11px !important;
       }
 
       #pwaUpdateBanner .pwa-update-details h3 {
-        margin: 0 0 9px !important;
-        color: var(--color-text, #f8fafc) !important;
-        font-size: 12px !important;
+        margin: 0 0 8px !important;
+        font-size: 11px !important;
         font-weight: 800 !important;
       }
 
       #pwaUpdateBanner .pwa-update-notes {
         display: grid !important;
         grid-template-columns: 1fr !important;
-        gap: 8px !important;
+        gap: 7px !important;
         margin: 0 !important;
         padding: 0 !important;
         list-style: none !important;
       }
 
       #pwaUpdateBanner .pwa-update-notes li {
-        display: block !important;
         margin: 0 !important;
-        padding: 0 0 0 10px !important;
+        padding-left: 9px !important;
         border-left: 2px solid var(--color-primary, #3b82f6) !important;
       }
 
       #pwaUpdateBanner .pwa-update-notes strong {
         display: block !important;
-        margin: 0 0 2px !important;
-        color: var(--color-text, #f8fafc) !important;
-        font-size: 11px !important;
+        margin-bottom: 2px !important;
+        font-size: 10px !important;
         font-weight: 800 !important;
       }
 
@@ -280,11 +266,11 @@
         display: block !important;
         color: var(--color-text-secondary, #cbd5e1) !important;
         font-size: 10px !important;
-        line-height: 1.45 !important;
+        line-height: 1.4 !important;
       }
 
       #pwaUpdateBanner button:focus-visible {
-        outline: 3px solid var(--color-primary, #3b82f6) !important;
+        outline: 2px solid var(--color-primary, #3b82f6) !important;
         outline-offset: 2px !important;
       }
 
@@ -293,32 +279,13 @@
         cursor: wait !important;
       }
 
-      @media (max-width: 420px) {
-        #pwaUpdateBanner.pwa-update-banner {
-          width: calc(100% - 16px) !important;
-          border-radius: 12px !important;
-        }
-
-        #pwaUpdateBanner .pwa-update-actions {
-          min-height: 43px !important;
-          gap: 5px !important;
-          padding: 5px 7px !important;
-        }
-
-        #pwaUpdateBanner .pwa-update-button {
-          min-height: 29px !important;
-          height: 29px !important;
-          padding: 4px 7px !important;
-          font-size: 10px !important;
-        }
-
-        #pwaUpdateBanner .pwa-update-whats-new {
-          font-size: 10px !important;
-        }
+      @keyframes kskPwaInlineIn {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        #pwaUpdateBanner.pwa-update-banner,
+        #pwaUpdateBanner,
         #pwaUpdateBanner * {
           animation: none !important;
           transition: none !important;
@@ -329,195 +296,174 @@
     doc.head.appendChild(style);
   }
 
-  function buildReleaseNotes() {
-    if (!banner || detailsPanel) return;
+  function buildNotes() {
+    if (detailsPanel) return;
 
-    const text = getText();
-    const notes = RELEASE_NOTES[getLanguage()];
+    const t = labels();
+    const list = doc.createElement("ul");
+    list.className = "pwa-update-notes";
 
-    detailsPanel = createElement("section", "pwa-update-details");
-    detailsPanel.id = "pwaUpdateDetails";
-    detailsPanel.dataset.open = "false";
-    detailsPanel.setAttribute("aria-label", text.notesTitle);
+    NOTES[language()].forEach(function (note) {
+      const item = doc.createElement("li");
+      const heading = doc.createElement("strong");
+      const description = doc.createElement("span");
 
-    const inner = createElement("div", "pwa-update-details-inner");
-    const heading = createElement("h3", "", text.notesTitle);
-    const list = createElement("ul", "pwa-update-notes");
+      heading.textContent = note[0];
+      description.textContent = note[1];
 
-    notes.forEach(function (note) {
-      const item = createElement("li");
-      const name = createElement("strong", "", note[0]);
-      const description = createElement("span", "", note[1]);
-
-      item.append(name, description);
+      item.append(heading, description);
       list.appendChild(item);
     });
 
+    detailsPanel = doc.createElement("section");
+    detailsPanel.className = "pwa-update-details";
+    detailsPanel.dataset.open = "false";
+    detailsPanel.id = "pwaUpdateDetails";
+    detailsPanel.setAttribute("aria-hidden", "true");
+
+    const inner = doc.createElement("div");
+    inner.className = "pwa-update-details-inner";
+
+    const heading = doc.createElement("h3");
+    heading.textContent = t.notesTitle;
+
     inner.append(heading, list);
     detailsPanel.appendChild(inner);
-
     banner.appendChild(detailsPanel);
 
-    whatsNewButton = createElement(
-      "button",
-      "pwa-update-button pwa-update-whats-new",
-      text.whatsNew
-    );
-
+    whatsNewButton = doc.createElement("button");
     whatsNewButton.type = "button";
+    whatsNewButton.className =
+      "pwa-update-button pwa-update-whats-new";
+    whatsNewButton.textContent = t.notes;
     whatsNewButton.setAttribute("aria-expanded", "false");
     whatsNewButton.setAttribute("aria-controls", "pwaUpdateDetails");
-    whatsNewButton.addEventListener("click", toggleReleaseNotes);
+    whatsNewButton.addEventListener("click", toggleNotes);
 
     const actions = banner.querySelector(".pwa-update-actions");
 
     if (actions) {
       actions.insertBefore(whatsNewButton, actions.firstChild);
+    } else {
+      console.error("PWA update actions container is missing.");
     }
   }
 
-  function toggleReleaseNotes() {
+  function toggleNotes() {
     if (!detailsPanel || !whatsNewButton) return;
 
     const open = detailsPanel.dataset.open !== "true";
-    const text = getText();
+    const t = labels();
 
-    detailsPanel.dataset.open = open ? "true" : "false";
-    detailsPanel.setAttribute("aria-hidden", open ? "false" : "true");
+    detailsPanel.dataset.open = String(open);
+    detailsPanel.setAttribute("aria-hidden", String(!open));
     whatsNewButton.setAttribute("aria-expanded", String(open));
-    whatsNewButton.textContent = open ? text.hideNotes : text.whatsNew;
+    whatsNewButton.textContent = open ? t.closeNotes : t.notes;
   }
 
-  function renderBanner() {
-    if (!banner || !titleElement || !messageElement || !updateButton || !laterButton) {
-      return;
-    }
+  function render() {
+    if (!title || !message || !updateButton || !laterButton) return;
 
-    const text = getText();
+    const t = labels();
 
-    if (updateRequested) {
-      titleElement.textContent = text.updating;
-      messageElement.textContent = text.updatingMessage;
-      updateButton.textContent = text.waiting;
-      updateButton.disabled = true;
-      laterButton.disabled = true;
+    title.textContent = updateRequested ? t.updating : t.title;
+    message.textContent = updateRequested ? t.waitMessage : t.message;
+    updateButton.textContent = updateRequested ? t.waiting : t.update;
 
-      if (whatsNewButton) whatsNewButton.disabled = true;
-
-      banner.setAttribute("aria-busy", "true");
-      return;
-    }
-
-    titleElement.textContent = text.title;
-    messageElement.textContent = text.message;
-    updateButton.textContent = text.update;
-    laterButton.textContent = text.later;
-
-    updateButton.disabled = false;
-    laterButton.disabled = false;
+    updateButton.disabled = updateRequested;
+    laterButton.disabled = updateRequested;
 
     if (whatsNewButton) {
-      whatsNewButton.disabled = false;
-      whatsNewButton.textContent = text.whatsNew;
+      whatsNewButton.disabled = updateRequested;
+      if (!updateRequested) {
+        whatsNewButton.textContent =
+          detailsPanel?.dataset.open === "true" ? t.closeNotes : t.notes;
+      }
     }
 
-    banner.removeAttribute("aria-busy");
+    if (detailsPanel) {
+      const heading = detailsPanel.querySelector("h3");
+      if (heading) heading.textContent = t.notesTitle;
+    }
+
+    banner?.setAttribute("aria-busy", String(updateRequested));
   }
 
-  function showBanner(worker) {
-    if (!worker || dismissedThisPage || updateRequested || !banner) return;
+  function show(worker) {
+    if (!worker || dismissed || updateRequested || !banner) return;
 
     pendingWorker = worker;
-
-    renderBanner();
-    buildReleaseNotes();
-
+    buildNotes();
+    render();
     banner.hidden = false;
-
-    global.requestAnimationFrame(function () {
-      banner.classList.add("pwa-update-visible");
-    });
   }
 
-  function hideBanner() {
-    if (!banner) return;
-
-    banner.classList.remove("pwa-update-visible");
-
-    global.setTimeout(function () {
-      if (!banner.classList.contains("pwa-update-visible")) {
-        banner.hidden = true;
-      }
-    }, 220);
+  function hide() {
+    if (banner) banner.hidden = true;
   }
 
-  function clearActivationTimer() {
+  function clearTimer() {
     if (activationTimer !== null) {
       global.clearTimeout(activationTimer);
       activationTimer = null;
     }
   }
 
-  function handleLater() {
+  function later() {
     if (updateRequested) return;
-
-    dismissedThisPage = true;
-    hideBanner();
+    dismissed = true;
+    hide();
   }
 
-  function handleActivationFailure(error) {
-    clearActivationTimer();
+  function activationFailed(error) {
+    clearTimer();
     updateRequested = false;
-    renderBanner();
+    render();
 
-    if (pendingWorker) showBanner(pendingWorker);
+    if (pendingWorker) show(pendingWorker);
 
     console.error("PWA update activation failed:", error);
   }
 
-  function handleUpdateNow() {
+  function updateNow() {
     if (updateRequested) return;
 
     const worker = registration?.waiting || pendingWorker;
 
     if (!worker || worker.state === "redundant") {
       pendingWorker = null;
-      hideBanner();
-      console.warn("No valid waiting Service Worker is available.");
+      hide();
       return;
     }
 
     updateRequested = true;
-    renderBanner();
-    clearActivationTimer();
+    render();
 
     activationTimer = global.setTimeout(function () {
-      handleActivationFailure(
-        new Error("Service Worker activation timeout.")
-      );
-    }, ACTIVATION_TIMEOUT);
+      activationFailed(new Error("Service Worker activation timed out."));
+    }, 30000);
 
     try {
       worker.postMessage({ type: "SKIP_WAITING" });
     } catch (error) {
-      handleActivationFailure(error);
+      activationFailed(error);
     }
   }
 
-  function handleControllerChange() {
+  function controllerChanged() {
     if (!updateRequested) return;
 
-    clearActivationTimer();
+    clearTimer();
     updateRequested = false;
     global.location.reload();
   }
 
-  function monitorWorker(worker) {
-    if (!worker || monitoredWorkers.has(worker)) return;
+  function monitor(worker) {
+    if (!worker || monitored.has(worker)) return;
 
-    monitoredWorkers.add(worker);
+    monitored.add(worker);
 
-    function checkWorkerState() {
+    function check() {
       if (worker.state === "redundant") {
         if (pendingWorker === worker) pendingWorker = null;
         return;
@@ -529,31 +475,31 @@
         try {
           worker.postMessage({ type: "SKIP_WAITING" });
         } catch (error) {
-          console.error("First Service Worker activation failed:", error);
+          console.error("Initial worker activation failed:", error);
         }
         return;
       }
 
-      showBanner(worker);
+      show(worker);
     }
 
-    worker.addEventListener("statechange", checkWorkerState);
-    checkWorkerState();
+    worker.addEventListener("statechange", check);
+    check();
   }
 
-  function setupRegistrationEvents() {
+  function setupRegistration() {
     if (!registration) return;
 
     if (registration.waiting && registration.active) {
-      showBanner(registration.waiting);
+      show(registration.waiting);
     }
 
     registration.addEventListener("updatefound", function () {
-      monitorWorker(registration.installing);
+      monitor(registration.installing);
     });
 
     if (registration.installing) {
-      monitorWorker(registration.installing);
+      monitor(registration.installing);
     }
 
     if (typeof registration.update === "function") {
@@ -563,17 +509,13 @@
     }
   }
 
-  function registerServiceWorker() {
-    if (!nav.serviceWorker || !global.isSecureContext) {
-      console.warn("Service Worker requires a supported secure context.");
-      return;
-    }
+  function registerWorker() {
+    if (!nav.serviceWorker || !global.isSecureContext) return;
 
     nav.serviceWorker.register("./sw.js", { scope: "./" })
       .then(function (result) {
         registration = result;
-        console.info("Mero Sansar Service Worker registered:", registration.scope);
-        setupRegistrationEvents();
+        setupRegistration();
       })
       .catch(function (error) {
         console.error("Service Worker registration failed:", error);
@@ -584,44 +526,50 @@
     if (initialized) return true;
 
     if (!("serviceWorker" in nav) || !global.isSecureContext) {
-      console.warn("Service Worker is not supported in this context.");
       return false;
     }
 
     banner = doc.getElementById("pwaUpdateBanner");
-    titleElement = doc.getElementById("pwaUpdateTitle");
-    messageElement = doc.getElementById("pwaUpdateMessage");
+    title = doc.getElementById("pwaUpdateTitle");
+    message = doc.getElementById("pwaUpdateMessage");
     updateButton = doc.getElementById("pwaUpdateNow");
     laterButton = doc.getElementById("pwaUpdateLater");
 
-    if (!banner || !titleElement || !messageElement || !updateButton || !laterButton) {
-      console.warn("PWA update banner elements are incomplete.");
+    if (!banner || !title || !message || !updateButton || !laterButton) {
+      console.error("PWA update HTML elements are missing.");
       return false;
     }
 
-    injectStyles();
+    addStyles();
 
-    /* Move it to the body end so page-flow styles cannot reserve space. */
-    if (banner.parentElement !== doc.body) {
-      doc.body.appendChild(banner);
+    /* Keep the banner in normal document flow below the app header. */
+    const header = doc.querySelector(".app-header");
+
+    if (header && banner.previousElementSibling !== header) {
+      header.insertAdjacentElement("afterend", banner);
     }
 
-    buildReleaseNotes();
+    buildNotes();
 
+    banner.setAttribute("role", "region");
     banner.setAttribute("aria-live", "polite");
     banner.setAttribute("aria-atomic", "false");
 
+    updateButton.addEventListener("click", updateNow);
+    laterButton.addEventListener("click", later);
+    global.addEventListener("ksk:language-change", render);
+
+    nav.serviceWorker.addEventListener(
+      "controllerchange",
+      controllerChanged
+    );
+
     initialized = true;
 
-    updateButton.addEventListener("click", handleUpdateNow);
-    laterButton.addEventListener("click", handleLater);
-    global.addEventListener("ksk:language-change", renderBanner);
-    nav.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-
     if (doc.readyState === "complete") {
-      registerServiceWorker();
+      registerWorker();
     } else {
-      global.addEventListener("load", registerServiceWorker, { once: true });
+      global.addEventListener("load", registerWorker, { once: true });
     }
 
     return true;
@@ -643,24 +591,18 @@
     },
 
     checkForUpdate() {
-      if (registration && typeof registration.update === "function") {
-        return registration.update();
-      }
-
-      return Promise.resolve(null);
+      return registration?.update?.() || Promise.resolve(null);
     },
 
     showUpdateBanner() {
       const worker = registration?.waiting || pendingWorker;
-
       if (!worker) return false;
-
-      showBanner(worker);
+      show(worker);
       return true;
     },
 
     getReleaseNotes() {
-      return RELEASE_NOTES[getLanguage()].map(function (item) {
+      return NOTES[language()].map(function (item) {
         return { title: item[0], description: item[1] };
       });
     }
