@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -13,10 +14,6 @@
 
   const VALID_TABS = new Set(["posts", "photos", "about"]);
   const STYLE_ID = "ksk-profile-upgrade-styles";
-
-  let onlineProfileCache = null;
-  let onlineProfileUserId = "";
-  let onlineProfileLoadingUserId = "";
 
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -450,7 +447,7 @@
       "<": "&lt;",
       ">": "&gt;",
       '"': "&quot;",
-      "'": "&#39;"
+      "'": "&#039;"
     })[char]);
   }
 
@@ -463,102 +460,7 @@
   }
 
   function getProfile() {
-    const localProfile = global.KSKData?.getProfile?.() || {};
-    const remote = onlineProfileCache;
-
-    if (!remote) return localProfile;
-
-    const fullName = [
-      remote.first_name || "",
-      remote.last_name || ""
-    ].join(" ").trim();
-
-    return {
-      ...localProfile,
-      id: localProfile.id || remote.id,
-      name: remote.name || fullName || localProfile.name || "",
-      location: remote.location ?? localProfile.location ?? "",
-      bio: remote.bio ?? localProfile.bio ?? "",
-      avatar: remote.avatar_url || localProfile.avatar || "",
-      cover: remote.cover_url || localProfile.cover || "",
-      joinedAt: remote.created_at || localProfile.joinedAt || ""
-    };
-  }
-
-  async function loadOnlineProfile() {
-    const api = global.KSKSupabase;
-
-    if (
-      !api ||
-      typeof api.getUser !== "function" ||
-      typeof api.getProfile !== "function"
-    ) {
-      return false;
-    }
-
-    let userId = "";
-
-    try {
-      const user = await api.getUser();
-      userId = String(user?.id || "");
-
-      if (!userId) return false;
-
-      if (onlineProfileUserId !== userId) {
-        onlineProfileCache = null;
-        onlineProfileUserId = "";
-      }
-
-      if (
-        onlineProfileUserId === userId ||
-        onlineProfileLoadingUserId === userId
-      ) {
-        return true;
-      }
-
-      onlineProfileLoadingUserId = userId;
-
-      const profile = await api.getProfile(userId);
-      const currentUser = await api.getUser();
-
-      if (String(currentUser?.id || "") !== userId) {
-        return false;
-      }
-
-      if (!profile || String(profile.id) !== userId) {
-        throw new Error("प्रोफाइल विवरण भेटिएन।");
-      }
-
-      onlineProfileCache = profile;
-      onlineProfileUserId = userId;
-
-      if (
-        global.KSKNavigation?.getCurrentPage?.() === "profile"
-      ) {
-        global.KSKNavigation.refreshCurrentPage();
-      }
-
-      return true;
-
-    } catch (error) {
-      console.warn(
-        "Online profile could not be loaded:",
-        error
-      );
-
-      return false;
-
-    } finally {
-      if (onlineProfileLoadingUserId === userId) {
-        onlineProfileLoadingUserId = "";
-      }
-    }
-  }
-
-  function shouldShowLocation() {
-    const settings = global.KSKSettings?.getSettings?.() || {};
-
-    return settings.profilePreferences?.showLocation !== false;
+    return global.KSKData?.getProfile?.() || {};
   }
 
   function getPosts() {
@@ -593,8 +495,7 @@
           <img
             src="${escapeHTML(avatar)}"
             alt="${escapeHTML(name)}"
-            loading="lazy"
-          >
+            loading="lazy">
         </div>
       `;
     }
@@ -654,14 +555,10 @@
 
   function renderPostList(posts, options = {}) {
     if (!posts.length) {
-      return `
-        <div class="empty-state">
-          ${t(
-            "तपाईंले अहिलेसम्म पोस्ट गर्नुभएको छैन।",
-            "You have not published any posts."
-          )}
-        </div>
-      `;
+      return `<div class="empty-state">${t(
+        "तपाईंले अहिलेसम्म पोस्ट गर्नुभएको छैन।",
+        "You have not published any posts."
+      )}</div>`;
     }
 
     if (typeof options.renderPost === "function") {
@@ -669,23 +566,20 @@
     }
 
     return posts.map(post => `
-      <div class="card">
-        <strong>${escapeHTML(post.author || "")}</strong>
-
+      <article class="card post-card">
+        <div class="post-header">
+          <strong>${escapeHTML(post.author || "")}</strong>
+        </div>
         ${post.text
-          ? `<p>${escapeHTML(post.text)}</p>`
-          : ""
-        }
-
-        <small>
-          ${escapeHTML(
-            global.KSKUtils?.formatDateTime?.(
-              post.createdAt,
-              isEnglish() ? "en" : "ne"
-            ) || ""
-          )}
-        </small>
-      </div>
+          ? `<div class="post-content">${escapeHTML(post.text)}</div>`
+          : ""}
+        <small class="post-time">${escapeHTML(
+          global.KSKUtils?.formatDateTime?.(
+            post.createdAt,
+            isEnglish() ? "en" : "ne"
+          ) || ""
+        )}</small>
+      </article>
     `).join("");
   }
 
@@ -703,13 +597,11 @@
      * Use the same source here so Profile and Friends
      * always display matching counts.
      */
-
     const social = global.KSKSocialData;
     let localCounts = null;
 
     try {
       const localUserId = social?.getLocalUserId?.();
-
       if (localUserId && typeof social?.getCounts === "function") {
         localCounts = social.getCounts(localUserId);
       }
@@ -730,7 +622,6 @@
 
     // Backward-compatible fallback for installations
     // where the social module is not available.
-
     const followers = Array.isArray(user?.followers)
       ? user.followers.length
       : safeCount(user?.followersCount ?? user?.followers);
@@ -787,7 +678,7 @@
           }
         : null,
 
-      user?.location && shouldShowLocation()
+      user?.location
         ? {
             icon: "📍",
             label: t("स्थान", "Location"),
@@ -813,22 +704,17 @@
     ].filter(Boolean);
 
     if (!rows.length) {
-      return `
-        <div class="empty-state">
-          ${t(
-            "अहिलेसम्म About जानकारी थपिएको छैन। Edit Profile बाट उपलब्ध जानकारी थप्न सक्नुहुन्छ।",
-            "No About information yet. Add available details from Edit Profile."
-          )}
-        </div>
-      `;
+      return `<div class="empty-state">${t(
+        "अहिलेसम्म About जानकारी थपिएको छैन। Edit Profile बाट उपलब्ध जानकारी थप्न सक्नुहुन्छ।",
+        "No About information yet. Add available details from Edit Profile."
+      )}</div>`;
     }
 
     return `
       <div class="profile-about-list">
         ${rows.map(row => `
           <div class="profile-about-item">
-            <span class="profile-about-icon">${row.icon}</span>
-
+            <span class="profile-about-icon" aria-hidden="true">${row.icon}</span>
             <div>
               <small>${escapeHTML(row.label)}</small>
               <p>${escapeHTML(row.value)}</p>
@@ -845,7 +731,6 @@
       : {};
 
     ensureStyles();
-    loadOnlineProfile();
 
     const user = options.user && typeof options.user === "object"
       ? options.user
@@ -864,190 +749,194 @@
       : "posts";
 
     return `
-      <section class="card profile-card" aria-label="${t(
-        "मेरो प्रोफाइल",
-        "My profile"
-      )}">
+      <section class="profile-section" data-profile-section>
 
-        <div class="profile-avatar">
-          ${renderAvatar(user)}
-        </div>
+        <section class="card profile-card" aria-label="${t(
+          "मेरो प्रोफाइल",
+          "My profile"
+        )}">
 
-        <h2>${escapeHTML(getDisplayName(user))}</h2>
+          <div class="profile-avatar">
+            ${renderAvatar(user)}
+          </div>
 
-        ${user.bio
-          ? `<p>${escapeHTML(user.bio)}</p>`
-          : ""
-        }
+          <h2>${escapeHTML(getDisplayName(user))}</h2>
 
-        ${user.location && shouldShowLocation()
-          ? `<p>📍 ${escapeHTML(user.location)}</p>`
-          : ""
-        }
+          ${user.bio
+            ? `<p>${escapeHTML(user.bio)}</p>`
+            : ""
+          }
+
+          ${user.location
+            ? `<p>📍 ${escapeHTML(user.location)}</p>`
+            : ""
+          }
+
+          <div
+            class="profile-stats"
+            aria-label="${t("प्रोफाइल तथ्याङ्क", "Profile statistics")}"
+          >
+            ${renderStat(
+              counts.followers,
+              t("फलोअर्स", "Followers")
+            )}
+
+            ${renderStat(
+              counts.following,
+              t("फलोइङ", "Following")
+            )}
+
+            ${renderStat(
+              counts.friends,
+              t("साथीहरू", "Friends")
+            )}
+          </div>
+
+          <div class="profile-post-count">
+            ${posts.length} ${t("पोस्ट", "Posts")}
+          </div>
+
+          <div class="profile-main-actions">
+            <button
+              class="profile-action-btn primary"
+              type="button"
+              data-edit-profile
+            >
+              <span aria-hidden="true">✏️</span>
+              <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
+            </button>
+
+            <button
+              class="profile-action-btn"
+              type="button"
+              data-open-settings
+            >
+              <span aria-hidden="true">⚙️</span>
+              <span>${t("सेटिङ", "Settings")}</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="card profile-tools-card">
+          <div class="profile-tools-heading">
+            <div>
+              <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
+              <p>${t(
+                "आफ्नो प्रोफाइल र सामग्री व्यवस्थापन गर्नुहोस्।",
+                "Manage your profile and saved content."
+              )}</p>
+            </div>
+          </div>
+
+          <div
+            class="profile-tool-grid"
+            data-profile-extras
+            aria-label="${t("प्रोफाइलका विकल्पहरू", "Profile options")}"
+          >
+            <button
+              type="button"
+              class="profile-tool-button"
+              data-copy-profile-link
+            >
+              🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
+            </button>
+
+            <button
+              type="button"
+              class="profile-tool-button"
+              data-page="saved"
+            >
+              🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
+            </button>
+          </div>
+
+          <p class="profile-tool-note">
+            ${t(
+              "QR, उपलब्धि र Insights का विकल्पहरू यही सेक्सनमा देखिन्छन्।",
+              "QR, achievements and insights appear in this section."
+            )}
+          </p>
+        </section>
 
         <div
-          class="profile-stats"
-          aria-label="${t("प्रोफाइल तथ्याङ्क", "Profile statistics")}"
+          class="profile-tabs"
+          role="tablist"
+          aria-label="${t("प्रोफाइल सामग्री", "Profile content")}"
         >
-          ${renderStat(
-            counts.followers,
-            t("फलोअर्स", "Followers")
-          )}
-
-          ${renderStat(
-            counts.following,
-            t("फलोइङ", "Following")
-          )}
-
-          ${renderStat(
-            counts.friends,
-            t("साथीहरू", "Friends")
-          )}
-        </div>
-
-        <div class="profile-post-count">
-          ${posts.length} ${t("पोस्ट", "Posts")}
-        </div>
-
-        <div class="profile-main-actions">
           <button
-            class="profile-action-btn primary"
+            class="profile-tab${activeTab === "posts" ? " is-active" : ""}"
             type="button"
-            data-edit-profile
+            role="tab"
+            aria-selected="${activeTab === "posts"}"
+            aria-controls="profile-posts-panel"
+            data-profile-tab="posts"
           >
-            <span aria-hidden="true">✏️</span>
-            <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
+            ${t("पोस्टहरू", "Posts")}
           </button>
 
           <button
-            class="profile-action-btn"
+            class="profile-tab${activeTab === "photos" ? " is-active" : ""}"
             type="button"
-            data-open-settings
+            role="tab"
+            aria-selected="${activeTab === "photos"}"
+            aria-controls="profile-photos-panel"
+            data-profile-tab="photos"
           >
-            <span aria-hidden="true">⚙️</span>
-            <span>${t("सेटिङ", "Settings")}</span>
+            ${t("फोटोहरू", "Photos")}
+          </button>
+
+          <button
+            class="profile-tab${activeTab === "about" ? " is-active" : ""}"
+            type="button"
+            role="tab"
+            aria-selected="${activeTab === "about"}"
+            aria-controls="profile-about-panel"
+            data-profile-tab="about"
+          >
+            ${t("परिचय", "About")}
           </button>
         </div>
-      </section>
 
-      <section class="card profile-tools-card">
-        <div class="profile-tools-heading">
-          <div>
-            <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
-            <p>${t(
-              "आफ्नो प्रोफाइल र सामग्री व्यवस्थापन गर्नुहोस्।",
-              "Manage your profile and saved content."
-            )}</p>
+        <div
+          class="profile-tab-panel${activeTab === "posts" ? "" : " hidden"}"
+          id="profile-posts-panel"
+          data-profile-panel="posts"
+          role="tabpanel"
+        >
+          <div class="profile-posts">
+            ${renderPostList(posts, options)}
           </div>
         </div>
 
         <div
-          class="profile-tool-grid"
-          data-profile-extras
-          aria-label="${t("प्रोफाइलका विकल्पहरू", "Profile options")}"
+          class="profile-tab-panel${activeTab === "photos" ? "" : " hidden"}"
+          id="profile-photos-panel"
+          data-profile-panel="photos"
+          role="tabpanel"
         >
-          <button
-            type="button"
-            class="profile-tool-button"
-            data-copy-profile-link
-          >
-            🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
-          </button>
-
-          <button
-            type="button"
-            class="profile-tool-button"
-            data-page="saved"
-          >
-            🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
-          </button>
+          <div class="profile-posts">
+            ${photos.length
+              ? renderPostList(photos, options)
+              : `<div class="empty-state">${t(
+                  "अहिलेसम्म कुनै फोटो पोस्ट गरिएको छैन।",
+                  "No photos shared yet."
+                )}</div>`
+            }
+          </div>
         </div>
 
-        <p class="profile-tool-note">
-          ${t(
-            "QR, उपलब्धि र Insights का विकल्पहरू यही सेक्सनमा देखिन्छन्।",
-            "QR, achievements and insights appear in this section."
-          )}
-        </p>
+        <div
+          class="profile-tab-panel${activeTab === "about" ? "" : " hidden"}"
+          id="profile-about-panel"
+          data-profile-panel="about"
+          role="tabpanel"
+        >
+          <div class="card profile-about-card">
+            ${renderAbout(user)}
+          </div>
+        </div>
+
       </section>
-
-      <div
-        class="profile-tabs"
-        role="tablist"
-        aria-label="${t("प्रोफाइल सामग्री", "Profile content")}"
-      >
-        <button
-          class="profile-tab${activeTab === "posts" ? " is-active" : ""}"
-          type="button"
-          role="tab"
-          aria-selected="${activeTab === "posts"}"
-          aria-controls="profile-posts-panel"
-          data-profile-tab="posts"
-        >
-          ${t("पोस्टहरू", "Posts")}
-        </button>
-
-        <button
-          class="profile-tab${activeTab === "photos" ? " is-active" : ""}"
-          type="button"
-          role="tab"
-          aria-selected="${activeTab === "photos"}"
-          aria-controls="profile-photos-panel"
-          data-profile-tab="photos"
-        >
-          ${t("फोटोहरू", "Photos")}
-        </button>
-
-        <button
-          class="profile-tab${activeTab === "about" ? " is-active" : ""}"
-          type="button"
-          role="tab"
-          aria-selected="${activeTab === "about"}"
-          aria-controls="profile-about-panel"
-          data-profile-tab="about"
-        >
-          ${t("परिचय", "About")}
-        </button>
-      </div>
-
-      <div
-        class="profile-tab-panel${activeTab === "posts" ? "" : " hidden"}"
-        id="profile-posts-panel"
-        data-profile-panel="posts"
-        role="tabpanel"
-      >
-        <div class="profile-posts">
-          ${renderPostList(posts, options)}
-        </div>
-      </div>
-
-      <div
-        class="profile-tab-panel${activeTab === "photos" ? "" : " hidden"}"
-        id="profile-photos-panel"
-        data-profile-panel="photos"
-        role="tabpanel"
-      >
-        <div class="profile-posts">
-          ${photos.length
-            ? renderPostList(photos, options)
-            : `<div class="empty-state">${t(
-                "अहिलेसम्म कुनै फोटो पोस्ट गरिएको छैन।",
-                "No photos shared yet."
-              )}</div>`
-          }
-        </div>
-      </div>
-
-      <div
-        class="profile-tab-panel${activeTab === "about" ? "" : " hidden"}"
-        id="profile-about-panel"
-        data-profile-panel="about"
-        role="tabpanel"
-      >
-        <div class="card profile-about-card">
-          ${renderAbout(user)}
-        </div>
-      </div>
     `;
   }
 
