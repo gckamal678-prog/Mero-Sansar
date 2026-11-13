@@ -5,14 +5,22 @@
  * =========================================================
  * MERO SANSAR — NOTIFICATIONS PAGE
  *
- * PHASE 6:
+ * PHASE 6 — NOTIFICATION SOUND UPGRADE
+ *
+ * FEATURES:
  * - Notification type classification
  * - Notification preferences
+ * - Five built-in notification tones
+ * - Enable / Disable notification sound
+ * - Select preferred notification tone
+ * - Test selected notification tone
+ * - Incoming notification sound
+ * - Duplicate sound prevention
  * - Group notifications
  * - All / Unread filtering
- * - Mark one notification as read (local UI state)
- * - Mark all as read (existing KSKData API)
- * - Clear read notifications (local hide, not deletion)
+ * - Mark one notification as read
+ * - Mark all as read
+ * - Clear read notifications (local hide)
  *
  * STORAGE:
  * - Existing notifications: KSKData
@@ -148,7 +156,10 @@
       filter: "all",
       readOverrides: {},
       dismissedIds: [],
-      expandedGroups: {}
+      expandedGroups: {},
+
+      soundEnabled: false,
+      soundTone: "soft_bell"
     };
   }
 
@@ -173,23 +184,41 @@
       return {
         ...defaults,
         ...saved,
+
         types: {
           ...defaults.types,
           ...(saved.types || {})
         },
+
         readOverrides:
           saved.readOverrides &&
           typeof saved.readOverrides === "object"
             ? saved.readOverrides
             : {},
+
         dismissedIds: Array.isArray(saved.dismissedIds)
           ? saved.dismissedIds.map(String)
           : [],
+
         expandedGroups:
           saved.expandedGroups &&
           typeof saved.expandedGroups === "object"
             ? saved.expandedGroups
-            : {}
+            : {},
+
+        soundEnabled: Boolean(saved.soundEnabled),
+
+        soundTone:
+          typeof saved.soundTone === "string" &&
+          [
+            "soft_bell",
+            "bright_chime",
+            "double_ping",
+            "marimba",
+            "gentle_alert"
+          ].includes(saved.soundTone)
+            ? saved.soundTone
+            : "soft_bell"
       };
 
     } catch (error) {
@@ -228,6 +257,235 @@
       return false;
     }
   }
+
+  /* =======================================================
+     NOTIFICATION SOUND — FIVE BUILT-IN TONES
+  ======================================================= */
+
+  let notificationAudioContext = null;
+
+  const playedNotificationIds = new Set();
+
+  const SOUND_TONES = Object.freeze({
+    soft_bell: {
+      ne: "हल्का घण्टी",
+      en: "Soft Bell",
+      notes: [
+        [660, 0.22],
+        [880, 0.38]
+      ],
+      wave: "sine"
+    },
+
+    bright_chime: {
+      ne: "चम्किलो धुन",
+      en: "Bright Chime",
+      notes: [
+        [784, 0.16],
+        [988, 0.20],
+        [1175, 0.34]
+      ],
+      wave: "triangle"
+    },
+
+    double_ping: {
+      ne: "दुई पटकको धुन",
+      en: "Double Ping",
+      notes: [
+        [880, 0.16],
+        [880, 0.16]
+      ],
+      wave: "sine"
+    },
+
+    marimba: {
+      ne: "मधुर धुन",
+      en: "Marimba",
+      notes: [
+        [523, 0.18],
+        [659, 0.18],
+        [784, 0.32]
+      ],
+      wave: "triangle"
+    },
+
+    gentle_alert: {
+      ne: "शान्त सूचना धुन",
+      en: "Gentle Alert",
+      notes: [
+        [587, 0.24],
+        [698, 0.30]
+      ],
+      wave: "sine"
+    }
+  });
+
+  function getAudioContext() {
+    const AudioContextClass =
+      global.AudioContext ||
+      global.webkitAudioContext;
+
+    if (!AudioContextClass) return null;
+
+    if (!notificationAudioContext) {
+      notificationAudioContext =
+        new AudioContextClass();
+    }
+
+    return notificationAudioContext;
+  }
+
+  async function unlockNotificationAudio() {
+    try {
+      const context = getAudioContext();
+
+      if (!context) return false;
+
+      if (context.state === "suspended") {
+        await context.resume();
+      }
+
+      return context.state === "running";
+
+    } catch (error) {
+      console.warn(
+        "Notification audio unavailable:",
+        error
+      );
+
+      return false;
+    }
+  }
+
+  async function playNotificationTone(toneName) {
+    const tone = SOUND_TONES[toneName];
+
+    if (!tone) return false;
+
+    try {
+      const context = getAudioContext();
+
+      if (!context) return false;
+
+      if (context.state === "suspended") {
+        await context.resume();
+      }
+
+      if (context.state !== "running") return false;
+
+      let startAt = context.currentTime + 0.04;
+
+      tone.notes.forEach(([frequency, duration]) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+
+        oscillator.type = tone.wave;
+
+        oscillator.frequency.setValueAtTime(
+          frequency,
+          startAt
+        );
+
+        gain.gain.setValueAtTime(
+          0.0001,
+          startAt
+        );
+
+        gain.gain.exponentialRampToValueAtTime(
+          0.13,
+          startAt + 0.025
+        );
+
+        gain.gain.exponentialRampToValueAtTime(
+          0.0001,
+          startAt + duration
+        );
+
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+
+        oscillator.start(startAt);
+        oscillator.stop(startAt + duration + 0.02);
+
+        startAt += duration + 0.09;
+      });
+
+      return true;
+
+    } catch (error) {
+      console.warn(
+        "Could not play notification tone:",
+        error
+      );
+
+      return false;
+    }
+  }
+
+  function playSelectedNotificationSound() {
+    const preferences = loadPreferences();
+
+    if (!preferences.soundEnabled) {
+      notify(
+        t(
+          "पहिले सूचना आवाज खोल्नुहोस्।",
+          "Turn notification sound on first."
+        ),
+        "info"
+      );
+
+      return;
+    }
+
+    playNotificationTone(
+      preferences.soundTone || "soft_bell"
+    ).then(success => {
+      if (!success) {
+        notify(
+          t(
+            "आवाज चलाउन सकिएन। फेरि प्रयास गर्नुहोस्।",
+            "Could not play sound. Please try again."
+          ),
+          "error"
+        );
+      }
+    });
+  }
+
+  function playIncomingNotificationSound(item) {
+    if (!item || !item.id) return;
+
+    const id = String(item.id);
+
+    if (playedNotificationIds.has(id)) return;
+
+    const preferences = loadPreferences();
+
+    if (
+      !preferences.enabled ||
+      !preferences.soundEnabled ||
+      preferences.types[classifyNotification(item)] === false ||
+      document.visibilityState !== "visible"
+    ) {
+      return;
+    }
+
+    playedNotificationIds.add(id);
+
+    if (playedNotificationIds.size > 100) {
+      const first = playedNotificationIds.values().next().value;
+
+      playedNotificationIds.delete(first);
+    }
+
+    playNotificationTone(
+      preferences.soundTone || "soft_bell"
+    );
+  }
+
+  /* =======================================================
+     DATA
+  ======================================================= */
 
   function getNotifications() {
     const list = DATA()?.getNotifications?.();
@@ -379,6 +637,7 @@
       .filter(item => !isDismissed(item, preferences))
       .filter(item => {
         const type = classifyNotification(item);
+
         return preferences.types[type] !== false;
       })
       .filter(item => {
@@ -397,6 +656,7 @@
       .filter(item => !isDismissed(item, preferences))
       .filter(item => {
         const type = classifyNotification(item);
+
         return preferences.types[type] !== false;
       });
 
@@ -602,6 +862,22 @@
         width: 18px;
         height: 18px;
         accent-color: var(--primary-color, #2563eb);
+      }
+
+      .ksk-notif-setting-row select {
+        min-width: 0;
+        max-width: 155px;
+        padding: 8px;
+        border-radius: 9px;
+        border: 1px solid var(--border-color, #ddd);
+        background: var(--card-bg, transparent);
+        color: inherit;
+        font: inherit;
+      }
+
+      .ksk-notif-setting-row select:disabled {
+        opacity: .45;
+        cursor: not-allowed;
       }
 
       .ksk-notif-list {
@@ -865,6 +1141,7 @@
 
   function renderGroup(group, preferences) {
     const items = group.items;
+
     const unreadCount = items.filter(
       item => !isRead(item, preferences)
     ).length;
@@ -932,6 +1209,10 @@
     `;
   }
 
+  /* =======================================================
+     SETTINGS RENDER
+  ======================================================= */
+
   function renderSettings(preferences) {
     const rows = Object.keys(TYPES).map(type => `
       <label class="ksk-notif-setting-row">
@@ -967,6 +1248,61 @@
             data-notification-master
             ${preferences.enabled ? "checked" : ""}>
         </label>
+
+        <h3>
+          ${escapeHTML(t("सूचना आवाज", "Notification Sound"))}
+        </h3>
+
+        <label class="ksk-notif-setting-row">
+          <span>
+            🔔 ${escapeHTML(t("सूचना आउँदा आवाज बजाउने", "Play sound for new notifications"))}
+          </span>
+
+          <input
+            type="checkbox"
+            data-notification-sound
+            ${preferences.soundEnabled ? "checked" : ""}>
+        </label>
+
+        <label class="ksk-notif-setting-row">
+          <span>
+            ${escapeHTML(t("आफ्नो मनपर्ने धुन", "Choose your tone"))}
+          </span>
+
+          <select
+            data-notification-tone
+            ${preferences.soundEnabled ? "" : "disabled"}
+            style="
+              max-width: 155px;
+              padding: 8px;
+              border-radius: 9px;
+              border: 1px solid var(--border-color, #ddd);
+              background: var(--card-bg, transparent);
+              color: inherit;
+            ">
+            ${Object.keys(SOUND_TONES).map(name => `
+              <option
+                value="${name}"
+                ${(preferences.soundTone || "soft_bell") === name ? "selected" : ""}>
+                ${escapeHTML(
+                  isEnglish()
+                    ? SOUND_TONES[name].en
+                    : SOUND_TONES[name].ne
+                )}
+              </option>
+            `).join("")}
+          </select>
+        </label>
+
+        <div style="padding: 8px 0 14px;">
+          <button
+            type="button"
+            class="ksk-notif-btn"
+            data-notification-action="test-sound"
+            ${preferences.soundEnabled ? "" : "disabled"}>
+            ▶ ${escapeHTML(t("धुन सुनेर जाँच गर्नुहोस्", "Test selected tone"))}
+          </button>
+        </div>
 
         <div id="kskNotificationTypeSettings"
           ${preferences.enabled ? "" : "hidden"}>
@@ -1117,6 +1453,7 @@
     if (!key) return false;
 
     const preferences = loadPreferences();
+
     preferences.readOverrides[key] = true;
 
     const saved = savePreferences(preferences);
@@ -1174,6 +1511,7 @@
     }
 
     const preferences = loadPreferences();
+
     preferences.readOverrides = {};
 
     savePreferences(preferences);
@@ -1265,6 +1603,7 @@
       if (value !== "all" && value !== "unread") return;
 
       const preferences = loadPreferences();
+
       preferences.filter = value;
 
       if (savePreferences(preferences)) refresh();
@@ -1283,6 +1622,10 @@
     switch (action) {
       case "settings":
         toggleSettings();
+        break;
+
+      case "test-sound":
+        playSelectedNotificationSound();
         break;
 
       case "mark-all":
@@ -1311,6 +1654,45 @@
   }
 
   function handleChange(event) {
+
+    const soundToggle = event.target?.closest?.(
+      "[data-notification-sound]"
+    );
+
+    if (soundToggle) {
+      const preferences = loadPreferences();
+
+      preferences.soundEnabled = Boolean(soundToggle.checked);
+
+      if (preferences.soundEnabled) {
+        unlockNotificationAudio();
+      }
+
+      savePreferences(preferences);
+      refresh();
+
+      return;
+    }
+
+    const soundSelector = event.target?.closest?.(
+      "[data-notification-tone]"
+    );
+
+    if (soundSelector) {
+      const tone = soundSelector.value;
+
+      if (!SOUND_TONES[tone]) return;
+
+      const preferences = loadPreferences();
+
+      preferences.soundTone = tone;
+
+      savePreferences(preferences);
+      refresh();
+
+      return;
+    }
+
     const master = event.target?.closest?.(
       "[data-notification-master]"
     );
@@ -1344,7 +1726,17 @@
     refresh();
   }
 
-  function handleExternalChange() {
+  function handleExternalChange(event) {
+    const detail = event?.detail;
+
+    if (
+      detail?.collection === "notifications" &&
+      detail?.action === "add" &&
+      detail?.item
+    ) {
+      playIncomingNotificationSound(detail.item);
+    }
+
     if (global.KSKApp?.getCurrentPage?.() === "notifications") {
       refresh();
     }
