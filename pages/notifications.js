@@ -1730,10 +1730,10 @@
     const detail = event?.detail;
 
     if (
-      detail?.collection === "notifications" &&
-      detail?.action === "add" &&
-      detail?.item
-    ) {
+  detail?.collection === "ksk_notifications_v1" &&
+  detail?.action === "add" &&
+  detail?.item
+) {
       playIncomingNotificationSound(detail.item);
     }
 
