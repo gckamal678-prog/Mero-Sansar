@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -1329,6 +1328,12 @@
       .ksf-page summary:focus-visible {
         outline:2px solid var(--ksf-primary);
         outline-offset:2px;
+      }
+
+      /* Social counts are already displayed on Profile.
+         Keep Friends page focused on relationship management. */
+      .ksf-page .ksf-stats {
+        display: none !important;
       }
 
       @media(max-width:390px) {
