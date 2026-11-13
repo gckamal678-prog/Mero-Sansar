@@ -3,10 +3,10 @@
 
 /* =========================================================
    MERO SANSAR — SERVICE WORKER
-   Version: v61
+   Version: v62
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v61";
+const CACHE_NAME = "hamro-sansar-v62";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -69,10 +69,22 @@ const APP_FILES = [
   "./core/network-status.js",
   "./core/pwa-update.js",
 
-  "./core/design-system.css",
+  /* Notification MP3 engine */
+  "./core/tone.js",
+
+  /* User-selected notification sounds */
+  "./sounds/Eagle.mp3",
+  "./sounds/Oh No.mp3",
+  "./sounds/Water Drop.mp3",
+  "./sounds/Whistle.mp3",
+  "./sounds/anthem.mp3",
+
+  "./core/design-system.css"
 ];
 
-/* URL HELPERS */
+/* =========================================================
+   URL HELPERS
+========================================================= */
 
 function getAppURL(path) {
   return new URL(path, self.registration.scope);
@@ -87,7 +99,9 @@ function isAppURL(url) {
   );
 }
 
-/* ASSET DISCOVERY */
+/* =========================================================
+   ASSET DISCOVERY
+========================================================= */
 
 function discoverAssets(html) {
   const discovered = new Set();
@@ -107,7 +121,10 @@ function discoverAssets(html) {
     }
 
     try {
-      const url = new URL(value, self.registration.scope);
+      const url = new URL(
+        value,
+        self.registration.scope
+      );
 
       if (
         isAppURL(url) &&
@@ -116,14 +133,20 @@ function discoverAssets(html) {
         discovered.add(url.href);
       }
     } catch (error) {
-      console.warn("Invalid asset reference:", value, error);
+      console.warn(
+        "Invalid asset reference:",
+        value,
+        error
+      );
     }
   }
 
   return Array.from(discovered);
 }
 
-/* FETCH AND CACHE */
+/* =========================================================
+   FETCH AND CACHE
+========================================================= */
 
 async function fetchAndCache(cache, url) {
   const response = await fetch(new Request(url, {
@@ -139,7 +162,10 @@ async function fetchAndCache(cache, url) {
   ) {
     throw new Error(
       "Required asset could not be cached: " +
-      url + " (HTTP " + response.status + ")"
+      url +
+      " (HTTP " +
+      response.status +
+      ")"
     );
   }
 
@@ -148,7 +174,9 @@ async function fetchAndCache(cache, url) {
   return response;
 }
 
-/* INSTALL */
+/* =========================================================
+   INSTALL
+========================================================= */
 
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
@@ -178,14 +206,20 @@ self.addEventListener("install", event => {
               await fetchAndCache(cache, url);
               return null;
             } catch (error) {
-              return { url, reason: error };
+              return {
+                url,
+                reason: error
+              };
             }
           })
         )
       ).filter(Boolean);
 
       if (failures.length) {
-        console.error("Incomplete app shell:", failures);
+        console.error(
+          "Incomplete app shell:",
+          failures
+        );
 
         throw new Error(
           "PWA installation cancelled because " +
@@ -195,7 +229,7 @@ self.addEventListener("install", event => {
       }
 
       console.info(
-        "Mero Sansar v61 cached:",
+        "Mero Sansar v62 cached:",
         allFiles.size + 1,
         "files"
       );
@@ -207,7 +241,9 @@ self.addEventListener("install", event => {
   })());
 });
 
-/* ACTIVATE */
+/* =========================================================
+   ACTIVATE
+========================================================= */
 
 self.addEventListener("activate", event => {
   event.waitUntil((async () => {
@@ -226,11 +262,15 @@ self.addEventListener("activate", event => {
 
     await self.clients.claim();
 
-    console.info("Mero Sansar Service Worker v61 activated.");
+    console.info(
+      "Mero Sansar Service Worker v62 activated."
+    );
   })());
 });
 
-/* NAVIGATION REQUEST */
+/* =========================================================
+   NAVIGATION REQUEST
+========================================================= */
 
 async function handleNavigationRequest(request, cache) {
   try {
@@ -242,9 +282,15 @@ async function handleNavigationRequest(request, cache) {
       response.status === 200
     ) {
       try {
-        await cache.put(request, response.clone());
+        await cache.put(
+          request,
+          response.clone()
+        );
       } catch (error) {
-        console.warn("Navigation cache update failed:", error);
+        console.warn(
+          "Navigation cache update failed:",
+          error
+        );
       }
     }
 
@@ -265,7 +311,9 @@ async function handleNavigationRequest(request, cache) {
   }
 }
 
-/* ASSET REQUEST */
+/* =========================================================
+   ASSET REQUEST
+========================================================= */
 
 async function handleAssetRequest(request, cache) {
   const cached = await cache.match(request);
@@ -281,9 +329,15 @@ async function handleAssetRequest(request, cache) {
       response.status === 200
     ) {
       try {
-        await cache.put(request, response.clone());
+        await cache.put(
+          request,
+          response.clone()
+        );
       } catch (error) {
-        console.warn("Asset cache update failed:", error);
+        console.warn(
+          "Asset cache update failed:",
+          error
+        );
       }
     }
 
@@ -294,7 +348,9 @@ async function handleAssetRequest(request, cache) {
   }
 }
 
-/* OFFLINE RESPONSE */
+/* =========================================================
+   OFFLINE RESPONSE
+========================================================= */
 
 function offlineResponse() {
   return new Response(
@@ -310,7 +366,9 @@ function offlineResponse() {
   );
 }
 
-/* FETCH */
+/* =========================================================
+   FETCH
+========================================================= */
 
 self.addEventListener("fetch", event => {
   const request = event.request;
@@ -325,17 +383,27 @@ self.addEventListener("fetch", event => {
     const cache = await caches.open(CACHE_NAME);
 
     if (request.mode === "navigate") {
-      return handleNavigationRequest(request, cache);
+      return handleNavigationRequest(
+        request,
+        cache
+      );
     }
 
-    return handleAssetRequest(request, cache);
+    return handleAssetRequest(
+      request,
+      cache
+    );
   })());
 });
 
-/* UPDATE ACTIVATION */
+/* =========================================================
+   UPDATE ACTIVATION
+========================================================= */
 
 self.addEventListener("message", event => {
   if (event.data?.type === "SKIP_WAITING") {
-    event.waitUntil(self.skipWaiting());
+    event.waitUntil(
+      self.skipWaiting()
+    );
   }
 });
