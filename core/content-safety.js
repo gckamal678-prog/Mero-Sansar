@@ -17,7 +17,6 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
   const BLOCKED_TERMS = [
-    // English explicit terms and common profanity
     "porn", "porno", "pornography", "xxx", "nude", "nudes", "nudity",
     "nsfw", "naked", "adult content", "explicit content", "sexual content",
     "sexually explicit", "erotic", "hentai", "blowjob", "handjob",
@@ -25,7 +24,6 @@
     "bitch", "bastard", "asshole", "dick", "pussy", "cunt",
     "whore", "slut", "rape", "rapist",
 
-    // Nepali script and common Roman Nepali spellings
     "अश्लील", "पोर्न", "नग्न", "यौन सामग्री", "बलात्कार",
     "मुजी", "मुजि", "माचिक्ने", "रन्डी", "रण्डी",
     "लाडो", "लाँडो", "गाँड", "गान्ड", "गान्डु", "गाण्डु",
@@ -38,6 +36,7 @@
 
   let observer = null;
   let queued = false;
+  const photoConfirmedForms = new WeakSet();
 
   const english = () => global.KSKLanguage?.getLanguage?.() === "en";
   const t = (ne, en) => english() ? en : ne;
@@ -275,35 +274,20 @@
 
     style.textContent = [
       '[data-ksk-safety-hidden="true"]{display:none!important}',
-
       '.ksk-content-safety-actions{display:flex;flex-wrap:wrap;gap:7px;padding:7px 12px 10px;border-top:1px solid var(--color-border,#ddd)}',
-
       '.post-card>.ksk-content-safety-actions{display:none!important}',
-
       '.post-menu-actions .ksk-content-safety-actions{display:flex!important;flex-direction:column;border:0;padding:4px 0;margin-top:8px}',
-
       '.post-menu-actions .ksk-content-safety-actions button{width:100%;text-align:left;min-height:42px;font-size:14px}',
-
       '.ksk-content-safety-actions button{min-height:32px;padding:5px 9px;border:1px solid var(--color-border,#ddd);border-radius:8px;background:var(--color-surface-secondary,#f5f5f5);color:var(--color-text-secondary,#555);font:inherit;font-size:11px;font-weight:600;cursor:pointer}',
-
       '.ksk-content-safety-actions .ksk-safety-report{color:#b54747;border-color:rgba(181,71,71,.35)}',
-
       '.ksk-comment-safety-actions{display:inline-flex;gap:6px;margin-left:7px}',
-
       '.ksk-comment-safety-actions button{border:0;background:transparent;color:var(--color-text-secondary,#777);font:inherit;font-size:11px;cursor:pointer}',
-
       '.ksk-content-safety-panel{max-height:65vh;overflow:auto}',
-
       '.ksk-content-safety-panel h3{margin:14px 0 7px;font-size:15px}',
-
       '.ksk-content-safety-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--color-border,#ddd)}',
-
       '.ksk-content-safety-row>div{min-width:0;overflow-wrap:anywhere}',
-
       '.ksk-content-safety-row small{display:block;margin-top:3px;color:var(--color-text-secondary,#777);font-size:11px}',
-
       '.ksk-content-safety-row button{flex:0 0 auto;min-height:32px;padding:6px 9px;border:1px solid var(--color-border,#ddd);border-radius:8px;background:var(--color-surface-secondary,#f5f5f5);color:inherit;font:inherit;font-size:12px;cursor:pointer}',
-
       '.ksk-content-safety-note{padding:10px;border-radius:9px;background:var(--color-surface-secondary,#f5f5f5);color:var(--color-text-secondary,#777);font-size:12px;line-height:1.55}'
     ].join("");
 
@@ -437,6 +421,100 @@
     }, 0);
   }
 
+  function openPhotoSafetyConfirmation(form, submitter) {
+    const modalAPI = global.KSKModal;
+
+    if (typeof modalAPI?.openModal !== "function") {
+      notify(
+        t(
+          "फोटो सुरक्षा पुष्टि विन्डो उपलब्ध छैन। फोटो प्रकाशित गर्नुअघि कृपया फेरि प्रयास गर्नुहोस्।",
+          "Photo safety confirmation is unavailable. Please try again before publishing."
+        ),
+        "error"
+      );
+      return false;
+    }
+
+    const modal = modalAPI.openModal({
+      title: t("फोटो सुरक्षा पुष्टि", "Confirm photo safety"),
+      content: `
+        <div class="ksk-photo-safety-confirm">
+          <p style="line-height:1.65;margin:0">
+            ${t(
+              "फोटोको स्वचालित जाँच हुँदैन। फोटो सुरक्षित, गैर-अश्लील र अरूको गोपनीयता उल्लङ्घन नगर्ने भएको पुष्टि गर्नुहोस्।",
+              "Photos are not automatically scanned. Confirm that this image is safe, non-explicit, and does not violate anyone's privacy."
+            )}
+          </p>
+        </div>
+      `,
+      footer: `
+        <button type="button" class="btn btn-secondary" data-modal-close>
+          ${t("रद्द गर्नुहोस्", "Cancel")}
+        </button>
+        <button type="button" class="btn btn-primary" data-confirm-photo-safety>
+          ${t("पुष्टि गरी प्रकाशित गर्नुहोस्", "Confirm and publish")}
+        </button>
+      `
+    });
+
+    const confirmButton = modal?.element?.querySelector?.(
+      "[data-confirm-photo-safety]"
+    );
+
+    if (!confirmButton) {
+      modalAPI.closeModal?.();
+      notify(
+        t("पुष्टि विन्डो खोल्न सकिएन।", "Could not open the confirmation window."),
+        "error"
+      );
+      return false;
+    }
+
+    confirmButton.addEventListener("click", () => {
+      if (confirmButton.disabled) return;
+
+      if (!form?.isConnected) {
+        modalAPI.closeModal?.();
+        return;
+      }
+
+      confirmButton.disabled = true;
+      modalAPI.closeModal?.();
+
+      photoConfirmedForms.add(form);
+
+      try {
+        if (typeof form.requestSubmit === "function") {
+          if (submitter && submitter.form === form) {
+            form.requestSubmit(submitter);
+          } else {
+            form.requestSubmit();
+          }
+        } else {
+          photoConfirmedForms.delete(form);
+          notify(
+            t(
+              "यो ब्राउजरले सुरक्षित रूपमा फारम पुनः पठाउन सकेन।",
+              "This browser could not safely resubmit the form."
+            ),
+            "error"
+          );
+        }
+      } catch (error) {
+        photoConfirmedForms.delete(form);
+        notify(
+          t(
+            "पोस्ट प्रकाशित गर्न सकिएन। कृपया फेरि प्रयास गर्नुहोस्।",
+            "The post could not be submitted. Please try again."
+          ),
+          "error"
+        );
+      }
+    });
+
+    return true;
+  }
+
   function handleSubmit(event) {
     const form = event.target;
 
@@ -474,12 +552,15 @@
     if (composer) {
       const file = $("input[type=file]", form)?.files?.[0];
 
-      if (file && !global.confirm(t(
-        "फोटो स्वतः जाँच हुँदैन। फोटो सुरक्षित, गैर-अश्लील र अरूको गोपनीयता उल्लङ्घन नगर्ने भएको पुष्टि गर्नुहोस्। जारी राख्ने?",
-        "Photos are not automatically scanned. Confirm this image is safe, non-explicit, and does not violate anyone's privacy before publishing."
-      ))) {
+      if (file && !photoConfirmedForms.has(form)) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        openPhotoSafetyConfirmation(form, event.submitter || null);
+        return;
+      }
+
+      if (photoConfirmedForms.has(form)) {
+        photoConfirmedForms.delete(form);
       }
     }
   }
