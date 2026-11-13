@@ -4,10 +4,10 @@
 /*
  * MERO SANSAR — ACCESSIBILITY PATCH
  *
- * - Accessible custom Settings Reset confirmation
+ * - Custom Settings Reset confirmation
  * - Keyboard focus trap for Profile Extras dialogs
  * - Restore focus after dialog close
- * - No changes to core/data.js or existing feature APIs
+ * - Reset dialog state on close button and Escape
  */
 
 (function (global) {
@@ -43,18 +43,14 @@
       container.querySelectorAll(
         'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       )
-    ).filter(element => {
-      return (
-        !element.hidden &&
-        element.getAttribute("aria-hidden") !== "true" &&
-        element.getClientRects().length > 0
-      );
-    });
+    ).filter(element =>
+      !element.hidden &&
+      element.getAttribute("aria-hidden") !== "true" &&
+      element.getClientRects().length > 0
+    );
   }
 
-  /* =====================================================
-     SETTINGS RESET — CUSTOM CONFIRMATION
-  ===================================================== */
+  /* SETTINGS RESET */
 
   function openResetConfirmation() {
     if (resetDialogOpen || !global.KSKModal?.openModal) {
@@ -71,7 +67,6 @@
             "All settings will return to their defaults. Your current settings cannot be restored afterward."
           )}
         </p>
-
         <p>
           <strong>
             ${t("के तपाईं निश्चित हुनुहुन्छ?", "Are you sure?")}
@@ -82,19 +77,15 @@
 
     const footer = `
       <div class="ksk-accessibility-actions">
-        <button
-          type="button"
+        <button type="button"
           class="btn btn-secondary"
-          data-ksk-reset-cancel
-        >
+          data-ksk-reset-cancel>
           ${t("रद्द गर्नुहोस्", "Cancel")}
         </button>
 
-        <button
-          type="button"
+        <button type="button"
           class="btn btn-primary"
-          data-ksk-reset-confirm
-        >
+          data-ksk-reset-confirm>
           ${t("सेटिङ Reset गर्नुहोस्", "Reset settings")}
         </button>
       </div>
@@ -125,10 +116,7 @@
       closeResetConfirmation();
 
       notify(
-        t(
-          "सेटिङ Reset गर्न सकिएन।",
-          "Could not reset settings."
-        ),
+        t("सेटिङ Reset गर्न सकिएन।", "Could not reset settings."),
         "error"
       );
 
@@ -147,7 +135,6 @@
         ),
         "error"
       );
-
       return;
     }
 
@@ -162,9 +149,7 @@
     );
   }
 
-  /* =====================================================
-     PROFILE EXTRAS — FOCUS RESTORATION
-  ===================================================== */
+  /* PROFILE EXTRAS FOCUS */
 
   function getProfileDialog() {
     return $(".ksk-profile-extra-overlay");
@@ -172,14 +157,15 @@
 
   function handleProfileFocus(event) {
     const dialog = getProfileDialog();
-
     if (!dialog) return;
 
     const focusable = getFocusable(dialog);
 
     if (!focusable.length) {
       event.preventDefault();
-      dialog.querySelector(".ksk-profile-extra-dialog")?.focus();
+      dialog.querySelector(
+        ".ksk-profile-extra-dialog"
+      )?.focus();
       return;
     }
 
@@ -211,11 +197,13 @@
   }
 
   function handleKeydown(event) {
-    const dialog = getProfileDialog();
+    if (resetDialogOpen && event.key === "Escape") {
+      // Modal's own keyboard handler will close it.
+      resetDialogOpen = false;
+      return;
+    }
 
-    if (!dialog) return;
-
-    if (event.key === "Tab") {
+    if (event.key === "Tab" && getProfileDialog()) {
       handleProfileFocus(event);
     }
   }
@@ -263,14 +251,21 @@
     });
   }
 
-  /* =====================================================
-     CLICK HANDLING
-  ===================================================== */
+  /* CLICK HANDLING */
 
   function handleClick(event) {
     const target = event.target;
-
     if (!target?.closest) return;
+
+    // Allow the modal's own close handler to run,
+    // but clear our reset state first.
+    if (
+      resetDialogOpen &&
+      target.closest("[data-modal-close]")
+    ) {
+      resetDialogOpen = false;
+      return;
+    }
 
     const resetButton = target.closest(
       '[data-settings-action="reset"]'
@@ -297,9 +292,7 @@
     }
   }
 
-  /* =====================================================
-     STYLES
-  ===================================================== */
+  /* STYLES */
 
   function ensureStyles() {
     if ($("#ksk-accessibility-style")) return;
@@ -366,9 +359,7 @@
       .appendChild(style);
   }
 
-  /* =====================================================
-     INITIALIZE
-  ===================================================== */
+  /* INITIALIZE */
 
   function initialize() {
     if (!document.body) return false;
