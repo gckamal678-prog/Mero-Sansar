@@ -10,9 +10,15 @@
  * - Notification preferences
  * - Group notifications
  * - All / Unread filtering
- * - Mark one notification as read (local UI state)
- * - Mark all as read (existing KSKData API)
- * - Clear read notifications (local hide, not deletion)
+ * - Mark one notification as read
+ * - Mark all as read
+ * - Clear read notifications (local hide)
+ *
+ * SOUND:
+ * - Eight built-in tones
+ * - Custom MP3 tones from KSKTone
+ * - Immediate preview on selection
+ * - Optional automatic sound for new notifications
  *
  * STORAGE:
  * - Existing notifications: KSKData
@@ -31,6 +37,7 @@
   const DATA = () => global.KSKData || null;
   const LANG = () => global.KSKLanguage || null;
   const TOAST = () => global.KSKToast || null;
+  const TONE = () => global.KSKTone || null;
 
   const STORAGE_KEY = "ksk_notifications_ui_v1";
   const VERSION = 1;
@@ -134,6 +141,10 @@
     }
   }
 
+  /* =======================================================
+     PREFERENCES
+  ======================================================= */
+
   function makeDefaultPreferences() {
     const types = {};
 
@@ -148,8 +159,39 @@
       filter: "all",
       readOverrides: {},
       dismissedIds: [],
-      expandedGroups: {}
+      expandedGroups: {},
+      soundEnabled: false,
+      soundTone: "whistle"
     };
+  }
+
+  function isValidTone(id) {
+    return Boolean(
+      TONE()?.getTone?.(String(id || ""))
+    );
+  }
+
+  function getToneOptions() {
+    const tones = TONE()?.getTones?.();
+
+    if (Array.isArray(tones) && tones.length) {
+      return tones;
+    }
+
+    return [
+      { id: "whistle", ne: "सिटी", en: "Whistle" },
+      { id: "i_love_you", ne: "आइ लभ यू", en: "I Love You" },
+      { id: "lu_lu_lu", ne: "लु लु लु", en: "Lu Lu Lu" },
+      { id: "wolf", ne: "ब्वाँसोको आवाज", en: "Wolf Howl" },
+      { id: "eagle", ne: "चीलको आवाज", en: "Eagle Call" },
+      { id: "purge", ne: "साइरन", en: "The Purge Siren" },
+      { id: "birds", ne: "चराचुरुङ्गी", en: "Birds" },
+      {
+        id: "mechanical_click",
+        ne: "मेकानिकल क्लिक",
+        en: "Mechanical Click"
+      }
+    ];
   }
 
   function loadPreferences() {
@@ -173,23 +215,33 @@
       return {
         ...defaults,
         ...saved,
+
         types: {
           ...defaults.types,
           ...(saved.types || {})
         },
+
         readOverrides:
           saved.readOverrides &&
           typeof saved.readOverrides === "object"
             ? saved.readOverrides
             : {},
+
         dismissedIds: Array.isArray(saved.dismissedIds)
           ? saved.dismissedIds.map(String)
           : [],
+
         expandedGroups:
           saved.expandedGroups &&
           typeof saved.expandedGroups === "object"
             ? saved.expandedGroups
-            : {}
+            : {},
+
+        soundEnabled: Boolean(saved.soundEnabled),
+
+        soundTone: isValidTone(saved.soundTone)
+          ? saved.soundTone
+          : "whistle"
       };
 
     } catch (error) {
@@ -228,6 +280,111 @@
       return false;
     }
   }
+
+  /* =======================================================
+     NOTIFICATION SOUND ENGINE
+  ======================================================= */
+
+  function playTone(id, purpose = "preview") {
+    const engine = TONE();
+
+    if (typeof engine?.play !== "function") {
+      if (purpose === "preview") {
+        notify(
+          t(
+            "ध्वनि प्रणाली उपलब्ध छैन।",
+            "Sound engine is unavailable."
+          ),
+          "error"
+        );
+      }
+
+      return false;
+    }
+
+    try {
+      const result = engine.play(id);
+
+      if (result && typeof result.catch === "function") {
+        result.catch(error => {
+          console.warn(
+            "Notification tone playback failed:",
+            error
+          );
+
+          if (purpose === "preview") {
+            notify(
+              t(
+                "यो ध्वनि अहिले बजाउन सकिएन।",
+                "This sound could not be played."
+              ),
+              "error"
+            );
+          }
+        });
+      }
+
+      return true;
+
+    } catch (error) {
+      console.warn(
+        "Notification tone playback failed:",
+        error
+      );
+
+      return false;
+    }
+  }
+
+  const playedNotificationIds = new Set();
+
+  function playIncomingNotification(item) {
+    if (
+      !item ||
+      document.visibilityState !== "visible"
+    ) {
+      return false;
+    }
+
+    const preferences = loadPreferences();
+    const type = classifyNotification(item);
+
+    if (
+      !preferences.enabled ||
+      !preferences.soundEnabled ||
+      preferences.types[type] === false
+    ) {
+      return false;
+    }
+
+    const id = getItemId(item);
+
+    if (
+      id &&
+      playedNotificationIds.has(id)
+    ) {
+      return false;
+    }
+
+    if (id) {
+      playedNotificationIds.add(id);
+
+      if (playedNotificationIds.size > 500) {
+        playedNotificationIds.delete(
+          playedNotificationIds.values().next().value
+        );
+      }
+    }
+
+    return playTone(
+      preferences.soundTone,
+      "incoming"
+    );
+  }
+
+  /* =======================================================
+     DATA HELPERS
+  ======================================================= */
 
   function getNotifications() {
     const list = DATA()?.getNotifications?.();
@@ -469,7 +626,11 @@
   ======================================================= */
 
   function ensureStyles() {
-    if (document.getElementById("ksk-notifications-v2-style")) {
+    if (
+      document.getElementById(
+        "ksk-notifications-v2-style"
+      )
+    ) {
       return;
     }
 
@@ -602,6 +763,25 @@
         width: 18px;
         height: 18px;
         accent-color: var(--primary-color, #2563eb);
+      }
+
+      .ksk-notif-sound-select {
+        width: 100%;
+        min-height: 42px;
+        margin-top: 8px;
+        padding: 9px 11px;
+        border: 1px solid var(--border-color, #ddd);
+        border-radius: 10px;
+        background: var(--card-bg, transparent);
+        color: inherit;
+        font: inherit;
+      }
+
+      .ksk-notif-sound-note {
+        margin: 7px 0 12px;
+        font-size: 12px;
+        line-height: 1.5;
+        opacity: .72;
       }
 
       .ksk-notif-list {
@@ -865,6 +1045,7 @@
 
   function renderGroup(group, preferences) {
     const items = group.items;
+
     const unreadCount = items.filter(
       item => !isRead(item, preferences)
     ).length;
@@ -932,6 +1113,10 @@
     `;
   }
 
+  /* =======================================================
+     SETTINGS RENDER
+  ======================================================= */
+
   function renderSettings(preferences) {
     const rows = Object.keys(TYPES).map(type => `
       <label class="ksk-notif-setting-row">
@@ -945,6 +1130,14 @@
           data-notification-type="${escapeHTML(type)}"
           ${preferences.types[type] !== false ? "checked" : ""}>
       </label>
+    `).join("");
+
+    const toneOptions = getToneOptions().map(tone => `
+      <option
+        value="${escapeHTML(tone.id)}"
+        ${preferences.soundTone === tone.id ? "selected" : ""}>
+        ${escapeHTML(isEnglish() ? tone.en : tone.ne)}
+      </option>
     `).join("");
 
     return `
@@ -967,6 +1160,37 @@
             data-notification-master
             ${preferences.enabled ? "checked" : ""}>
         </label>
+
+        <div class="ksk-notif-sound-settings">
+          <label class="ksk-notif-setting-row">
+            <strong>
+              🔊 ${escapeHTML(t("सूचनाको ध्वनि", "Notification sound"))}
+            </strong>
+
+            <input
+              type="checkbox"
+              data-notification-sound-master
+              ${preferences.soundEnabled ? "checked" : ""}>
+          </label>
+
+          <label for="kskNotificationTone">
+            ${escapeHTML(t("ध्वनि छान्नुहोस्", "Choose a sound"))}
+          </label>
+
+          <select
+            id="kskNotificationTone"
+            class="ksk-notif-sound-select"
+            data-notification-tone>
+            ${toneOptions}
+          </select>
+
+          <p class="ksk-notif-sound-note">
+            ${escapeHTML(t(
+              "ध्वनि छान्दा तुरुन्तै नमुना बज्छ। नयाँ सूचना आउँदा ध्वनि बजाउन माथिको विकल्प खोल्नुहोस्।",
+              "Selecting a sound plays a preview immediately. Turn on the switch above to hear it for new notifications."
+            ))}
+          </p>
+        </div>
 
         <div id="kskNotificationTypeSettings"
           ${preferences.enabled ? "" : "hidden"}>
@@ -1106,7 +1330,9 @@
   ======================================================= */
 
   function refresh() {
-    if (global.KSKApp?.getCurrentPage?.() === "notifications") {
+    if (
+      global.KSKApp?.getCurrentPage?.() === "notifications"
+    ) {
       global.KSKApp.refreshCurrentPage?.();
     }
   }
@@ -1326,6 +1552,46 @@
       return;
     }
 
+    const soundMaster = event.target?.closest?.(
+      "[data-notification-sound-master]"
+    );
+
+    if (soundMaster) {
+      const preferences = loadPreferences();
+
+      preferences.soundEnabled = Boolean(
+        soundMaster.checked
+      );
+
+      savePreferences(preferences);
+      refresh();
+
+      return;
+    }
+
+    const toneSelect = event.target?.closest?.(
+      "[data-notification-tone]"
+    );
+
+    if (toneSelect) {
+      const preferences = loadPreferences();
+      const selectedTone = String(
+        toneSelect.value || ""
+      );
+
+      if (!isValidTone(selectedTone)) return;
+
+      preferences.soundTone = selectedTone;
+
+      if (savePreferences(preferences)) {
+        // Selection itself is the user gesture.
+        // Play the preview immediately.
+        playTone(selectedTone, "preview");
+      }
+
+      return;
+    }
+
     const typeInput = event.target?.closest?.(
       "[data-notification-type]"
     );
@@ -1344,8 +1610,27 @@
     refresh();
   }
 
-  function handleExternalChange() {
-    if (global.KSKApp?.getCurrentPage?.() === "notifications") {
+  function handleExternalChange(event) {
+    const detail = event?.detail;
+
+    /*
+     * KSKData uses the exact storage key as collection:
+     * ksk_notifications_v1
+     *
+     * Only newly added notifications play sound.
+     * Mark-read and sync events do not play sound.
+     */
+
+    if (
+      detail?.collection === "ksk_notifications_v1" &&
+      detail?.action === "add"
+    ) {
+      playIncomingNotification(detail.item);
+    }
+
+    if (
+      global.KSKApp?.getCurrentPage?.() === "notifications"
+    ) {
       refresh();
     }
   }
@@ -1359,8 +1644,15 @@
 
     initialized = true;
 
-    document.addEventListener("click", handleClick);
-    document.addEventListener("change", handleChange);
+    document.addEventListener(
+      "click",
+      handleClick
+    );
+
+    document.addEventListener(
+      "change",
+      handleChange
+    );
 
     global.addEventListener(
       "ksk:data-change",
