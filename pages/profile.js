@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -591,6 +592,36 @@
   }
 
   function getSocialCounts(user) {
+    /*
+     * The Friends page owns the local social graph.
+     * Use the same source here so Profile and Friends
+     * always display matching counts.
+     */
+    const social = global.KSKSocialData;
+    let localCounts = null;
+
+    try {
+      const localUserId = social?.getLocalUserId?.();
+      if (localUserId && typeof social?.getCounts === "function") {
+        localCounts = social.getCounts(localUserId);
+      }
+    } catch (error) {
+      localCounts = null;
+    }
+
+    if (
+      localCounts &&
+      typeof localCounts === "object"
+    ) {
+      return {
+        followers: safeCount(localCounts.followers),
+        following: safeCount(localCounts.following),
+        friends: safeCount(localCounts.friends)
+      };
+    }
+
+    // Backward-compatible fallback for installations
+    // where the social module is not available.
     const followers = Array.isArray(user?.followers)
       ? user.followers.length
       : safeCount(user?.followersCount ?? user?.followers);
