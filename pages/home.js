@@ -1046,12 +1046,18 @@
     return true;
   }
 
+  
   function setStoryReaction(id, emoji) {
-    if (!["❤️", "👍", "😂", "😮", "😢"].includes(emoji)) {
+    const allowed = ["❤️", "👍", "😂", "😮", "😢"];
+
+    if (!allowed.includes(emoji)) {
       return false;
     }
 
-    const feature = getStoryFeature(id);
+    const storyId = String(id || "");
+    if (!storyId) return false;
+
+    const feature = getStoryFeature(storyId);
 
     const reactions =
       feature.reactions && typeof feature.reactions === "object"
@@ -1066,64 +1072,53 @@
       reactions[viewer.id] = emoji;
     }
 
-    if (!updateStoryFeature(id, { reactions })) {
+    if (!updateStoryFeature(storyId, { reactions })) {
       return false;
     }
 
-    closeStoryModal();
-    openStoryFeatureViewer(id);
+    /*
+     * Update the open Story in place.
+     * Do not close/reopen the modal: that caused the flicker.
+     */
+    const view = document.querySelector(".ksk-story-feature-view");
 
-    return true;
-  }
-
-  function saveStoryReply(id, value) {
-    const text = String(value || "").trim().slice(0, 500);
-
-    if (!text) {
-      showStoryToast(
-        isEnglish()
-          ? "Write a reply first."
-          : "पहिले जवाफ लेख्नुहोस्।",
-        "warning"
+    if (view) {
+      const reactionButtons = Array.from(
+        view.querySelectorAll("[data-home-story-reaction][data-story-id]")
+      ).filter(button =>
+        String(button.dataset.storyId || "") === storyId
       );
 
-      return false;
+      const selectedReaction = reactions[viewer.id] || "";
+
+      reactionButtons.forEach(button => {
+        const selected =
+          button.dataset.homeStoryReaction === selectedReaction;
+
+        button.classList.toggle("is-selected", selected);
+        button.setAttribute(
+          "aria-pressed",
+          selected ? "true" : "false"
+        );
+      });
+
+      const counts = storyReactionCounts({ reactions });
+
+      const countText =
+        Object.keys(counts)
+          .map(key => key + " " + counts[key])
+          .join(" · ") ||
+        (isEnglish()
+          ? "No reactions yet"
+          : "अहिलेसम्म Reaction छैन");
+
+      const reactionRow = view.querySelector(".ksk-story-reaction-row");
+      const countLine = reactionRow?.nextElementSibling;
+
+      if (countLine?.classList.contains("ksk-story-meta-line")) {
+        countLine.textContent = countText;
+      }
     }
-
-    const feature = getStoryFeature(id);
-
-    const replies = Array.isArray(feature.replies)
-      ? feature.replies
-      : [];
-
-    const viewer = storyViewer();
-
-    replies.push({
-      id: "reply-" +
-        Date.now().toString(36) +
-        Math.random().toString(36).slice(2, 7),
-
-      author: viewer.name,
-      authorId: viewer.id,
-      text,
-      createdAt: new Date().toISOString()
-    });
-
-    if (!updateStoryFeature(id, {
-      replies: replies.slice(-50)
-    })) {
-      return false;
-    }
-
-    showStoryToast(
-      isEnglish()
-        ? "Local reply saved on this device."
-        : "स्थानीय जवाफ यो डिभाइसमा सुरक्षित भयो।",
-      "success"
-    );
-
-    closeStoryModal();
-    openStoryFeatureViewer(id);
 
     return true;
   }
