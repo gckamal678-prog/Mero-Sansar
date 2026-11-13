@@ -56,7 +56,8 @@
         id: tone.id,
         ne: tone.ne,
         en: tone.en,
-        type: "file"
+        type: "file",
+        src: tone.src
       };
     });
   }
@@ -188,7 +189,10 @@
         return;
       }
 
-      if (playResult && typeof playResult.then === "function") {
+      if (
+        playResult &&
+        typeof playResult.then === "function"
+      ) {
         playResult.then(function () {
           if (activeAudio !== audio) {
             cleanup();
