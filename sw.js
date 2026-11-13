@@ -68,7 +68,6 @@ const APP_FILES = [
   "./core/pwa-update.js",
 
   "./core/design-system.css",
-  "./core/final-polish.js"
 ];
 
 /* URL HELPERS */
