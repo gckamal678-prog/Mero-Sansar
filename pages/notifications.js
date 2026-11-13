@@ -2,31 +2,27 @@
 "use strict";
 
 /*
- * =========================================================
- * Hamro Sansar — NOTIFICATIONS PAGE
+ * MERO SANSAR — NOTIFICATIONS PAGE
  *
- * PHASE 6:
- * - Notification type classification
- * - Notification preferences
- * - Group notifications
- * - All / Unread filtering
- * - Mark one notification as read
- * - Mark all as read
- * - Clear read notifications (local hide)
+ * Notifications:
+ * - All / Unread filters
+ * - Mark one / all as read
+ * - Clear read notifications locally
+ * - Group related notifications
+ * - Notification type preferences
  *
- * SOUND:
- * - Eight built-in tones
- * - Custom MP3 tones from KSKTone
- * - Immediate preview on selection
- * - Optional automatic sound for new notifications
+ * Sounds:
+ * - Only five MP3 files from KSKTone
+ * - Individual sound buttons
+ * - Tap a sound to save and preview immediately
+ * - No select dropdown
+ * - No page refresh after choosing a sound
  *
- * STORAGE:
- * - Existing notifications: KSKData
+ * Storage:
+ * - Notifications: KSKData
  * - UI preferences: ksk_notifications_ui_v1
  *
- * NO core/data.js changes.
- * NO backend / SQL / server sync claims.
- * =========================================================
+ * No backend or core/data.js changes.
  */
 
 (function (global) {
@@ -40,76 +36,72 @@
   const TONE = () => global.KSKTone || null;
 
   const STORAGE_KEY = "ksk_notifications_ui_v1";
-  const VERSION = 1;
+  const VERSION = 2;
 
   const TYPES = Object.freeze({
     friend_request: {
-      ne: "Friend Request",
+      ne: "मित्र अनुरोध",
       en: "Friend Request",
       icon: "👥"
     },
     friend_accepted: {
-      ne: "Request Accepted",
+      ne: "अनुरोध स्वीकार",
       en: "Request Accepted",
       icon: "🤝"
     },
     follower: {
-      ne: "New Follower",
+      ne: "नयाँ फलोअर",
       en: "New Follower",
       icon: "➕"
     },
     post_like: {
-      ne: "Post Like",
+      ne: "पोस्ट लाइक",
       en: "Post Like",
       icon: "❤️"
     },
     post_comment: {
-      ne: "Post Comment",
+      ne: "पोस्ट टिप्पणी",
       en: "Post Comment",
       icon: "💬"
     },
     post_reaction: {
-      ne: "Post Reaction",
+      ne: "पोस्ट प्रतिक्रिया",
       en: "Post Reaction",
       icon: "👍"
     },
     story_reaction: {
-      ne: "Story Reaction",
+      ne: "स्टोरी प्रतिक्रिया",
       en: "Story Reaction",
       icon: "✨"
     },
     story_reply: {
-      ne: "Story Reply",
+      ne: "स्टोरी जवाफ",
       en: "Story Reply",
       icon: "↩️"
     },
     group_activity: {
-      ne: "Group Activity",
+      ne: "समूह गतिविधि",
       en: "Group Activity",
       icon: "👨‍👩‍👧‍👦"
     },
     message: {
-      ne: "Message",
+      ne: "सन्देश",
       en: "Message",
       icon: "✉️"
     },
     system: {
-      ne: "System",
+      ne: "प्रणाली",
       en: "System",
       icon: "🔔"
     },
     other: {
-      ne: "Other",
+      ne: "अन्य",
       en: "Other",
       icon: "📌"
     }
   });
 
   let initialized = false;
-
-  /* =======================================================
-     LANGUAGE / HELPERS
-  ======================================================= */
 
   function isEnglish() {
     return LANG()?.getLanguage?.() === "en";
@@ -142,6 +134,34 @@
   }
 
   /* =======================================================
+     MP3 SOUND OPTIONS
+  ======================================================= */
+
+  function getToneOptions() {
+    const tones = TONE()?.getTones?.();
+
+    if (!Array.isArray(tones)) return [];
+
+    return tones.filter(tone => {
+      return (
+        tone &&
+        typeof tone.id === "string" &&
+        tone.id.trim() &&
+        typeof tone.src === "string" &&
+        /\.mp3(?:[?#].*)?$/i.test(tone.src)
+      );
+    });
+  }
+
+  function isValidTone(id) {
+    const key = String(id || "");
+
+    return getToneOptions().some(tone => {
+      return tone.id === key;
+    });
+  }
+
+  /* =======================================================
      PREFERENCES
   ======================================================= */
 
@@ -152,6 +172,9 @@
       types[type] = true;
     });
 
+    const tones = getToneOptions();
+    const firstTone = tones[0]?.id || "";
+
     return {
       version: VERSION,
       enabled: true,
@@ -161,37 +184,8 @@
       dismissedIds: [],
       expandedGroups: {},
       soundEnabled: false,
-      soundTone: "whistle"
+      soundTone: firstTone
     };
-  }
-
-  function isValidTone(id) {
-    return Boolean(
-      TONE()?.getTone?.(String(id || ""))
-    );
-  }
-
-  function getToneOptions() {
-    const tones = TONE()?.getTones?.();
-
-    if (Array.isArray(tones) && tones.length) {
-      return tones;
-    }
-
-    return [
-      { id: "whistle", ne: "सिटी", en: "Whistle" },
-      { id: "i_love_you", ne: "आइ लभ यू", en: "I Love You" },
-      { id: "lu_lu_lu", ne: "लु लु लु", en: "Lu Lu Lu" },
-      { id: "wolf", ne: "ब्वाँसोको आवाज", en: "Wolf Howl" },
-      { id: "eagle", ne: "चीलको आवाज", en: "Eagle Call" },
-      { id: "purge", ne: "साइरन", en: "The Purge Siren" },
-      { id: "birds", ne: "चराचुरुङ्गी", en: "Birds" },
-      {
-        id: "mechanical_click",
-        ne: "मेकानिकल क्लिक",
-        en: "Mechanical Click"
-      }
-    ];
   }
 
   function loadPreferences() {
@@ -204,17 +198,21 @@
 
       const saved = JSON.parse(raw);
 
-      if (
-        !saved ||
-        typeof saved !== "object" ||
-        saved.version !== VERSION
-      ) {
+      if (!saved || typeof saved !== "object") {
         return defaults;
       }
+
+      const savedTone = String(saved.soundTone || "");
+
+      const selectedTone = isValidTone(savedTone)
+        ? savedTone
+        : defaults.soundTone;
 
       return {
         ...defaults,
         ...saved,
+
+        version: VERSION,
 
         types: {
           ...defaults.types,
@@ -239,14 +237,12 @@
 
         soundEnabled: Boolean(saved.soundEnabled),
 
-        soundTone: isValidTone(saved.soundTone)
-          ? saved.soundTone
-          : "whistle"
+        soundTone: selectedTone
       };
 
     } catch (error) {
       console.warn(
-        "Notification preferences could not be loaded:",
+        "Notification preferences load failed:",
         error
       );
 
@@ -265,14 +261,14 @@
 
     } catch (error) {
       console.error(
-        "Notification preferences could not be saved:",
+        "Notification preferences save failed:",
         error
       );
 
       notify(
         t(
           "सेटिङ सुरक्षित गर्न सकिएन।",
-          "Could not save notification settings."
+          "Could not save settings."
         ),
         "error"
       );
@@ -282,58 +278,96 @@
   }
 
   /* =======================================================
-     NOTIFICATION SOUND ENGINE
+     SOUND PLAYBACK
   ======================================================= */
 
   function playTone(id, purpose = "preview") {
     const engine = TONE();
 
-    if (typeof engine?.play !== "function") {
+    if (
+      typeof engine?.play !== "function" ||
+      !isValidTone(id)
+    ) {
       if (purpose === "preview") {
         notify(
           t(
-            "ध्वनि प्रणाली उपलब्ध छैन।",
-            "Sound engine is unavailable."
+            "ध्वनि उपलब्ध छैन। MP3 फाइलको नाम र स्थान जाँच गर्नुहोस्।",
+            "Sound is unavailable. Check the MP3 file name and path."
           ),
           "error"
         );
       }
 
-      return false;
+      return Promise.resolve(false);
     }
+
+    let result;
 
     try {
-      const result = engine.play(id);
-
-      if (result && typeof result.catch === "function") {
-        result.catch(error => {
-          console.warn(
-            "Notification tone playback failed:",
-            error
-          );
-
-          if (purpose === "preview") {
-            notify(
-              t(
-                "यो ध्वनि अहिले बजाउन सकिएन।",
-                "This sound could not be played."
-              ),
-              "error"
-            );
-          }
-        });
-      }
-
-      return true;
+      result = engine.play(id);
 
     } catch (error) {
-      console.warn(
-        "Notification tone playback failed:",
-        error
+      console.warn("Tone playback failed:", error);
+      return Promise.resolve(false);
+    }
+
+    return Promise.resolve(result)
+      .then(success => {
+        if (success === false && purpose === "preview") {
+          notify(
+            t(
+              "यो MP3 बजाउन सकिएन। फाइलको नाम र स्थान जाँच गर्नुहोस्।",
+              "This MP3 could not be played. Check the file name and path."
+            ),
+            "error"
+          );
+        }
+
+        return success !== false;
+      })
+      .catch(error => {
+        console.warn("Tone playback failed:", error);
+
+        if (purpose === "preview") {
+          notify(
+            t(
+              "यो ध्वनि अहिले बजाउन सकिएन।",
+              "This sound could not be played."
+            ),
+            "error"
+          );
+        }
+
+        return false;
+      });
+  }
+
+  function updateToneSelectionUI(selectedId) {
+    document.querySelectorAll(
+      "[data-notification-tone]"
+    ).forEach(button => {
+      const selected =
+        button.dataset.notificationTone === selectedId;
+
+      button.classList.toggle("selected", selected);
+
+      button.setAttribute(
+        "aria-pressed",
+        String(selected)
       );
 
-      return false;
-    }
+      const tone = getToneOptions().find(item => {
+        return item.id === selectedId;
+      });
+
+      const label = tone
+        ? escapeHTML(isEnglish() ? tone.en : tone.ne)
+        : "";
+
+      button.textContent = selected
+        ? "✓ " + label
+        : label;
+    });
   }
 
   const playedNotificationIds = new Set();
@@ -359,10 +393,7 @@
 
     const id = getItemId(item);
 
-    if (
-      id &&
-      playedNotificationIds.has(id)
-    ) {
+    if (id && playedNotificationIds.has(id)) {
       return false;
     }
 
@@ -376,14 +407,13 @@
       }
     }
 
-    return playTone(
-      preferences.soundTone,
-      "incoming"
-    );
+    playTone(preferences.soundTone, "incoming");
+
+    return true;
   }
 
   /* =======================================================
-     DATA HELPERS
+     NOTIFICATION DATA
   ======================================================= */
 
   function getNotifications() {
@@ -500,7 +530,7 @@
   }
 
   /* =======================================================
-     READ STATE
+     READ / HIDDEN STATE
   ======================================================= */
 
   function isRead(item, preferences) {
@@ -535,15 +565,15 @@
     return getNotifications()
       .filter(item => !isDismissed(item, preferences))
       .filter(item => {
-        const type = classifyNotification(item);
-        return preferences.types[type] !== false;
+        return preferences.types[
+          classifyNotification(item)
+        ] !== false;
       })
       .filter(item => {
-        if (preferences.filter === "unread") {
-          return !isRead(item, preferences);
-        }
-
-        return true;
+        return (
+          preferences.filter !== "unread" ||
+          !isRead(item, preferences)
+        );
       });
   }
 
@@ -553,8 +583,9 @@
     const all = getNotifications()
       .filter(item => !isDismissed(item, preferences))
       .filter(item => {
-        const type = classifyNotification(item);
-        return preferences.types[type] !== false;
+        return preferences.types[
+          classifyNotification(item)
+        ] !== false;
       });
 
     const unread = all.filter(
@@ -585,7 +616,13 @@
       "";
 
     if (!target) {
-      return type + ":single:" + getItemId(item || {}) + ":" + index;
+      return (
+        type +
+        ":single:" +
+        getItemId(item) +
+        ":" +
+        index
+      );
     }
 
     return type + ":" + String(target);
@@ -616,8 +653,10 @@
         )
       }))
       .sort((a, b) => {
-        return getItemDate(b.items[0]) -
-          getItemDate(a.items[0]);
+        return (
+          getItemDate(b.items[0]) -
+          getItemDate(a.items[0])
+        );
       });
   }
 
@@ -661,10 +700,15 @@
         font-size: 21px;
       }
 
-      .ksk-notif-counts {
+      .ksk-notif-counts,
+      .ksk-notif-toolbar,
+      .ksk-notif-tabs {
         display: flex;
-        gap: 8px;
         flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .ksk-notif-counts {
         margin-bottom: 14px;
       }
 
@@ -677,13 +721,11 @@
       }
 
       .ksk-notif-toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
         margin-bottom: 14px;
       }
 
-      .ksk-notif-btn {
+      .ksk-notif-btn,
+      .ksk-notif-tab {
         border: 1px solid var(--border-color, #ddd);
         border-radius: 10px;
         padding: 9px 12px;
@@ -694,7 +736,8 @@
         cursor: pointer;
       }
 
-      .ksk-notif-btn.primary {
+      .ksk-notif-btn.primary,
+      .ksk-notif-tab.active {
         background: var(--primary-color, #2563eb);
         color: #fff;
         border-color: transparent;
@@ -706,26 +749,13 @@
       }
 
       .ksk-notif-tabs {
-        display: flex;
-        gap: 8px;
         margin: 12px 0;
         overflow-x: auto;
       }
 
       .ksk-notif-tab {
-        border: 1px solid var(--border-color, #ddd);
         border-radius: 999px;
-        padding: 8px 15px;
-        background: transparent;
-        color: inherit;
         white-space: nowrap;
-        cursor: pointer;
-      }
-
-      .ksk-notif-tab.active {
-        background: var(--primary-color, #2563eb);
-        border-color: var(--primary-color, #2563eb);
-        color: #fff;
       }
 
       .ksk-notif-settings {
@@ -736,7 +766,8 @@
         background: var(--card-bg, transparent);
       }
 
-      .ksk-notif-settings[hidden] {
+      .ksk-notif-settings[hidden],
+      .ksk-notif-settings [hidden] {
         display: none !important;
       }
 
@@ -765,23 +796,50 @@
         accent-color: var(--primary-color, #2563eb);
       }
 
-      .ksk-notif-sound-select {
-        width: 100%;
-        min-height: 42px;
-        margin-top: 8px;
-        padding: 9px 11px;
-        border: 1px solid var(--border-color, #ddd);
-        border-radius: 10px;
-        background: var(--card-bg, transparent);
-        color: inherit;
-        font: inherit;
-      }
-
       .ksk-notif-sound-note {
-        margin: 7px 0 12px;
+        margin: 8px 0 12px;
         font-size: 12px;
         line-height: 1.5;
         opacity: .72;
+      }
+
+      .ksk-notif-tone-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .ksk-notif-tone-button {
+        min-width: 0;
+        min-height: 43px;
+        padding: 9px 11px;
+        border: 1px solid var(--border-color, #64748b);
+        border-radius: 11px;
+        background: var(--card-bg, transparent);
+        color: inherit;
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+        transition:
+          border-color .15s ease,
+          background .15s ease;
+      }
+
+      .ksk-notif-tone-button.selected {
+        border: 2px solid var(--primary-color, #3b82f6);
+        background: var(--secondary-bg, rgba(59,130,246,.12));
+        font-weight: 750;
+      }
+
+      .ksk-notif-tone-button:focus-visible,
+      .ksk-notif-btn:focus-visible,
+      .ksk-notif-tab:focus-visible,
+      .ksk-notif-small-btn:focus-visible,
+      .ksk-notif-group-toggle:focus-visible {
+        outline: 2px solid var(--primary-color, #3b82f6);
+        outline-offset: 2px;
       }
 
       .ksk-notif-list {
@@ -789,16 +847,20 @@
         gap: 10px;
       }
 
-      .ksk-notif-card {
+      .ksk-notif-card,
+      .ksk-notif-group {
         border: 1px solid var(--border-color, #ddd);
         border-radius: 14px;
-        padding: 13px;
         background: var(--card-bg, transparent);
       }
 
-      .ksk-notif-card.unread {
+      .ksk-notif-card {
+        padding: 13px;
+      }
+
+      .ksk-notif-card.unread,
+      .ksk-notif-group.unread {
         border-left: 4px solid var(--primary-color, #2563eb);
-        background: var(--secondary-bg, rgba(37,99,235,.06));
       }
 
       .ksk-notif-card-head {
@@ -823,7 +885,8 @@
         flex: 1;
       }
 
-      .ksk-notif-body p {
+      .ksk-notif-body p,
+      .ksk-notif-group-item p {
         margin: 0;
         line-height: 1.5;
         overflow-wrap: anywhere;
@@ -854,14 +917,7 @@
       }
 
       .ksk-notif-group {
-        border: 1px solid var(--border-color, #ddd);
-        border-radius: 14px;
         overflow: hidden;
-        background: var(--card-bg, transparent);
-      }
-
-      .ksk-notif-group.unread {
-        border-left: 4px solid var(--primary-color, #2563eb);
       }
 
       .ksk-notif-group-toggle {
@@ -917,11 +973,6 @@
         font-size: 13px;
       }
 
-      .ksk-notif-group-item p {
-        margin: 0;
-        line-height: 1.45;
-      }
-
       .ksk-notif-empty {
         padding: 32px 16px;
         text-align: center;
@@ -955,6 +1006,16 @@
         .ksk-notif-group-items {
           padding-left: 14px;
         }
+
+        .ksk-notif-tone-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ksk-notif-tone-button {
+          transition: none;
+        }
       }
     `;
 
@@ -962,22 +1023,20 @@
   }
 
   /* =======================================================
-     RENDER HELPERS
+     RENDER
   ======================================================= */
 
   function renderEmpty(message) {
     return `
       <div class="ksk-notif-empty">
         <div class="ksk-notif-empty-icon">🔔</div>
+
         <strong>${escapeHTML(message)}</strong>
-        <p>
-          ${escapeHTML(
-            t(
-              "नयाँ सूचना आएपछि यहाँ देखिनेछन्।",
-              "New notifications will appear here."
-            )
-          )}
-        </p>
+
+        <p>${escapeHTML(t(
+          "नयाँ सूचना आएपछि यहाँ देखिनेछन्।",
+          "New notifications will appear here."
+        ))}</p>
       </div>
     `;
   }
@@ -1005,26 +1064,16 @@
             <small class="ksk-notif-meta">
               ${escapeHTML(getTypeLabel(type))}
               ${date ? " · " + date : ""}
-              ${read ? "" : " · " + escapeHTML(t("नयाँ", "New"))}
+              ${
+                read
+                  ? ""
+                  : " · " + escapeHTML(t("नयाँ", "New"))
+              }
             </small>
           </div>
         </div>
 
         <div class="ksk-notif-actions">
-          ${
-            read
-              ? ""
-              : `
-                <button
-                  type="button"
-                  class="ksk-notif-small-btn"
-                  data-notification-action="read"
-                  data-notification-id="${escapeHTML(id)}">
-                  ${escapeHTML(t("Read बनाउनुहोस्", "Mark as read"))}
-                </button>
-              `
-          }
-
           ${
             read
               ? `
@@ -1036,7 +1085,15 @@
                   ${escapeHTML(t("हटाउनुहोस्", "Clear"))}
                 </button>
               `
-              : ""
+              : `
+                <button
+                  type="button"
+                  class="ksk-notif-small-btn"
+                  data-notification-action="read"
+                  data-notification-id="${escapeHTML(id)}">
+                  ${escapeHTML(t("पढेको बनाउनुहोस्", "Mark as read"))}
+                </button>
+              `
           }
         </div>
       </article>
@@ -1069,9 +1126,14 @@
       ? items.map(item => `
           <div class="ksk-notif-group-item">
             <p>${escapeHTML(item.text || "")}</p>
+
             <small class="ksk-notif-meta">
               ${escapeHTML(formatDate(item))}
-              ${isRead(item, preferences) ? "" : " · " + escapeHTML(t("Unread", "Unread"))}
+              ${
+                isRead(item, preferences)
+                  ? ""
+                  : " · " + escapeHTML(t("नपढेको", "Unread"))
+              }
             </small>
           </div>
         `).join("")
@@ -1091,17 +1153,24 @@
 
           <span class="ksk-notif-group-summary">
             <strong>${escapeHTML(summary)}</strong>
+
             <small>
               ${escapeHTML(title)}
               · ${escapeHTML(formatDate(first))}
-              ${unreadCount
-                ? " · " + unreadCount + " " + escapeHTML(t("Unread", "Unread"))
-                : ""}
+              ${
+                unreadCount
+                  ? " · " + unreadCount + " " +
+                    escapeHTML(t("नपढेको", "Unread"))
+                  : ""
+              }
             </small>
           </span>
 
           <span class="ksk-notif-group-count">${count}</span>
-          <span aria-hidden="true">${expanded ? "⌃" : "⌄"}</span>
+
+          <span aria-hidden="true">
+            ${expanded ? "⌃" : "⌄"}
+          </span>
         </button>
 
         ${
@@ -1112,10 +1181,6 @@
       </section>
     `;
   }
-
-  /* =======================================================
-     SETTINGS RENDER
-  ======================================================= */
 
   function renderSettings(preferences) {
     const rows = Object.keys(TYPES).map(type => `
@@ -1132,13 +1197,26 @@
       </label>
     `).join("");
 
-    const toneOptions = getToneOptions().map(tone => `
-      <option
-        value="${escapeHTML(tone.id)}"
-        ${preferences.soundTone === tone.id ? "selected" : ""}>
-        ${escapeHTML(isEnglish() ? tone.en : tone.ne)}
-      </option>
-    `).join("");
+    const tones = getToneOptions();
+
+    const toneButtons = tones.map(tone => {
+      const selected = preferences.soundTone === tone.id;
+
+      return `
+        <button
+          type="button"
+          class="ksk-notif-tone-button ${selected ? "selected" : ""}"
+          data-notification-tone="${escapeHTML(tone.id)}"
+          aria-pressed="${selected ? "true" : "false"}">
+
+          ${selected ? "✓ " : ""}
+
+          ${escapeHTML(
+            isEnglish() ? tone.en : tone.ne
+          )}
+        </button>
+      `;
+    }).join("");
 
     return `
       <section
@@ -1147,12 +1225,12 @@
         hidden>
 
         <h3>
-          ${escapeHTML(t("Notification Preferences", "Notification Preferences"))}
+          ${escapeHTML(t("सूचना सेटिङ", "Notification Settings"))}
         </h3>
 
         <label class="ksk-notif-setting-row">
           <strong>
-            ${escapeHTML(t("सबै Notification", "All notifications"))}
+            ${escapeHTML(t("सबै सूचनाहरू", "All notifications"))}
           </strong>
 
           <input
@@ -1164,7 +1242,8 @@
         <div class="ksk-notif-sound-settings">
           <label class="ksk-notif-setting-row">
             <strong>
-              🔊 ${escapeHTML(t("सूचनाको ध्वनि", "Notification sound"))}
+              🔊
+              ${escapeHTML(t("सूचनाको ध्वनि", "Notification sound"))}
             </strong>
 
             <input
@@ -1173,61 +1252,60 @@
               ${preferences.soundEnabled ? "checked" : ""}>
           </label>
 
-          <label for="kskNotificationTone">
-            ${escapeHTML(t("ध्वनि छान्नुहोस्", "Choose a sound"))}
-          </label>
+          <strong>
+            ${escapeHTML(
+              t("आफ्नो ध्वनि छान्नुहोस्", "Choose your sound")
+            )}
+          </strong>
 
-          <select
-            id="kskNotificationTone"
-            class="ksk-notif-sound-select"
-            data-notification-tone>
-            ${toneOptions}
-          </select>
+          <div class="ksk-notif-tone-grid">
+            ${
+              toneButtons ||
+              `<p class="ksk-notif-sound-note">${
+                escapeHTML(t(
+                  "ध्वनि फाइल उपलब्ध छैन।",
+                  "No sound files are available."
+                ))
+              }</p>`
+            }
+          </div>
 
           <p class="ksk-notif-sound-note">
             ${escapeHTML(t(
-              "ध्वनि छान्दा तुरुन्तै नमुना बज्छ। नयाँ सूचना आउँदा ध्वनि बजाउन माथिको विकल्प खोल्नुहोस्।",
-              "Selecting a sound plays a preview immediately. Turn on the switch above to hear it for new notifications."
+              "कुनै ध्वनि थिच्दा तुरुन्तै बज्छ र छनोट सुरक्षित हुन्छ। नयाँ सूचना आउँदा बजाउन माथिको ध्वनि विकल्प खोल्नुहोस्।",
+              "Tap a sound to play its preview and save your choice. Turn on notification sound above to use it for new notifications."
             ))}
           </p>
         </div>
 
-        <div id="kskNotificationTypeSettings"
+        <div
+          id="kskNotificationTypeSettings"
           ${preferences.enabled ? "" : "hidden"}>
           ${rows}
         </div>
 
         <p class="ksk-notif-meta">
-          ${escapeHTML(
-            t(
-              "यी प्राथमिकताले यस डिभाइसमा देखिने सूचना मात्र फिल्टर गर्छन्।",
-              "These preferences filter notifications shown on this device only."
-            )
-          )}
+          ${escapeHTML(t(
+            "यी प्राथमिकताले यस डिभाइसमा देखिने सूचना मात्र नियन्त्रण गर्छन्।",
+            "These preferences control notifications on this device only."
+          ))}
         </p>
       </section>
     `;
   }
-
-  /* =======================================================
-     MAIN RENDER
-  ======================================================= */
 
   function render() {
     ensureStyles();
 
     const preferences = loadPreferences();
     const counts = getCounts();
-
     const allNotifications = visibleNotifications();
     const groups = buildGroups(allNotifications);
 
     const renderedGroups = groups.map(group => {
-      if (group.items.length > 1) {
-        return renderGroup(group, preferences);
-      }
-
-      return renderSingle(group.items[0], preferences);
+      return group.items.length > 1
+        ? renderGroup(group, preferences)
+        : renderSingle(group.items[0], preferences);
     }).join("");
 
     let emptyMessage = t(
@@ -1237,12 +1315,12 @@
 
     if (!preferences.enabled) {
       emptyMessage = t(
-        "सबै Notification बन्द छन्",
+        "सबै सूचनाहरू बन्द छन्",
         "Notifications are turned off"
       );
     } else if (preferences.filter === "unread") {
       emptyMessage = t(
-        "Unread सूचना छैन",
+        "नपढेका सूचना छैनन्",
         "No unread notifications"
       );
     }
@@ -1251,13 +1329,16 @@
       <section class="ksk-notifications">
 
         <header class="ksk-notif-heading">
-          <h2>${escapeHTML(t("सूचनाहरू", "Notifications"))}</h2>
+          <h2>
+            ${escapeHTML(t("सूचनाहरू", "Notifications"))}
+          </h2>
 
           <button
             type="button"
             class="ksk-notif-btn"
             data-notification-action="settings">
-            ⚙️ ${escapeHTML(t("सेटिङ", "Settings"))}
+            ⚙️
+            ${escapeHTML(t("सेटिङ", "Settings"))}
           </button>
         </header>
 
@@ -1268,12 +1349,12 @@
           </div>
 
           <div class="ksk-notif-count">
-            ${escapeHTML(t("Unread", "Unread"))}:
+            ${escapeHTML(t("नपढेका", "Unread"))}:
             <strong>${counts.unread}</strong>
           </div>
 
           <div class="ksk-notif-count">
-            ${escapeHTML(t("Read", "Read"))}:
+            ${escapeHTML(t("पढेका", "Read"))}:
             <strong>${counts.read}</strong>
           </div>
         </div>
@@ -1284,7 +1365,11 @@
             class="ksk-notif-btn primary"
             data-notification-action="mark-all"
             ${counts.unread ? "" : "disabled"}>
-            ✓ ${escapeHTML(t("सबै Read गर्नुहोस्", "Mark all as read"))}
+            ✓
+            ${escapeHTML(t(
+              "सबै पढेको बनाउनुहोस्",
+              "Mark all as read"
+            ))}
           </button>
 
           <button
@@ -1292,33 +1377,40 @@
             class="ksk-notif-btn"
             data-notification-action="clear-read"
             ${counts.read ? "" : "disabled"}>
-            ${escapeHTML(t("Read सूचना हटाउनुहोस्", "Clear read notifications"))}
+            ${escapeHTML(t(
+              "पढेका सूचना हटाउनुहोस्",
+              "Clear read notifications"
+            ))}
           </button>
         </div>
 
-        <nav class="ksk-notif-tabs" aria-label="Notification filters">
+        <nav
+          class="ksk-notif-tabs"
+          aria-label="Notification filters">
+
           <button
             type="button"
-            class="ksk-notif-tab ${preferences.filter === "all" ? "active" : ""}"
+            class="ksk-notif-tab ${
+              preferences.filter === "all" ? "active" : ""
+            }"
             data-notification-filter="all">
             ${escapeHTML(t("सबै", "All"))}
           </button>
 
           <button
             type="button"
-            class="ksk-notif-tab ${preferences.filter === "unread" ? "active" : ""}"
+            class="ksk-notif-tab ${
+              preferences.filter === "unread" ? "active" : ""
+            }"
             data-notification-filter="unread">
-            ${escapeHTML(t("Unread", "Unread"))}
+            ${escapeHTML(t("नपढेका", "Unread"))}
           </button>
         </nav>
 
         ${renderSettings(preferences)}
 
         <div class="ksk-notif-list">
-          ${
-            renderedGroups ||
-            renderEmpty(emptyMessage)
-          }
+          ${renderedGroups || renderEmpty(emptyMessage)}
         </div>
 
       </section>
@@ -1326,7 +1418,7 @@
   }
 
   /* =======================================================
-     ACTIONS
+     PAGE ACTIONS
   ======================================================= */
 
   function refresh() {
@@ -1343,6 +1435,7 @@
     if (!key) return false;
 
     const preferences = loadPreferences();
+
     preferences.readOverrides[key] = true;
 
     const saved = savePreferences(preferences);
@@ -1373,10 +1466,12 @@
   function markAllAsRead() {
     const api = DATA();
 
-    if (typeof api?.markNotificationsRead !== "function") {
+    if (
+      typeof api?.markNotificationsRead !== "function"
+    ) {
       notify(
         t(
-          "Read सुविधा उपलब्ध छैन।",
+          "पढेको बनाउने सुविधा उपलब्ध छैन।",
           "Mark as read is unavailable."
         ),
         "error"
@@ -1390,7 +1485,7 @@
     if (result === false) {
       notify(
         t(
-          "सूचना Read गर्न सकिएन।",
+          "सूचना पढेको बनाउन सकिएन।",
           "Could not mark notifications as read."
         ),
         "error"
@@ -1400,6 +1495,7 @@
     }
 
     const preferences = loadPreferences();
+
     preferences.readOverrides = {};
 
     savePreferences(preferences);
@@ -1407,7 +1503,7 @@
 
     notify(
       t(
-        "सबै सूचना Read भए।",
+        "सबै सूचना पढेको बनाइयो।",
         "All notifications marked as read."
       ),
       "success"
@@ -1446,7 +1542,7 @@
 
       notify(
         t(
-          "Read सूचना यस डिभाइसको सूचीबाट हटाइयो।",
+          "पढेका सूचना यस डिभाइसको सूचीबाट हटाइयो।",
           "Read notifications cleared from this device's list."
         ),
         "success"
@@ -1462,8 +1558,9 @@
     preferences.expandedGroups[key] =
       !preferences.expandedGroups[key];
 
-    savePreferences(preferences);
-    refresh();
+    if (savePreferences(preferences)) {
+      refresh();
+    }
   }
 
   function toggleSettings() {
@@ -1481,32 +1578,69 @@
   ======================================================= */
 
   function handleClick(event) {
-    const filter = event.target?.closest?.(
+    const target = event.target;
+
+    /*
+     * Sound button handling comes first.
+     * No refresh, navigation or page redraw here.
+     */
+    const toneButton = target?.closest?.(
+      "[data-notification-tone]"
+    );
+
+    if (toneButton) {
+      const selectedTone = String(
+        toneButton.dataset.notificationTone || ""
+      );
+
+      if (!isValidTone(selectedTone)) return;
+
+      const preferences = loadPreferences();
+
+      preferences.soundTone = selectedTone;
+
+      if (savePreferences(preferences)) {
+        updateToneSelectionUI(selectedTone);
+
+        /*
+         * Preview is started directly from the user's tap.
+         * The current page remains open.
+         */
+        playTone(selectedTone, "preview");
+      }
+
+      return;
+    }
+
+    const filter = target?.closest?.(
       "[data-notification-filter]"
     );
 
     if (filter) {
       const value = filter.dataset.notificationFilter;
 
-      if (value !== "all" && value !== "unread") return;
+      if (value !== "all" && value !== "unread") {
+        return;
+      }
 
       const preferences = loadPreferences();
+
       preferences.filter = value;
 
-      if (savePreferences(preferences)) refresh();
+      if (savePreferences(preferences)) {
+        refresh();
+      }
 
       return;
     }
 
-    const button = event.target?.closest?.(
+    const button = target?.closest?.(
       "[data-notification-action]"
     );
 
     if (!button) return;
 
-    const action = button.dataset.notificationAction;
-
-    switch (action) {
+    switch (button.dataset.notificationAction) {
       case "settings":
         toggleSettings();
         break;
@@ -1520,15 +1654,21 @@
         break;
 
       case "read":
-        markOneAsRead(button.dataset.notificationId);
+        markOneAsRead(
+          button.dataset.notificationId
+        );
         break;
 
       case "hide":
-        clearOne(button.dataset.notificationId);
+        clearOne(
+          button.dataset.notificationId
+        );
         break;
 
       case "toggle-group":
-        toggleGroup(button.dataset.groupKey || "");
+        toggleGroup(
+          button.dataset.groupKey || ""
+        );
         break;
 
       default:
@@ -1537,7 +1677,9 @@
   }
 
   function handleChange(event) {
-    const master = event.target?.closest?.(
+    const target = event.target;
+
+    const master = target?.closest?.(
       "[data-notification-master]"
     );
 
@@ -1552,7 +1694,7 @@
       return;
     }
 
-    const soundMaster = event.target?.closest?.(
+    const soundMaster = target?.closest?.(
       "[data-notification-sound-master]"
     );
 
@@ -1564,35 +1706,11 @@
       );
 
       savePreferences(preferences);
-      refresh();
 
       return;
     }
 
-    const toneSelect = event.target?.closest?.(
-      "[data-notification-tone]"
-    );
-
-    if (toneSelect) {
-      const preferences = loadPreferences();
-      const selectedTone = String(
-        toneSelect.value || ""
-      );
-
-      if (!isValidTone(selectedTone)) return;
-
-      preferences.soundTone = selectedTone;
-
-      if (savePreferences(preferences)) {
-        // Selection itself is the user gesture.
-        // Play the preview immediately.
-        playTone(selectedTone, "preview");
-      }
-
-      return;
-    }
-
-    const typeInput = event.target?.closest?.(
+    const typeInput = target?.closest?.(
       "[data-notification-type]"
     );
 
@@ -1604,7 +1722,9 @@
 
     const preferences = loadPreferences();
 
-    preferences.types[type] = Boolean(typeInput.checked);
+    preferences.types[type] = Boolean(
+      typeInput.checked
+    );
 
     savePreferences(preferences);
     refresh();
@@ -1612,14 +1732,6 @@
 
   function handleExternalChange(event) {
     const detail = event?.detail;
-
-    /*
-     * KSKData uses the exact storage key as collection:
-     * ksk_notifications_v1
-     *
-     * Only newly added notifications play sound.
-     * Mark-read and sync events do not play sound.
-     */
 
     if (
       detail?.collection === "ksk_notifications_v1" &&
@@ -1632,6 +1744,19 @@
       global.KSKApp?.getCurrentPage?.() === "notifications"
     ) {
       refresh();
+    }
+  }
+
+  function handleStorage(event) {
+    if (
+      event.key === STORAGE_KEY ||
+      event.key === "ksk_notifications_v1"
+    ) {
+      if (
+        global.KSKApp?.getCurrentPage?.() === "notifications"
+      ) {
+        refresh();
+      }
     }
   }
 
@@ -1666,13 +1791,13 @@
 
     global.addEventListener(
       "storage",
-      event => {
-        if (
-          event.key === STORAGE_KEY ||
-          event.key === "ksk_notifications_v1"
-        ) {
-          handleExternalChange();
-        }
+      handleStorage
+    );
+
+    global.addEventListener(
+      "ksk:language-change",
+      function () {
+        refresh();
       }
     );
 
