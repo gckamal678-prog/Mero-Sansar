@@ -1,9 +1,12 @@
+
 "use strict";
 
 /*
+ * =========================================================
  * MERO SANSAR — PROFILE EXTRAS
  * QR Profile + Achievement Badges.
  * Buttons are injected into the shared Profile Tools section.
+ * =========================================================
  */
 
 (function (global) {
@@ -16,9 +19,14 @@
 
   let observer = null;
   let modal = null;
+  let qrImageBlobPromise = null;
 
-  const $ = (selector, root = document) => root.querySelector(selector);
-  const english = () => global.KSKLanguage?.getLanguage?.() === "en";
+  const $ = (selector, root = document) =>
+    root.querySelector(selector);
+
+  const english = () =>
+    global.KSKLanguage?.getLanguage?.() === "en";
+
   const t = (ne, en) => english() ? en : ne;
 
   function esc(value) {
@@ -27,7 +35,7 @@
       "<": "&lt;",
       ">": "&gt;",
       '"': "&quot;",
-      "'": "&#039;"
+      "'": "&#39;"
     })[ch]);
   }
 
@@ -87,11 +95,18 @@
     const postCount = getOwnPosts().length;
     const friendCount = getFriends().length;
 
-    const hasName = Boolean(String(user?.name || "").trim());
+    const hasName = Boolean(
+      String(user?.name || "").trim()
+    );
+
     const hasAvatar = Boolean(
       String(user?.avatar || user?.avatarMediaId || "").trim()
     );
-    const hasBio = Boolean(String(user?.bio || "").trim());
+
+    const hasBio = Boolean(
+      String(user?.bio || "").trim()
+    );
+
     const hasExtra = Boolean(
       String(user?.location || user?.website || "").trim()
     );
@@ -375,6 +390,7 @@
    * Add QR and Badges to the shared Profile Tools grid.
    * No extra card is created.
    */
+
   function inject() {
     const section = $("#otherPageText .profile-section");
     const tools = section?.querySelector("[data-profile-extras]");
@@ -388,7 +404,10 @@
       qr.type = "button";
       qr.className = "ksk-profile-extra-button";
       qr.dataset.profileExtraOpen = "qr";
-      qr.textContent = "▦ " + t("मेरो QR प्रोफाइल", "My QR Profile");
+      qr.textContent = "▦ " + t(
+        "मेरो QR प्रोफाइल",
+        "My QR Profile"
+      );
       tools.appendChild(qr);
     }
 
@@ -464,6 +483,10 @@
     }
   }
 
+  // =========================================================
+  // QR PROFILE
+  // =========================================================
+
   function openQR() {
     const link = getProfileLink();
 
@@ -480,13 +503,38 @@
 
     const qrURL =
       QR_ENDPOINT +
-      "?size=240x240&margin=12&format=png&data=" +
+      "?size=640x640&margin=16&format=png&data=" +
       encodeURIComponent(link);
+
+    qrImageBlobPromise = fetch(qrURL, {
+      method: "GET",
+      mode: "cors",
+      cache: "force-cache",
+      credentials: "omit"
+    }).then(response => {
+      if (!response.ok) {
+        throw new Error("QR image request failed");
+      }
+
+      return response.blob();
+
+    }).then(blob => {
+      if (!blob.type.includes("image")) {
+        throw new Error("QR image is invalid");
+      }
+
+      return blob;
+    });
+
+    qrImageBlobPromise.catch(error => {
+      console.warn("QR image preload failed:", error);
+    });
 
     showModal(
       t("मेरो QR प्रोफाइल", "My QR Profile"),
       `
         <div class="ksk-profile-qr-wrap">
+
           <img
             class="ksk-profile-qr-image"
             src="${esc(qrURL)}"
@@ -504,6 +552,7 @@
           )}</p>
 
           <div class="ksk-profile-extra-actions">
+
             <button
               type="button"
               class="ksk-profile-extra-action"
@@ -517,16 +566,18 @@
               class="ksk-profile-extra-action secondary"
               data-profile-extra-share
             >
-              ${t("Share गर्नुहोस्", "Share")}
+              ${t("QR फोटो Share गर्नुहोस्", "Share QR image")}
             </button>
+
           </div>
 
           <p class="ksk-profile-extra-note">
             ${t(
-              "QR बनाउन प्रोफाइल लिंक QRServer सेवामा पठाइन्छ। तपाईंको नाम वा अन्य प्रोफाइल विवरण पठाइँदैन।",
-              "The profile link is sent to QRServer to create the QR image. Your name and other profile details are not sent."
+              "Share गर्दा QR को PNG फोटो पठाइन्छ, लिंक मात्र होइन। QR बनाउन प्रोफाइल लिंक QRServer सेवामा पठाइन्छ।",
+              "Share sends the QR PNG image, not just the link. The profile link is sent to QRServer to create the QR image."
             )}
           </p>
+
         </div>
       `
     );
@@ -538,6 +589,7 @@
 
     const rows = list.map(item => `
       <article class="ksk-profile-badge${item.earned ? "" : " is-locked"}">
+
         <span class="ksk-profile-badge-icon" aria-hidden="true">
           ${item.icon}
         </span>
@@ -553,6 +605,7 @@
             : t("बाँकी", "Locked")
           }
         </span>
+
       </article>
     `).join("");
 
@@ -578,12 +631,19 @@
     );
   }
 
+  // =========================================================
+  // COPY PROFILE LINK
+  // =========================================================
+
   async function copyLink() {
     const link = getProfileLink();
 
     if (!link) {
       notify(
-        t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."),
+        t(
+          "प्रोफाइल लिंक उपलब्ध भएन।",
+          "Profile link is unavailable."
+        ),
         "error"
       );
       return false;
@@ -595,6 +655,7 @@
         global.isSecureContext
       ) {
         await global.navigator.clipboard.writeText(link);
+
       } else {
         const field = document.createElement("textarea");
 
@@ -615,7 +676,10 @@
       }
 
       notify(
-        t("प्रोफाइल लिंक कपी भयो।", "Profile link copied."),
+        t(
+          "प्रोफाइल लिंक कपी भयो।",
+          "Profile link copied."
+        ),
         "success"
       );
 
@@ -634,45 +698,125 @@
     }
   }
 
-  async function shareLink() {
-    const link = getProfileLink();
+  // =========================================================
+  // SHARE QR IMAGE
+  // =========================================================
 
-    if (!link) {
+  async function shareLink() {
+    if (!getProfileLink()) {
       notify(
-        t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."),
+        t(
+          "प्रोफाइल लिंक उपलब्ध भएन।",
+          "Profile link is unavailable."
+        ),
         "error"
       );
       return;
     }
 
-    if (typeof global.navigator?.share === "function") {
-      try {
-        await global.navigator.share({
-          title: t(
-            "मेरो संसार प्रोफाइल",
-            "My Mero Sansar profile"
+    try {
+      if (!qrImageBlobPromise) {
+        notify(
+          t(
+            "पहिले QR फोटो तयार हुन दिनुहोस्।",
+            "Please wait for the QR image to prepare."
           ),
-          url: link
-        });
-
+          "warning"
+        );
         return;
-
-      } catch (error) {
-        if (error?.name === "AbortError") return;
       }
-    }
 
-    await copyLink();
+      const blob = await qrImageBlobPromise;
+
+      const file = new File(
+        [blob],
+        "mero-sansar-profile-qr.png",
+        { type: "image/png" }
+      );
+
+      if (
+        typeof global.navigator.share === "function" &&
+        (
+          typeof global.navigator.canShare !== "function" ||
+          global.navigator.canShare({ files: [file] })
+        )
+      ) {
+        try {
+          await global.navigator.share({
+            files: [file],
+            title: t(
+              "मेरो संसार QR प्रोफाइल",
+              "Mero Sansar QR Profile"
+            ),
+            text: t(
+              "मेरो प्रोफाइल खोल्न यो QR स्क्यान गर्नुहोस्।",
+              "Scan this QR code to open my profile."
+            )
+          });
+
+          return;
+
+        } catch (shareError) {
+          if (shareError?.name === "AbortError") return;
+
+          console.warn(
+            "Native QR sharing failed:",
+            shareError
+          );
+        }
+      }
+
+      const objectURL = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+
+      anchor.href = objectURL;
+      anchor.download = "mero-sansar-profile-qr.png";
+      anchor.hidden = true;
+
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      setTimeout(() => {
+        URL.revokeObjectURL(objectURL);
+      }, 20000);
+
+      notify(
+        t(
+          "QR फोटो डाउनलोड हुँदैछ। Gallery बाट Share गर्नुहोस्।",
+          "QR image is downloading. Share it from your Gallery."
+        ),
+        "success"
+      );
+
+    } catch (error) {
+      console.warn("QR sharing failed:", error);
+
+      notify(
+        t(
+          "QR फोटो तयार भएन। इन्टरनेट जडान जाँच गर्नुहोस्।",
+          "Could not prepare the QR image. Check your internet connection."
+        ),
+        "error"
+      );
+    }
   }
+
+  // =========================================================
+  // EVENT HANDLING
+  // =========================================================
 
   function handleClick(event) {
     const target = event.target;
 
-    const trigger = target?.closest?.("[data-profile-extra-open]");
+    const trigger = target?.closest?.(
+      "[data-profile-extra-open]"
+    );
 
     if (trigger) {
       if (trigger.dataset.profileExtraOpen === "qr") {
         openQR();
+
       } else if (trigger.dataset.profileExtraOpen === "badges") {
         openBadges();
       }
@@ -690,6 +834,10 @@
     }
   }
 
+  // =========================================================
+  // INITIALIZATION
+  // =========================================================
+
   function initialize() {
     if (!document.body) return false;
 
@@ -698,7 +846,7 @@
     if (!observer && global.MutationObserver) {
       const host = $("#otherPageText") || document.body;
 
-      observer = new MutationObserver(() => {
+      observer = new global.MutationObserver(() => {
         inject();
       });
 
