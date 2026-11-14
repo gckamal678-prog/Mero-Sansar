@@ -4,6 +4,7 @@
 /* =========================================================
    MERO SANSAR — SUPABASE AUTHENTICATION
    Email + Password + Verification + Recovery + Account
+   FIX: SAFE SINGLE-FLIGHT INITIALIZATION
 ========================================================= */
 
 (function (global) {
@@ -26,7 +27,11 @@
   let client = null;
   let session = null;
   let sdkPromise = null;
-  let initialized = false;
+
+  // एउटै समयमा धेरै पटक Auth Initialization हुन नदिने।
+  let clientInitializationPromise = null;
+  let initializationPromise = null;
+
   let observer = null;
   let currentMode = "login";
   let recoveryMode = false;
@@ -154,6 +159,8 @@
       };
 
       script.onerror = () => {
+        sdkPromise = null;
+
         reject(new Error(
           "Supabase SDK लोड भएन। इन्टरनेट जाँच गर्नुहोस्।"
         ));
@@ -167,73 +174,96 @@
 
   /* =======================================================
      INITIALIZE CLIENT
+     FIX: SHARE ONE INITIALIZATION PROMISE
   ======================================================= */
 
-  async function initializeClient() {
-    if (client) return client;
-
-    const sdk = await loadSDK();
-
-    client = sdk.createClient(
-      SUPABASE_URL,
-      SUPABASE_PUBLISHABLE_KEY,
-      {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true
-        }
+  function initializeClient() {
+    if (client && session !== undefined) {
+      // Client तयार भइसकेको भए यही प्रयोग गर्ने।
+      if (clientInitializationPromise === null) {
+        return Promise.resolve(client);
       }
-    );
-
-    const result = await client.auth.getSession();
-
-    if (result.error) throw result.error;
-
-    session = result.data?.session || null;
-
-    if (session?.user && !isVerified(session.user)) {
-      await client.auth.signOut();
-      session = null;
     }
 
-    client.auth.onAuthStateChange((event, nextSession) => {
-      session = nextSession || null;
+    if (clientInitializationPromise) {
+      return clientInitializationPromise;
+    }
 
-      if (event === "PASSWORD_RECOVERY") {
-        recoveryMode = true;
+    clientInitializationPromise = (async () => {
+      const sdk = await loadSDK();
 
-        global.setTimeout(() => {
-          global.dispatchEvent(new CustomEvent(
-            "ksk:password-recovery"
-          ));
-
-          dispatchAuthChange();
-        }, 0);
-
-        return;
+      if (!client) {
+        client = sdk.createClient(
+          SUPABASE_URL,
+          SUPABASE_PUBLISHABLE_KEY,
+          {
+            auth: {
+              persistSession: true,
+              autoRefreshToken: true,
+              detectSessionInUrl: true
+            }
+          }
+        );
       }
 
-      if (event === "SIGNED_OUT") {
-        recoveryMode = false;
-      }
+      const result = await client.auth.getSession();
+
+      if (result.error) throw result.error;
+
+      session = result.data?.session || null;
 
       if (session?.user && !isVerified(session.user)) {
+        await client.auth.signOut();
         session = null;
-        recoveryMode = false;
-
-        global.setTimeout(() => {
-          client.auth.signOut();
-        }, 0);
       }
 
-      global.setTimeout(() => {
-        renderPanel(true);
-        dispatchAuthChange();
-      }, 0);
-    });
+      client.auth.onAuthStateChange((event, nextSession) => {
+        session = nextSession || null;
 
-    return client;
+        if (event === "PASSWORD_RECOVERY") {
+          recoveryMode = true;
+
+          global.setTimeout(() => {
+            global.dispatchEvent(new CustomEvent(
+              "ksk:password-recovery"
+            ));
+
+            dispatchAuthChange();
+          }, 0);
+
+          return;
+        }
+
+        if (event === "SIGNED_OUT") {
+          recoveryMode = false;
+        }
+
+        if (session?.user && !isVerified(session.user)) {
+          session = null;
+          recoveryMode = false;
+
+          global.setTimeout(() => {
+            client.auth.signOut();
+          }, 0);
+        }
+
+        global.setTimeout(() => {
+          renderPanel(true);
+          dispatchAuthChange();
+        }, 0);
+      });
+
+      return client;
+    })();
+
+    return clientInitializationPromise.catch(error => {
+      // असफल भए अर्को पटक पुनः Initialization गर्न दिने।
+      clientInitializationPromise = null;
+      client = null;
+      session = null;
+
+      throw error;
+    });
   }
 
   /* =======================================================
@@ -1027,57 +1057,65 @@
 
   /* =======================================================
      INITIALIZE
+     FIX: WAIT FOR THE SAME PROMISE
   ======================================================= */
 
-  async function initialize() {
-    if (initialized) return true;
-
-    initialized = true;
+  function initialize() {
+    if (initializationPromise) {
+      return initializationPromise;
+    }
 
     ensureStyles();
     observeSettings();
 
-    try {
-      await initializeClient();
+    initializationPromise = (async () => {
+      try {
+        await initializeClient();
 
-      renderPanel(false);
+        renderPanel(false);
 
-      global.dispatchEvent(new CustomEvent(
-        "ksk:auth-ready",
-        {
-          detail: {
-            user: isAuthenticated() ? session.user : null,
-            recoveryMode
-          }
-        }
-      ));
-
-      if (recoveryMode) {
         global.dispatchEvent(new CustomEvent(
-          "ksk:password-recovery"
-        ));
-      }
-
-      return true;
-
-    } catch (error) {
-      console.error(
-        "Authentication initialization failed:",
-        error
-      );
-
-      global.dispatchEvent(new CustomEvent(
-        "ksk:auth-ready",
-        {
-          detail: {
-            user: null,
-            error: getErrorMessage(error)
+          "ksk:auth-ready",
+          {
+            detail: {
+              user: isAuthenticated() ? session.user : null,
+              recoveryMode
+            }
           }
-        }
-      ));
+        ));
 
-      return false;
-    }
+        if (recoveryMode) {
+          global.dispatchEvent(new CustomEvent(
+            "ksk:password-recovery"
+          ));
+        }
+
+        return true;
+
+      } catch (error) {
+        console.error(
+          "Authentication initialization failed:",
+          error
+        );
+
+        global.dispatchEvent(new CustomEvent(
+          "ksk:auth-ready",
+          {
+            detail: {
+              user: null,
+              error: getErrorMessage(error)
+            }
+          }
+        ));
+
+        // असफल Initialization पछि पुनः प्रयास गर्न दिने।
+        initializationPromise = null;
+
+        return false;
+      }
+    })();
+
+    return initializationPromise;
   }
 
   /* =======================================================
