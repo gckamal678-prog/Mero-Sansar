@@ -1,234 +1,41 @@
 
-<!DOCTYPE html>
-<html lang="ne" data-theme="light">
+<!-- WELCOME SPLASH CONTROLLER -->
+<script>
+(function () {
+  "use strict";
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  var splash = document.getElementById("welcomeSplash");
+  var start = document.getElementById("welcomeStartButton");
 
-  <meta name="theme-color" content="#2563eb">
-  <meta name="description" content="हाम्रो संसार — साथी जोडौँ, कुरा गरौँ ।">
-  <meta name="color-scheme" content="light dark">
+  if (!splash || !start) return;
 
-  <script>
-    (function () {
-      "use strict";
-      try {
-        var saved =
-          localStorage.getItem("ksk_app_settings") ||
-          localStorage.getItem("ksk_app_settings_old");
-        var settings = saved ? JSON.parse(saved) : {};
-        var theme = settings.theme === "dark" ? "dark" : "light";
-        var root = document.documentElement;
-        root.dataset.theme = theme;
-        root.style.colorScheme = theme;
-        var themeColor = document.querySelector('meta[name="theme-color"]');
-        if (themeColor) {
-          themeColor.setAttribute("content", theme === "dark" ? "#0b1220" : "#2563eb");
-        }
-      } catch (error) {
-        document.documentElement.dataset.theme = "light";
-      }
-    })();
-  </script>
+  var seenKey = "mero_sansar_welcome_seen_v1";
+  var seen = false;
 
-  <title>हाम्रो संसार</title>
+  try {
+    seen = localStorage.getItem(seenKey) === "yes";
+  } catch (error) {}
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  if (!seen) {
+    splash.hidden = false;
+    document.body.classList.add("welcome-splash-active");
+  }
 
-  <link rel="stylesheet" href="core/design-system.css">
-  <link rel="stylesheet" href="app.css">
-  <link rel="stylesheet" href="core/comments.css">
+  function enterApp() {
+    try {
+      localStorage.setItem(seenKey, "yes");
+    } catch (error) {}
 
-  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
-  <link rel="apple-touch-icon" href="icon-192.png" sizes="192x192">
-  <link rel="manifest" href="manifest.json">
+    splash.classList.add("welcome-splash-leaving");
+    document.body.classList.remove("welcome-splash-active");
 
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="हाम्रो संसार">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-</head>
+    window.setTimeout(function () {
+      splash.hidden = true;
+      splash.classList.remove("welcome-splash-leaving");
+    }, 520);
+  }
 
-<body>
+  start.addEventListener("click", enterApp);
 
-  <header class="app-header">
-    <div class="header-inner">
-      <div class="brand">
-        <div class="brand-logo">
-          <img src="Nepal.jpg" class="brand-logo-image" alt="हाम्रो संसार लोगो" loading="eager">
-        </div>
-        <div class="brand-text">
-          <h1 class="brand-name" data-i18n="appName">हाम्रो संसार</h1>
-          <p class="brand-tagline" data-i18n="tagline">साथी जोडौँ, कुरा गरौँ</p>
-        </div>
-      </div>
-
-      <div class="header-actions">
-        <button class="icon-button" id="searchToggle" type="button" aria-label="खोज्नुहोस्" title="खोज्नुहोस्">⌕</button>
-        <button class="icon-button" id="notificationsToggle" type="button" aria-label="सूचनाहरू" title="सूचनाहरू">🔔</button>
-        <button class="icon-button" id="installAppButton" type="button" aria-label="एप इन्स्टल गर्नुहोस्" title="एप इन्स्टल गर्नुहोस्" hidden>⬇</button>
-      </div>
-    </div>
-  </header>
-
-  <div id="networkStatus" class="network-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
-
-  <div id="pwaUpdateBanner" class="pwa-update-banner" role="region" aria-labelledby="pwaUpdateTitle" aria-live="polite" hidden>
-    <div class="pwa-update-content">
-      <strong id="pwaUpdateTitle">नयाँ संस्करण उपलब्ध छ</strong>
-      <p id="pwaUpdateMessage">हाम्रो संसारको नयाँ संस्करण तयार छ।</p>
-    </div>
-    <div class="pwa-update-actions">
-      <button id="pwaUpdateLater" class="pwa-update-button pwa-update-later" type="button">Later</button>
-      <button id="pwaUpdateNow" class="pwa-update-button pwa-update-now" type="button">Update Now</button>
-    </div>
-  </div>
-
-  <main class="app-main">
-
-    <section id="searchPanel" class="search-panel hidden">
-      <input id="searchInput" class="form-input" type="search"
-        placeholder="साथी वा पोस्ट खोज्नुहोस्..." aria-label="खोज्नुहोस्"
-        data-i18n-placeholder="searchPlaceholder">
-      <div id="searchResults" class="search-results hidden" aria-live="polite" aria-label="Search results"></div>
-    </section>
-
-    <section id="homePage" class="page">
-      <section class="stories-section">
-        <h2 class="section-title" data-i18n="stories">स्टोरीहरू</h2>
-        <div id="storiesList" class="stories-row"></div>
-      </section>
-
-      <section class="composer-card card">
-        <div class="composer-top">
-          <div class="avatar" aria-hidden="true">+</div>
-          <button id="openComposer" class="composer-input composer-trigger" type="button" data-i18n="writePost">के सोच्दै हुनुहुन्छ?</button>
-        </div>
-        <div class="composer-actions">
-          <button class="composer-tool" id="quickText" type="button">✍️ लेख्नुहोस्</button>
-        </div>
-      </section>
-
-      <section class="feed-section">
-        <h2 class="section-title" data-i18n="feed">नयाँ पोस्टहरू</h2>
-        <div id="feedList"></div>
-        <div id="emptyFeed" class="empty-state hidden">
-          <div class="empty-state-icon">📝</div>
-          <h3 class="empty-state-title" data-i18n="emptyFeed">अहिलेसम्म पोस्ट छैन</h3>
-          <p>पहिलो पोस्ट गरेर साथीहरूसँग कुरा सुरु गर्नुहोस्।</p>
-        </div>
-      </section>
-    </section>
-
-    <section id="otherPage" class="page hidden">
-      <div class="card page-content-card">
-        <div class="other-page-heading">
-          <h2 id="otherPageTitle">पृष्ठ</h2>
-        </div>
-        <div id="otherPageText">
-          <p>यो सुविधा क्रमशः थपिँदैछ।</p>
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <nav class="bottom-nav" id="bottomNav" aria-label="मुख्य Navigation">
-    <div class="bottom-nav-inner">
-      <button class="nav-item active" type="button" data-page="home" aria-label="Home" aria-current="page">
-        <span class="nav-icon">🏠</span><span data-i18n="home">होम</span>
-      </button>
-      <button class="nav-item" type="button" data-page="friends" aria-label="Friends">
-        <span class="nav-icon">👥</span><span data-i18n="friends">साथीहरू</span>
-      </button>
-      <button class="nav-item nav-create" type="button" data-page="create" aria-label="Create Post">
-        <span class="nav-icon">＋</span><span data-i18n="create">पोस्ट</span>
-      </button>
-      <button class="nav-item" type="button" data-page="messages" aria-label="Messages">
-        <span class="nav-icon">💬</span><span data-i18n="messages">सन्देश</span>
-      </button>
-      <button class="nav-item" type="button" data-page="profile" aria-label="Profile">
-        <span class="nav-icon">👤</span><span data-i18n="profile">प्रोफाइल</span>
-      </button>
-    </div>
-  </nav>
-
-  <div id="settingsModal" class="modal-backdrop hidden" aria-hidden="true">
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-      <header class="modal-header">
-        <h2 id="settingsTitle" class="modal-title">सेटिङ</h2>
-        <button id="closeSettings" class="icon-button" type="button" aria-label="बन्द गर्नुहोस्">×</button>
-      </header>
-      <div class="modal-body" id="settingsBody">
-        <div class="empty-state"><p>सेटिङ लोड हुँदैछ...</p></div>
-      </div>
-    </section>
-  </div>
-
-  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
-
-  <!-- CORE MODULES -->
-  <script src="core/state.js"></script>
-  <script src="core/settings.js"></script>
-  <script src="core/theme.js"></script>
-  <script src="core/language.js"></script>
-  <script src="core/toast.js"></script>
-  <script src="core/utils.js"></script>
-  <script src="core/media.js"></script>
-  <script src="core/modal.js"></script>
-  <script src="core/data.js"></script>
-  <script src="core/content-safety.js"></script>
-  <script src="core/data-saver.js"></script>
-  <script src="core/post-actions.js"></script>
-  <script src="core/comments.js"></script>
-  <script src="core/reactions.js"></script>
-  <script src="core/share.js"></script>
-
-  <!-- UI MODULES -->
-  <script src="core/settings-ui.js"></script>
-  <script src="core/media-ui.js"></script>
-  <script src="core/profile-media.js"></script>
-  <script src="core/avatar-ui.js"></script>
-
-  <!-- COMPONENTS -->
-  <script src="components/user-card.js"></script>
-  <script src="components/message-item.js"></script>
-  <script src="components/post-card.js"></script>
-
-  <!-- HOME PAGE MODULE -->
-  <script src="pages/home.js"></script>
-  <script src="pages/story-ui-upgrade.js"></script>
-
-  <!-- PAGE MODULES -->
-  <script src="pages/friends.js"></script>
-  <script src="pages/messages.js"></script>
-  <script src="pages/profile.js"></script>
-  <script src="pages/profile-extras.js"></script>
-  <script src="core/accessibility.js"></script>
-  <script src="pages/drafts.js"></script>
-  <script src="pages/insights.js"></script>
-  <script src="core/tone.js"></script>
-<script src="pages/notifications.js"></script>
-  <script src="pages/saved.js"></script>
-  <script src="pages/settings.js"></script>
-
-  <!-- NAVIGATION -->
-  <script src="core/navigation.js"></script>
-  <script src="core/search.js"></script>
-  <script src="core/app-events.js"></script>
-  <script src="core/ui-actions.js"></script>
-  <script src="core/data-refresh.js"></script>
-
-  <!-- MAIN APPLICATION -->
-  <script src="app.js"></script>
-
-  <!-- PWA -->
-  <script src="core/pwa-install.js"></script>
-  <script src="core/network-status.js"></script>
-  <script src="core/pwa-update.js"></script>
-
-</body>
-</html>
+})();
+</script>
