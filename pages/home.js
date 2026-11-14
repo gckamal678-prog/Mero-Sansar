@@ -25,6 +25,8 @@
   let cloudFeedPosts = null;
   let cloudFeedLoading = false;
   let cloudFeedRequest = 0;
+  let cloudFeedStatus = "idle";
+  let cloudFeedError = "";
 
   const $ = (selector, root = document) =>
     root.querySelector(selector);
@@ -47,66 +49,55 @@
     })[character]);
   }
 
+  /* SUPABASE-ONLY POSTS */
+
   function getPosts() {
-    // Cloud Feed सफलतापूर्वक लोड भएको छ भने
-    // Supabase का पोस्ट प्रयोग गर्ने।
-    if (Array.isArray(cloudFeedPosts)) {
-      return cloudFeedPosts;
-    }
-
-    // Cloud Feed उपलब्ध नभएसम्म पुरानो
-    // Local Storage डेटा सुरक्षित राख्ने।
-    const posts = global.KSKData?.getPosts?.();
-
-    return Array.isArray(posts) ? posts : [];
+    // Feed मा Supabase बाट आएका पोस्ट मात्र देखाउने।
+    return Array.isArray(cloudFeedPosts)
+      ? cloudFeedPosts
+      : [];
   }
 
   async function loadCloudFeed() {
     const api = global.KSKSupabasePosts;
 
-    if (typeof api?.getFeed !== "function") {
-      return false;
-    }
-
-    if (cloudFeedLoading) {
-      return false;
-    }
-
-    cloudFeedLoading = true;
+    if (cloudFeedLoading) return false;
 
     const requestId = ++cloudFeedRequest;
+    cloudFeedLoading = true;
+    cloudFeedStatus = "loading";
+    cloudFeedError = "";
 
     try {
-      const result = await api.getFeed({
-        limit: 100
-      });
-
-      // पुरानो Request ले नयाँ डेटा overwrite नगरोस्।
-      if (requestId !== cloudFeedRequest) {
-        return false;
+      if (typeof api?.getFeed !== "function") {
+        throw new Error("Supabase Posts सेवा उपलब्ध छैन।");
       }
 
-      if (
-        !result?.ok ||
-        !Array.isArray(result.data)
-      ) {
-        console.warn(
-          "Supabase Feed load failed:",
-          result?.message || result?.code || "Unknown error"
-        );
+      const result = await api.getFeed({ limit: 100 });
 
-        return false;
+      if (requestId !== cloudFeedRequest) return false;
+
+      if (!result?.ok || !Array.isArray(result.data)) {
+        throw new Error(
+          result?.message || result?.code || "Feed लोड गर्न सकिएन।"
+        );
       }
 
       cloudFeedPosts = result.data;
+      cloudFeedStatus = "ready";
 
       return true;
 
     } catch (error) {
-      console.error(
-        "Cloud Feed error:",
-        error
-      );
+      if (requestId === cloudFeedRequest) {
+        cloudFeedPosts = [];
+        cloudFeedStatus = "error";
+        cloudFeedError = String(
+          error?.message || "Supabase Feed लोड गर्न सकिएन।"
+        );
+      }
+
+      console.error("Cloud Feed error:", error);
 
       return false;
 
@@ -1579,31 +1570,33 @@
     );
   }
 
-  /* BIND LOAD MORE EVENT ONLY ONCE */
+  /* BIND LOAD MORE AND RETRY EVENTS ONLY ONCE */
 
   function bindFeedPagination(feedList) {
-    if (
-      feedList.dataset.paginationBound === "true"
-    ) {
+    if (feedList.dataset.paginationBound === "true") {
       return;
     }
 
     feedList.dataset.paginationBound = "true";
 
     feedList.addEventListener("click", event => {
+      const retryButton = event.target?.closest?.(
+        "[data-feed-retry]"
+      );
+
+      if (retryButton && feedList.contains(retryButton)) {
+        event.preventDefault();
+        refreshCloudFeed();
+        return;
+      }
+
       const button = event.target?.closest?.(
         "[data-feed-load-more]"
       );
 
-      if (
-        !button ||
-        !feedList.contains(button)
-      ) {
-        return;
-      }
+      if (!button || !feedList.contains(button)) return;
 
       event.preventDefault();
-
       loadMorePosts();
     });
   }
@@ -1662,6 +1655,25 @@
     return true;
   }
 
+  /* CLOUD FEED STATUS MESSAGE */
+
+  function renderCloudFeedMessage(message, showRetry = false) {
+    const retryLabel = isEnglish()
+      ? "Try again"
+      : "फेरि प्रयास गर्नुहोस्";
+
+    return `
+      <div class="empty-state" role="status" aria-live="polite">
+        <p>${escapeHTML(message)}</p>
+        ${showRetry ? `
+          <button class="btn btn-secondary" type="button" data-feed-retry>
+            ${escapeHTML(retryLabel)}
+          </button>
+        ` : ""}
+      </div>
+    `;
+  }
+
   /* FEED RENDERING */
 
   function renderFeed() {
@@ -1671,17 +1683,35 @@
 
     bindFeedPagination(feedList);
 
-    // Cloud Feed अहिलेसम्म लोड भएको छैन भने
-    // Supabase बाट स्वतः लोड सुरु गर्ने।
-    if (
-      cloudFeedPosts === null &&
-      !cloudFeedLoading
-    ) {
-      loadCloudFeed().then(loaded => {
-        if (loaded) {
-          renderFeed();
-        }
-      });
+    if (cloudFeedStatus === "idle" && !cloudFeedLoading) {
+      loadCloudFeed().then(() => renderFeed());
+    }
+
+    if (cloudFeedStatus === "loading") {
+      feedList.innerHTML = renderCloudFeedMessage(
+        isEnglish()
+          ? "Loading posts…"
+          : "पोस्ट लोड हुँदैछन्…"
+      );
+
+      $("#emptyFeed")?.classList.add("hidden");
+
+      return true;
+    }
+
+    if (cloudFeedStatus === "error") {
+      feedList.innerHTML = renderCloudFeedMessage(
+        cloudFeedError || (
+          isEnglish()
+            ? "Could not load posts."
+            : "पोस्ट लोड गर्न सकिएन।"
+        ),
+        true
+      );
+
+      $("#emptyFeed")?.classList.add("hidden");
+
+      return true;
     }
 
     const filtered = getFilteredPosts();
@@ -1718,17 +1748,18 @@
   /* SUPABASE POSTS CHANGE LISTENER */
 
   function refreshCloudFeed() {
-    // पुरानो Request को परिणाम अस्वीकार गर्ने।
+    // पुरानो Request को परिणाम अस्वीकार गरी Cloud बाट फेरि पढ्ने।
     cloudFeedRequest += 1;
-
     cloudFeedLoading = false;
     cloudFeedPosts = null;
+    cloudFeedStatus = "idle";
+    cloudFeedError = "";
 
-    loadCloudFeed().then(loaded => {
-      if (loaded) {
-        renderFeed();
-      }
-    });
+    loadCloudFeed().then(() => renderFeed());
+
+    renderFeed();
+
+    return true;
   }
 
   global.addEventListener(
@@ -1814,7 +1845,7 @@
 
   function refresh() {
     renderStories();
-    renderFeed();
+    refreshCloudFeed();
 
     return true;
   }
