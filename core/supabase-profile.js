@@ -346,8 +346,6 @@
 
     const update = buildUpdatePayload(profile);
 
-    update.updated_at = new Date().toISOString();
-
     const { data, error } = await client
       .from(TABLE)
       .update(update)
