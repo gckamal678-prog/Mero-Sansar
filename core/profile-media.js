@@ -939,11 +939,44 @@
      PROFILE INFORMATION EDITOR
   ===================================================== */
 
-  function openEditor() {
+  async function openEditor() {
 
     if (busy) return;
 
-    const user = profile();
+    busy = true;
+
+    let user;
+
+    try {
+      const api = global.KSKSupabaseProfile;
+
+      if (!api) {
+        throw new Error("Supabase Profile सेवा उपलब्ध छैन।");
+      }
+
+      user = await api.getMyProfile();
+
+      if (!user) {
+        throw new Error("प्रोफाइल विवरण भेटिएन।");
+      }
+
+    } catch (error) {
+
+      console.error("KSK Profile Load Failed:", error);
+
+      toast(
+        error.message || t(
+          "प्रोफाइल विवरण लोड भएन।",
+          "Could not load profile."
+        ),
+        "error"
+      );
+
+      return;
+
+    } finally {
+      busy = false;
+    }
 
     const modal = openModal({
 
@@ -954,7 +987,6 @@
         <form id="kskProfileMediaForm" class="ksk-profile-editor">
 
           <div class="form-group">
-
             <label class="form-label" for="kskPMName">
               ${t("नाम", "Name")}
             </label>
@@ -964,11 +996,9 @@
               class="form-input"
               maxlength="60"
               value="${escapeHTML(user.name || "")}">
-
           </div>
 
           <div class="form-group">
-
             <label class="form-label" for="kskPMBio">
               ${t("मेरो परिचय", "About me")}
             </label>
@@ -978,11 +1008,9 @@
               class="form-textarea"
               maxlength="240"
               rows="3">${escapeHTML(user.bio || "")}</textarea>
-
           </div>
 
           <div class="form-group">
-
             <label class="form-label" for="kskPMLocation">
               ${t("ठेगाना", "Location")}
             </label>
@@ -992,7 +1020,6 @@
               class="form-input"
               maxlength="100"
               value="${escapeHTML(user.location || "")}">
-
           </div>
 
           <p class="ksk-crop-note">
@@ -1044,24 +1071,34 @@
 
       try {
 
-        const result = global.KSKData?.saveProfile?.({
-
+        const payload = {
           name: $("#kskPMName", modal.element)?.value.trim() || "",
-
           bio: $("#kskPMBio", modal.element)?.value.trim() || "",
-
           location: $("#kskPMLocation", modal.element)?.value.trim() || ""
+        };
 
-        });
+        const updated = await global.KSKSupabaseProfile.updateMyProfile(
+          payload
+        );
 
-        if (!result) {
+        if (!updated) {
           throw new Error("Profile save failed.");
         }
+
+        // Keep the existing UI cache synchronized.
+        global.KSKData?.saveProfile?.({
+          name: updated.name,
+          bio: updated.bio,
+          location: updated.location
+        });
 
         closeModal();
 
         toast(
-          t("प्रोफाइल सफलतापूर्वक अपडेट भयो।", "Profile updated successfully."),
+          t(
+            "प्रोफाइल सफलतापूर्वक अपडेट भयो।",
+            "Profile updated successfully."
+          ),
           "success"
         );
 
@@ -1070,9 +1107,14 @@
         console.error("KSK Profile Save Failed:", error);
 
         toast(
-          t("प्रोफाइल सुरक्षित भएन। फेरि प्रयास गर्नुहोस्।", "Profile could not be saved."),
+          error.message || t(
+            "प्रोफाइल सुरक्षित भएन। फेरि प्रयास गर्नुहोस्।",
+            "Profile could not be saved. Please try again."
+          ),
           "error"
         );
+
+        if (saveButton) saveButton.disabled = false;
 
       } finally {
         busy = false;
