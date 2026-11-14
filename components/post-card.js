@@ -6,11 +6,10 @@
  * KSK — POST CARD COMPONENT
  * Mero-Sansar
  *
- * RESPONSIBILITY:
- * - Render one reusable post card
+ * - Render reusable post card
  * - Display author, avatar, date and post text
  * - Display reaction, comment, save and share actions
- * - Expose remote Supabase media URL for Media UI
+ * - Display live Supabase Share count
  * =========================================================
  */
 
@@ -163,6 +162,52 @@
       .join("");
   }
 
+  /* SHARE COUNT */
+
+  function getShareCount(post) {
+    const count = Number(post?.shareCount ?? 0);
+
+    return Number.isFinite(count)
+      ? Math.max(0, count)
+      : 0;
+  }
+
+  /*
+   * Share सफल भएपछि core/share.js ले
+   * ksk:post-share-change event पठाउँछ।
+   *
+   * यहाँ सम्बन्धित पोस्टको संख्या मात्र
+   * तुरुन्त अपडेट हुन्छ।
+   */
+
+  function handleShareCountChange(event) {
+    const detail = event.detail || {};
+
+    const postId = String(detail.postId || "").trim();
+    const count = Number(detail.shareCount);
+
+    if (
+      !postId ||
+      !Number.isFinite(count) ||
+      count < 0
+    ) {
+      return;
+    }
+
+    document
+      .querySelectorAll(
+        `[data-share-count-post-id="${postId}"]`
+      )
+      .forEach(node => {
+        node.textContent = String(count);
+      });
+  }
+
+  global.addEventListener(
+    "ksk:post-share-change",
+    handleShareCountChange
+  );
+
   /* RENDER POST CARD */
 
   function render(post, options = {}) {
@@ -217,10 +262,13 @@
       ? post.comments.length
       : Number(post.commentCount || 0);
 
+    const shareCount = getShareCount(post);
+
     /*
      * Supabase private Storage signed URL.
      * Media UI will use this URL to display the photo.
      */
+
     const mediaUrl = isImageSource(post.mediaUrl)
       ? escapeHTML(post.mediaUrl.trim())
       : "";
@@ -320,10 +368,16 @@
             class="post-action"
             type="button"
             data-post-action="share"
-            data-post-id="${id}">
+            data-post-id="${id}"
+            aria-label="${english
+              ? `Share post, ${shareCount} shares`
+              : `पोस्ट साझा गर्नुहोस्, ${shareCount} पटक साझा भयो`}">
 
             ↗
             ${english ? "Share" : "साझा"}
+            (<span
+              class="post-share-count"
+              data-share-count-post-id="${id}">${shareCount}</span>)
 
           </button>
 
