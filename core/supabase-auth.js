@@ -1,10 +1,8 @@
-
 "use strict";
 
 /* =========================================================
-   MERO SANSAR — VERIFIED EMAIL AUTHENTICATION
-   Email + Password
-   Mandatory Email Confirmation
+   MERO SANSAR — SUPABASE AUTHENTICATION
+   Email + Password + Email Verification + Password Recovery
 ========================================================= */
 
 (function (global) {
@@ -30,10 +28,12 @@
   let initialized = false;
   let observer = null;
   let currentMode = "login";
+  let recoveryMode = false;
 
   function t(ne, en) {
     return global.KSKLanguage?.getLanguage?.() === "en"
-      ? en : ne;
+      ? en
+      : ne;
   }
 
   function escapeHTML(value = "") {
@@ -55,7 +55,9 @@
 
   function isAuthenticated() {
     return Boolean(
-      session?.user && isVerified(session.user)
+      !recoveryMode &&
+      session?.user &&
+      isVerified(session.user)
     );
   }
 
@@ -76,7 +78,8 @@
 
   function getEmail(form) {
     return String(new FormData(form).get("email") || "")
-      .trim().toLowerCase();
+      .trim()
+      .toLowerCase();
   }
 
   function getPassword(form) {
@@ -99,22 +102,34 @@
     const panel = document.getElementById(PANEL_ID);
     if (!panel) return;
 
-    panel.querySelectorAll("button,input").forEach(el => {
-      el.disabled = Boolean(busy);
+    panel.querySelectorAll("button,input").forEach(element => {
+      element.disabled = Boolean(busy);
     });
   }
 
   function notify(message, type = "info") {
-    const toast = global.KSKToast;
-
-    if (typeof toast?.show === "function") {
-      toast.show(message, type);
+    if (typeof global.KSKToast?.show === "function") {
+      global.KSKToast.show(message, type);
     } else {
       console.info(message);
     }
   }
 
-  /* SDK */
+  function dispatchAuthChange() {
+    global.dispatchEvent(new CustomEvent(
+      "ksk:auth-change",
+      {
+        detail: {
+          user: isAuthenticated() ? session.user : null,
+          recoveryMode
+        }
+      }
+    ));
+  }
+
+  /* =======================================================
+     LOAD SUPABASE SDK
+  ======================================================= */
 
   function loadSDK() {
     if (global.supabase?.createClient) {
@@ -125,6 +140,7 @@
 
     sdkPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
+
       script.src = SDK_URL;
       script.async = true;
 
@@ -136,15 +152,21 @@
         }
       };
 
-      script.onerror = () => reject(
-        new Error("Supabase SDK लोड भएन। इन्टरनेट जाँच गर्नुहोस्।")
-      );
+      script.onerror = () => {
+        reject(new Error(
+          "Supabase SDK लोड भएन। इन्टरनेट जाँच गर्नुहोस्।"
+        ));
+      };
 
       document.head.appendChild(script);
     });
 
     return sdkPromise;
   }
+
+  /* =======================================================
+     INITIALIZE CLIENT
+  ======================================================= */
 
   async function initializeClient() {
     if (client) return client;
@@ -169,17 +191,35 @@
 
     session = result.data?.session || null;
 
-    // पुरानो वा पुष्टि नभएको Session लाई पहुँच नदिने
     if (session?.user && !isVerified(session.user)) {
       await client.auth.signOut();
       session = null;
     }
 
-    client.auth.onAuthStateChange((_event, nextSession) => {
+    client.auth.onAuthStateChange((event, nextSession) => {
       session = nextSession || null;
+
+      if (event === "PASSWORD_RECOVERY") {
+        recoveryMode = true;
+
+        global.setTimeout(() => {
+          global.dispatchEvent(new CustomEvent(
+            "ksk:password-recovery"
+          ));
+
+          dispatchAuthChange();
+        }, 0);
+
+        return;
+      }
+
+      if (event === "SIGNED_OUT") {
+        recoveryMode = false;
+      }
 
       if (session?.user && !isVerified(session.user)) {
         session = null;
+        recoveryMode = false;
 
         global.setTimeout(() => {
           client.auth.signOut();
@@ -188,18 +228,16 @@
 
       global.setTimeout(() => {
         renderPanel(true);
-
-        global.dispatchEvent(new CustomEvent(
-          "ksk:auth-change",
-          { detail: { user: session?.user || null } }
-        ));
+        dispatchAuthChange();
       }, 0);
     });
 
     return client;
   }
 
-  /* SIGN UP */
+  /* =======================================================
+     SIGN UP
+  ======================================================= */
 
   async function signUp(email, password) {
     const api = await initializeClient();
@@ -217,17 +255,12 @@
 
     session = result.data?.session || null;
 
-    // Email confirmation अनिवार्य हुनुपर्छ।
-    // Supabase मा confirmation बन्द छ भने पनि प्रवेश रोक्ने।
     if (session && !isVerified(result.data?.user)) {
       await api.auth.signOut();
       session = null;
     }
 
-    if (session && !isVerified(session.user)) {
-      await api.auth.signOut();
-      session = null;
-    }
+    recoveryMode = false;
 
     return {
       user: result.data?.user || null,
@@ -236,7 +269,9 @@
     };
   }
 
-  /* LOGIN */
+  /* =======================================================
+     SIGN IN
+  ======================================================= */
 
   async function signIn(email, password) {
     const api = await initializeClient();
@@ -269,11 +304,9 @@
     }
 
     session = newSession;
+    recoveryMode = false;
 
-    global.dispatchEvent(new CustomEvent(
-      "ksk:auth-change",
-      { detail: { user } }
-    ));
+    dispatchAuthChange();
 
     return {
       user,
@@ -281,7 +314,9 @@
     };
   }
 
-  /* LOGOUT */
+  /* =======================================================
+     SIGN OUT
+  ======================================================= */
 
   async function signOut() {
     const api = await initializeClient();
@@ -291,17 +326,17 @@
     if (result.error) throw result.error;
 
     session = null;
-    renderPanel(true);
+    recoveryMode = false;
 
-    global.dispatchEvent(new CustomEvent(
-      "ksk:auth-change",
-      { detail: { user: null } }
-    ));
+    renderPanel(true);
+    dispatchAuthChange();
 
     return true;
   }
 
-  /* PASSWORD RESET */
+  /* =======================================================
+     FORGOT PASSWORD — SEND RESET EMAIL
+  ======================================================= */
 
   async function resetPassword(email) {
     const api = await initializeClient();
@@ -315,10 +350,54 @@
     );
 
     if (result.error) throw result.error;
+
     return true;
   }
 
-  /* STYLES */
+  /* =======================================================
+     UPDATE PASSWORD — AFTER RESET LINK
+  ======================================================= */
+
+  async function updatePassword(newPassword) {
+    const api = await initializeClient();
+
+    if (!recoveryMode) {
+      throw new Error(t(
+        "Password Reset प्रक्रिया सुरु भएको छैन। पहिले Reset Link खोल्नुहोस्।",
+        "Password recovery has not started. Open the reset link first."
+      ));
+    }
+
+    if (String(newPassword).length < 6) {
+      throw new Error(t(
+        "नयाँ पासवर्ड कम्तीमा ६ अक्षरको हुनुपर्छ।",
+        "New password must be at least 6 characters."
+      ));
+    }
+
+    const result = await api.auth.updateUser({
+      password: newPassword
+    });
+
+    if (result.error) throw result.error;
+
+    session = result.data?.user
+      ? {
+          ...session,
+          user: result.data.user
+        }
+      : session;
+
+    recoveryMode = false;
+
+    dispatchAuthChange();
+
+    return true;
+  }
+
+  /* =======================================================
+     SETTINGS PANEL STYLES
+  ======================================================= */
 
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -468,7 +547,9 @@
     document.head.appendChild(style);
   }
 
-  /* PANEL HTML */
+  /* =======================================================
+     SETTINGS PANEL
+  ======================================================= */
 
   function renderLoginPanel() {
     const signup = currentMode === "signup";
@@ -492,17 +573,23 @@
         <form data-auth-form data-auth-mode="${signup ? "signup" : "login"}">
           <label class="ksk-auth-field">
             <span>${t("इमेल ठेगाना", "Email address")}</span>
-            <input type="email" name="email"
-              autocomplete="email" maxlength="254"
-              placeholder="name@example.com" required>
+            <input
+              type="email"
+              name="email"
+              autocomplete="email"
+              maxlength="254"
+              placeholder="name@example.com"
+              required>
           </label>
 
           <label class="ksk-auth-field">
             <span>${t("पासवर्ड", "Password")}</span>
-            <input type="password" name="password"
+            <input
+              type="password"
+              name="password"
               autocomplete="${signup ? "new-password" : "current-password"}"
-              minlength="6" maxlength="128"
-              placeholder="${t("कम्तीमा ६ अक्षर", "At least 6 characters")}"
+              minlength="6"
+              maxlength="128"
               required>
           </label>
 
@@ -514,7 +601,9 @@
           </button>
         </form>
 
-        <button type="button" class="ksk-auth-link"
+        <button
+          type="button"
+          class="ksk-auth-link"
           data-auth-action="toggle">
           ${signup
             ? t("पहिल्यै खाता छ? Login गर्नुहोस्", "Already registered? Log in")
@@ -523,14 +612,20 @@
         </button>
 
         ${!signup ? `
-          <button type="button" class="ksk-auth-link"
+          <button
+            type="button"
+            class="ksk-auth-link"
             data-auth-action="reset">
             ${t("पासवर्ड बिर्सनुभयो?", "Forgot password?")}
           </button>
         ` : ""}
 
-        <p class="ksk-auth-status" data-auth-status
-          role="status" aria-live="polite" hidden></p>
+        <p
+          class="ksk-auth-status"
+          data-auth-status
+          role="status"
+          aria-live="polite"
+          hidden></p>
       </div>
     `;
   }
@@ -551,13 +646,19 @@
           <small>${escapeHTML(session?.user?.email || "")}</small>
         </div>
 
-        <button type="button" class="ksk-auth-secondary"
+        <button
+          type="button"
+          class="ksk-auth-secondary"
           data-auth-action="logout">
           ${t("लगआउट गर्नुहोस्", "Log out")}
         </button>
 
-        <p class="ksk-auth-status" data-auth-status
-          role="status" aria-live="polite" hidden></p>
+        <p
+          class="ksk-auth-status"
+          data-auth-status
+          role="status"
+          aria-live="polite"
+          hidden></p>
       </div>
     `;
   }
@@ -571,6 +672,7 @@
     const old = document.getElementById(PANEL_ID);
 
     if (old && !force) return true;
+
     old?.remove();
 
     const wrapper = document.createElement("div");
@@ -582,13 +684,18 @@
     const panel = wrapper.firstElementChild;
     const info = body.querySelector(".ksk-settings-info");
 
-    if (info) info.insertAdjacentElement("afterend", panel);
-    else body.appendChild(panel);
+    if (info) {
+      info.insertAdjacentElement("afterend", panel);
+    } else {
+      body.appendChild(panel);
+    }
 
     return true;
   }
 
-  /* FORM */
+  /* =======================================================
+     SETTINGS FORM
+  ======================================================= */
 
   async function handleSubmit(event) {
     const form = event.target.closest("[data-auth-form]");
@@ -605,6 +712,7 @@
         "सही इमेल र कम्तीमा ६ अक्षरको पासवर्ड राख्नुहोस्।",
         "Enter a valid email and a password of at least 6 characters."
       ), "error");
+
       return;
     }
 
@@ -620,8 +728,8 @@
           renderPanel(true);
 
           setStatus(t(
-            "खाता अनुरोध सफल भयो। आफ्नो इमेल Inbox वा Spam मा आएको Confirmation Link खोल्नुहोस्। इमेल पुष्टि भएपछि मात्र Login गर्न सकिन्छ।",
-            "Signup request received. Check your inbox or spam folder for the confirmation link. You can log in only after verifying your email."
+            "खाता अनुरोध सफल भयो। आफ्नो इमेल Inbox वा Spam मा आएको Confirmation Link खोल्नुहोस्।",
+            "Signup request received. Check your inbox or spam folder for the confirmation link."
           ), "success");
 
           return;
@@ -645,8 +753,6 @@
     }
   }
 
-  /* BUTTONS */
-
   async function handleClick(event) {
     const button = event.target.closest("[data-auth-action]");
     if (!button) return;
@@ -654,7 +760,10 @@
     const action = button.dataset.authAction;
 
     if (action === "toggle") {
-      currentMode = currentMode === "login" ? "signup" : "login";
+      currentMode = currentMode === "login"
+        ? "signup"
+        : "login";
+
       renderPanel(true);
       return;
     }
@@ -685,6 +794,7 @@
           "पहिले इमेल ठेगाना लेख्नुहोस्।",
           "Enter your email address first."
         ), "error");
+
         form?.querySelector('[name="email"]')?.focus();
         return;
       }
@@ -693,10 +803,12 @@
 
       try {
         await resetPassword(email);
+
         setStatus(t(
-          "पासवर्ड परिवर्तन गर्ने Link इमेलमा पठाइएको छ।",
-          "A password reset link has been sent."
+          "पासवर्ड परिवर्तन गर्ने Link तपाईंको इमेलमा पठाइएको छ।",
+          "A password reset link has been sent to your email."
         ), "success");
+
       } catch (error) {
         setStatus(getErrorMessage(error), "error");
       } finally {
@@ -705,10 +817,13 @@
     }
   }
 
-  /* SETTINGS */
+  /* =======================================================
+     SETTINGS OBSERVER
+  ======================================================= */
 
   function observeSettings() {
     const body = getSettingsBody();
+
     if (!body || observer) return;
 
     observer = new MutationObserver(() => {
@@ -724,12 +839,15 @@
     body.addEventListener("click", handleClick);
   }
 
-  /* INITIALIZE */
+  /* =======================================================
+     INITIALIZE
+  ======================================================= */
 
   async function initialize() {
     if (initialized) return true;
 
     initialized = true;
+
     ensureStyles();
     observeSettings();
 
@@ -740,8 +858,19 @@
 
       global.dispatchEvent(new CustomEvent(
         "ksk:auth-ready",
-        { detail: { user: isAuthenticated() ? session.user : null } }
+        {
+          detail: {
+            user: isAuthenticated() ? session.user : null,
+            recoveryMode
+          }
+        }
       ));
+
+      if (recoveryMode) {
+        global.dispatchEvent(new CustomEvent(
+          "ksk:password-recovery"
+        ));
+      }
 
       return true;
 
@@ -750,14 +879,21 @@
 
       global.dispatchEvent(new CustomEvent(
         "ksk:auth-ready",
-        { detail: { user: null, error: getErrorMessage(error) } }
+        {
+          detail: {
+            user: null,
+            error: getErrorMessage(error)
+          }
+        }
       ));
 
       return false;
     }
   }
 
-  /* PUBLIC API */
+  /* =======================================================
+     PUBLIC API
+  ======================================================= */
 
   global.KSKSupabaseAuth = Object.freeze({
     initialize,
@@ -776,10 +912,15 @@
 
     isAuthenticated,
 
+    isPasswordRecovery() {
+      return recoveryMode;
+    },
+
     signUp,
     signIn,
     signOut,
     resetPassword,
+    updatePassword,
 
     render() {
       return renderPanel(true);
@@ -787,7 +928,9 @@
   });
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialize, { once: true });
+    document.addEventListener("DOMContentLoaded", initialize, {
+      once: true
+    });
   } else {
     initialize();
   }
