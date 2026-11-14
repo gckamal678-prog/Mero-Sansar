@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -58,6 +59,62 @@
     const posts = global.KSKData?.getPosts?.();
 
     return Array.isArray(posts) ? posts : [];
+  }
+
+  async function loadCloudFeed() {
+    const api = global.KSKSupabasePosts;
+
+    if (typeof api?.getFeed !== "function") {
+      return false;
+    }
+
+    if (cloudFeedLoading) {
+      return false;
+    }
+
+    cloudFeedLoading = true;
+
+    const requestId = ++cloudFeedRequest;
+
+    try {
+      const result = await api.getFeed({
+        limit: 100
+      });
+
+      // पुरानो Request ले नयाँ डेटा overwrite नगरोस्।
+      if (requestId !== cloudFeedRequest) {
+        return false;
+      }
+
+      if (
+        !result?.ok ||
+        !Array.isArray(result.data)
+      ) {
+        console.warn(
+          "Supabase Feed load failed:",
+          result?.message || result?.code || "Unknown error"
+        );
+
+        return false;
+      }
+
+      cloudFeedPosts = result.data;
+
+      return true;
+
+    } catch (error) {
+      console.error(
+        "Cloud Feed error:",
+        error
+      );
+
+      return false;
+
+    } finally {
+      if (requestId === cloudFeedRequest) {
+        cloudFeedLoading = false;
+      }
+    }
   }
 
   function getStories() {
@@ -1059,7 +1116,6 @@
     return true;
   }
 
-  
   function setStoryReaction(id, emoji) {
     const allowed = ["❤️", "👍", "😂", "😮", "😢"];
 
@@ -1615,6 +1671,19 @@
 
     bindFeedPagination(feedList);
 
+    // Cloud Feed अहिलेसम्म लोड भएको छैन भने
+    // Supabase बाट स्वतः लोड सुरु गर्ने।
+    if (
+      cloudFeedPosts === null &&
+      !cloudFeedLoading
+    ) {
+      loadCloudFeed().then(loaded => {
+        if (loaded) {
+          renderFeed();
+        }
+      });
+    }
+
     const filtered = getFilteredPosts();
 
     visiblePostCount = Math.min(
@@ -1645,6 +1714,27 @@
 
     return true;
   }
+
+  /* SUPABASE POSTS CHANGE LISTENER */
+
+  function refreshCloudFeed() {
+    // पुरानो Request को परिणाम अस्वीकार गर्ने।
+    cloudFeedRequest += 1;
+
+    cloudFeedLoading = false;
+    cloudFeedPosts = null;
+
+    loadCloudFeed().then(loaded => {
+      if (loaded) {
+        renderFeed();
+      }
+    });
+  }
+
+  global.addEventListener(
+    "ksk:posts-cloud-change",
+    refreshCloudFeed
+  );
 
   /* FOCUS A SEARCHED POST */
 
