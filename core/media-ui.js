@@ -894,16 +894,39 @@
     }
 
     const postId = postElement.dataset.postId;
-    const post = global.KSKData?.getPost?.(postId);
 
-    if (!post?.mediaId) return;
+    const remoteUrl = String(
+      postElement.dataset.postMediaUrl || ""
+    ).trim();
 
-    postElement.dataset.mediaReady = "loading";
+    let markup = "";
 
-    const markup = await imageMarkup(
-      post.mediaId,
-      "ksk-post-media"
-    );
+    if (
+      remoteUrl &&
+      /^https?:\/\//i.test(remoteUrl)
+    ) {
+      postElement.dataset.mediaReady = "loading";
+
+      markup = `
+        <div class="ksk-post-media">
+          <img
+            src="${escapeHTML(remoteUrl)}"
+            alt="${isEnglish() ? "Shared photo" : "साझा गरिएको फोटो"}"
+            loading="lazy">
+        </div>
+      `;
+    } else {
+      const post = global.KSKData?.getPost?.(postId);
+
+      if (!post?.mediaId) return;
+
+      postElement.dataset.mediaReady = "loading";
+
+      markup = await imageMarkup(
+        post.mediaId,
+        "ksk-post-media"
+      );
+    }
 
     if (!postElement.isConnected) return;
 
@@ -912,7 +935,7 @@
       postElement
     );
 
-    if (footer) {
+    if (footer && markup) {
       footer.insertAdjacentHTML(
         "beforebegin",
         markup
