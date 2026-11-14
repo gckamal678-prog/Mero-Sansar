@@ -2,38 +2,19 @@
 "use strict";
 
 /*
- * =========================================================
  * KSK — NAVIGATION CONTROLLER
  * Mero-Sansar
  *
- * SINGLE RESPONSIBILITY:
- * - Navigate between pages
- * - Read current page from KSKState
- * - Update active navigation controls
- * - Render the selected page
- * - Dispatch navigation events
- *
- * STATE OWNER:
- * - KSKState (core/state.js)
- *
- * APPLICATION OWNER:
- * - KSKApp (app.js)
- *
- * DOES NOT:
- * - Maintain a second currentPage variable
- * - Manage post data
- * - Manage application initialization
- * =========================================================
+ * - Normal page navigation
+ * - Post deep-link navigation: #post=POST_ID
+ * - Opens Home and focuses the requested post
+ * - Waits for asynchronous Supabase Feed loading
  */
 
 (function (global) {
   "use strict";
 
   if (global.KSKNavigation) return;
-
-  /* =======================================================
-     CONSTANTS
-  ======================================================= */
 
   const VALID_PAGES = new Set([
     "home",
@@ -49,27 +30,22 @@
       ne: "गृहपृष्ठ",
       en: "Home"
     },
-
     friends: {
       ne: "साथीहरू",
       en: "Friends"
     },
-
     messages: {
       ne: "सन्देश",
       en: "Messages"
     },
-
     notifications: {
       ne: "सूचनाहरू",
       en: "Notifications"
     },
-
     saved: {
       ne: "सेभ गरिएका पोस्ट",
       en: "Saved Posts"
     },
-
     profile: {
       ne: "प्रोफाइल",
       en: "Profile"
@@ -78,11 +54,9 @@
 
   let initialized = false;
   let clickRoot = null;
+  let postLinkRequest = 0;
 
-  /* =======================================================
-     STATE ACCESS
-     KSKState IS THE ONLY CURRENT PAGE OWNER.
-  ======================================================= */
+  /* STATE */
 
   function getState() {
     return global.KSKState?.getState?.() || null;
@@ -112,9 +86,7 @@
     return state.setCurrentPage(page);
   }
 
-  /* =======================================================
-     PAGE VALIDATION
-  ======================================================= */
+  /* PAGE VALIDATION */
 
   function normalizePage(page) {
     const value = String(page || "home")
@@ -128,9 +100,7 @@
     return VALID_PAGES.has(normalizePage(page));
   }
 
-  /* =======================================================
-     LANGUAGE
-  ======================================================= */
+  /* LANGUAGE */
 
   function getLanguage() {
     const language =
@@ -145,13 +115,10 @@
       PAGE_TITLES.home[getLanguage()];
   }
 
-  /* =======================================================
-     PAGE MODULE RENDERING
-  ======================================================= */
+  /* PAGE MODULE RENDERING */
 
   function getPageHTML(page) {
     switch (page) {
-
       case "friends":
         return global.KSKFriendsPage?.render?.();
 
@@ -177,10 +144,7 @@
     }
   }
 
-  /* =======================================================
-     SHARED POST CARD
-     HTML GENERATION BELONGS TO KSKPostCard.
-  ======================================================= */
+  /* SHARED POST CARD */
 
   function renderPost(post) {
     const postCard = global.KSKPostCard;
@@ -211,9 +175,7 @@
     });
   }
 
-  /* =======================================================
-     ACTIVE NAVIGATION
-  ======================================================= */
+  /* ACTIVE NAVIGATION */
 
   function updateActiveNavigation() {
     const currentPage = getCurrentPage();
@@ -221,7 +183,6 @@
     document
       .querySelectorAll("[data-page], [data-nav-page]")
       .forEach(node => {
-
         const page = normalizePage(
           node.dataset.page ||
           node.dataset.navPage ||
@@ -243,9 +204,7 @@
       });
   }
 
-  /* =======================================================
-     PAGE VISIBILITY
-  ======================================================= */
+  /* PAGE VISIBILITY */
 
   function showHomePage() {
     document
@@ -281,25 +240,19 @@
 
     content.innerHTML = html;
 
-    /* Media is refreshed after inserting page HTML. */
-
     refreshPageMedia();
 
     return true;
   }
 
-  /* =======================================================
-     MEDIA REFRESH
-  ======================================================= */
+  /* MEDIA REFRESH */
 
   function refreshPageMedia() {
     global.KSKMediaUI?.refresh?.();
     global.KSKProfileMediaUI?.refresh?.();
   }
 
-  /* =======================================================
-     PAGE ERROR
-  ======================================================= */
+  /* PAGE ERROR */
 
   function showPageError() {
     return getLanguage() === "en"
@@ -307,9 +260,7 @@
       : '<div class="empty-state">यो पृष्ठ अहिले उपलब्ध छैन। कृपया फेरि प्रयास गर्नुहोस्।</div>';
   }
 
-  /* =======================================================
-     REFRESH CURRENT PAGE
-  ======================================================= */
+  /* REFRESH CURRENT PAGE */
 
   function refreshCurrentPage() {
     const page = getCurrentPage();
@@ -338,7 +289,6 @@
       return showOtherPage(page, html);
 
     } catch (error) {
-
       console.error(
         "KSKNavigation: Page rendering failed:",
         page,
@@ -351,9 +301,7 @@
     }
   }
 
-  /* =======================================================
-     NAVIGATION EVENTS
-  ======================================================= */
+  /* NAVIGATION EVENTS */
 
   function dispatchNavigationEvent(page, options = {}) {
     global.dispatchEvent(
@@ -375,9 +323,7 @@
     );
   }
 
-  /* =======================================================
-     NAVIGATE
-  ======================================================= */
+  /* NAVIGATE */
 
   function navigate(page, options = {}) {
     const next = normalizePage(page);
@@ -407,9 +353,7 @@
     return true;
   }
 
-  /* =======================================================
-     SET CURRENT PAGE
-  ======================================================= */
+  /* SET CURRENT PAGE */
 
   function setCurrentPage(page, options = {}) {
     const next = normalizePage(page);
@@ -431,9 +375,7 @@
     return true;
   }
 
-  /* =======================================================
-     NAVIGATION CLICK
-  ======================================================= */
+  /* DOCUMENT NAVIGATION CLICK */
 
   function handleDocumentClick(event) {
     const target = event.target?.closest?.(
@@ -446,11 +388,6 @@
       target.dataset.page ||
       target.dataset.navPage;
 
-    /*
-     * Create is handled by KSKMediaUI.
-     * It is not a navigation page.
-     */
-
     if (!isValidPage(page)) {
       return;
     }
@@ -462,9 +399,7 @@
     });
   }
 
-  /* =======================================================
-     EXTERNAL NAVIGATION REQUEST
-  ======================================================= */
+  /* EXTERNAL NAVIGATION REQUEST */
 
   function handleNavigationRequest(event) {
     const detail = event.detail || {};
@@ -477,9 +412,140 @@
     );
   }
 
-  /* =======================================================
-     INITIALIZE
-  ======================================================= */
+  /* READ POST LINK */
+
+  function getPostIdFromHash() {
+    const rawHash = String(
+      global.location?.hash || ""
+    ).replace(/^#/, "").trim();
+
+    if (!rawHash.startsWith("post=")) {
+      return "";
+    }
+
+    const encodedId = rawHash.slice(5);
+
+    if (!encodedId) return "";
+
+    try {
+      return decodeURIComponent(encodedId).trim();
+    } catch (error) {
+      console.warn(
+        "KSKNavigation: Invalid post link:",
+        error
+      );
+
+      return "";
+    }
+  }
+
+  /* OPEN POST FROM DEEP LINK */
+
+  function openPostDeepLink(postId) {
+    const id = String(postId || "").trim();
+
+    if (!id) return false;
+
+    const requestId = ++postLinkRequest;
+
+    // पोस्ट खोज्न पुरानो Search हटाउने।
+    global.KSKHomePage?.clearSearch?.();
+
+    // Home page खोल्ने।
+    if (getCurrentPage() !== "home") {
+      navigate("home", {
+        source: "post-deep-link",
+        postId: id
+      });
+    } else {
+      updateActiveNavigation();
+      showHomePage();
+    }
+
+    const home = global.KSKHomePage;
+
+    if (typeof home?.focusPost !== "function") {
+      console.error(
+        "KSKNavigation: Home focusPost is unavailable."
+      );
+
+      return false;
+    }
+
+    // Feed मा पोस्ट पहिले नै उपलब्ध छ भने तुरुन्त खोल्ने।
+    if (home.focusPost(id)) {
+      return true;
+    }
+
+    /*
+     * Feed asynchronous भएकाले Cloud बाट फेरि लोड गर्ने।
+     * focusPost सफल नभएसम्म सीमित समय पर्खने।
+     */
+    if (typeof home.refresh === "function") {
+      home.refresh();
+    }
+
+    let attempts = 0;
+    const maxAttempts = 120;
+
+    function retryFocus() {
+      if (requestId !== postLinkRequest) {
+        return;
+      }
+
+      if (home.focusPost(id)) {
+        return;
+      }
+
+      attempts += 1;
+
+      if (attempts >= maxAttempts) {
+        console.warn(
+          "KSKNavigation: Linked post was not found in the loaded feed:",
+          id
+        );
+
+        return;
+      }
+
+      global.setTimeout(retryFocus, 125);
+    }
+
+    global.setTimeout(retryFocus, 125);
+
+    return true;
+  }
+
+  /* HANDLE HASH ROUTING */
+
+  function handleHashChange() {
+    const postId = getPostIdFromHash();
+
+    if (postId) {
+      openPostDeepLink(postId);
+      return;
+    }
+
+    const rawHash = String(
+      global.location?.hash || ""
+    ).replace(/^#/, "").trim();
+
+    if (!rawHash) {
+      setCurrentPage("home");
+      return;
+    }
+
+    const linkedPage = normalizePage(rawHash);
+
+    if (isValidPage(linkedPage)) {
+      // नयाँ page link ले पुरानो post retry रोक्छ।
+      postLinkRequest += 1;
+
+      setCurrentPage(linkedPage);
+    }
+  }
+
+  /* INITIALIZE */
 
   function initializeNavigation(root = document) {
     if (initialized) {
@@ -501,16 +567,25 @@
       state.currentPage || "home"
     );
 
-    const rawHash = String(global.location?.hash || "")
-      .replace(/^#/, "")
-      .trim();
+    const linkedPostId = getPostIdFromHash();
 
-    const linkedPage = rawHash ? normalizePage(rawHash) : "";
+    const rawHash = String(
+      global.location?.hash || ""
+    ).replace(/^#/, "").trim();
 
-    // A valid deep link takes priority; an empty hash must not
-    // overwrite the user's previously selected page.
-    if (linkedPage && isValidPage(linkedPage)) {
+    const linkedPage = rawHash
+      ? normalizePage(rawHash)
+      : "";
+
+    if (linkedPostId) {
+      updatePageState("home");
+
+    } else if (
+      linkedPage &&
+      isValidPage(linkedPage)
+    ) {
       updatePageState(linkedPage);
+
     } else if (!isValidPage(savedPage)) {
       updatePageState("home");
     }
@@ -536,42 +611,24 @@
 
     updateActiveNavigation();
 
+    // App initialization पछि पोस्ट खोल्ने।
+    if (linkedPostId) {
+      global.setTimeout(() => {
+        openPostDeepLink(linkedPostId);
+      }, 0);
+    }
+
     return true;
   }
 
-  /* =======================================================
-     DEEP-LINK ROUTING
-  ======================================================= */
-
-  function handleHashChange() {
-    const rawHash = String(global.location?.hash || "")
-      .replace(/^#/, "")
-      .trim();
-
-    if (!rawHash) {
-      setCurrentPage("home");
-      return;
-    }
-
-    const linkedPage = normalizePage(rawHash);
-
-    if (isValidPage(linkedPage)) {
-      setCurrentPage(linkedPage);
-    }
-  }
-
-  /* =======================================================
-     REFRESH NAVIGATION
-  ======================================================= */
+  /* REFRESH NAVIGATION */
 
   function refreshNavigation() {
     updateActiveNavigation();
     return true;
   }
 
-  /* =======================================================
-     DESTROY
-  ======================================================= */
+  /* DESTROY */
 
   function destroy() {
     if (clickRoot) {
@@ -591,34 +648,26 @@
       handleHashChange
     );
 
+    postLinkRequest += 1;
+
     initialized = false;
     clickRoot = null;
 
     return true;
   }
 
-  /* =======================================================
-     PUBLIC API
-  ======================================================= */
+  /* PUBLIC API */
 
   global.KSKNavigation = Object.freeze({
-
     initializeNavigation,
-
     isValidPage,
-
     navigate,
-
     setCurrentPage,
-
     getCurrentPage,
-
     refreshNavigation,
-
     refreshCurrentPage,
-
+    openPostDeepLink,
     destroy
-
   });
 
 })(window);
