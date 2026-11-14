@@ -7,8 +7,9 @@
  * POST REACTIONS:
  * - Supabase database persistence
  * - Add, change and remove reactions
- * - Live reaction counts on the loaded feed
+ * - Live reaction counts
  * - Current user's reaction state
+ * - Realtime updates from other users
  *
  * COMMENT REACTIONS:
  * - Disabled until comment reaction database is ready
@@ -31,10 +32,18 @@
 
   const TABLE = "post_reactions";
   const ANIMATION_STYLE_ID = "ksk-like-animation-style";
+  const REALTIME_CHANNEL = "ksk-post-reactions-live";
 
   let activePicker = null;
   let activeTriggerButton = null;
   let activeRequest = 0;
+
+  let realtimeChannel = null;
+  let realtimeClient = null;
+  let realtimeUserId = "";
+  let realtimeStarting = false;
+
+  const pendingPostUpdates = new Map();
 
   const $ = (selector, root = document) =>
     root.querySelector(selector);
@@ -111,7 +120,6 @@
     if (!post) return false;
 
     const counts = {};
-
     let myReaction = "";
 
     (Array.isArray(rows) ? rows : []).forEach(row => {
@@ -131,6 +139,7 @@
     post.reactionCounts = counts;
     post.myReaction = myReaction;
     post.liked = Boolean(myReaction);
+
     post.likes = Object.values(counts).reduce(
       (total, count) => total + count,
       0
@@ -160,6 +169,169 @@
       )?.emoji || "",
       likes: rows.length
     };
+  }
+
+  /* =========================================
+     REFRESH UI
+  ========================================= */
+
+  function refreshFeed() {
+    if (typeof global.KSKHomePage?.renderFeed === "function") {
+      global.KSKHomePage.renderFeed();
+      return true;
+    }
+
+    if (typeof global.KSKApp?.refreshCurrentPage === "function") {
+      global.KSKApp.refreshCurrentPage();
+      return true;
+    }
+
+    return false;
+  }
+
+  /* =========================================
+     REALTIME REACTION UPDATES
+  ========================================= */
+
+  async function syncRealtimePost(postId) {
+    const id = String(postId || "");
+
+    if (!id) return false;
+
+    // एउटै पोस्टका लगातार Realtime घटनालाई क्रमबद्ध गर्ने।
+    const previous = pendingPostUpdates.get(id) || Promise.resolve();
+
+    const current = previous
+      .catch(() => {})
+      .then(async () => {
+        try {
+          await loadPostReactions(id);
+
+          if (getPost(id)) {
+            refreshFeed();
+          }
+
+          return true;
+
+        } catch (error) {
+          console.warn(
+            "Realtime reaction refresh failed:",
+            error
+          );
+
+          return false;
+        }
+      });
+
+    pendingPostUpdates.set(id, current);
+
+    try {
+      return await current;
+    } finally {
+      if (pendingPostUpdates.get(id) === current) {
+        pendingPostUpdates.delete(id);
+      }
+    }
+  }
+
+  async function stopRealtime() {
+    const oldChannel = realtimeChannel;
+    const oldClient = realtimeClient;
+
+    realtimeChannel = null;
+    realtimeClient = null;
+    realtimeUserId = "";
+
+    if (oldChannel && oldClient?.removeChannel) {
+      try {
+        await oldClient.removeChannel(oldChannel);
+      } catch (error) {
+        console.warn(
+          "Reaction Realtime cleanup failed:",
+          error
+        );
+      }
+    }
+
+    return true;
+  }
+
+  async function startRealtime() {
+    if (realtimeStarting) return false;
+
+    realtimeStarting = true;
+
+    try {
+      const { client, user } = await getSupabaseContext();
+
+      if (
+        realtimeChannel &&
+        realtimeClient === client &&
+        realtimeUserId === user.id
+      ) {
+        return true;
+      }
+
+      await stopRealtime();
+
+      const channel = client
+        .channel(REALTIME_CHANNEL)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: TABLE
+          },
+          payload => {
+            const postId =
+              payload?.new?.post_id ||
+              payload?.old?.post_id ||
+              "";
+
+            if (postId) {
+              syncRealtimePost(postId);
+            }
+          }
+        );
+
+      realtimeChannel = channel;
+      realtimeClient = client;
+      realtimeUserId = user.id;
+
+      await channel.subscribe(status => {
+        if (status === "SUBSCRIBED") {
+          console.info("Reaction Realtime connected.");
+        }
+
+        if (status === "CHANNEL_ERROR") {
+          console.warn("Reaction Realtime channel error.");
+        }
+
+        if (status === "TIMED_OUT") {
+          console.warn("Reaction Realtime connection timed out.");
+        }
+
+        if (status === "CLOSED") {
+          console.warn("Reaction Realtime channel closed.");
+        }
+      });
+
+      return true;
+
+    } catch (error) {
+      console.warn(
+        "Reaction Realtime could not start:",
+        error
+      );
+
+      await stopRealtime();
+
+      return false;
+
+    } finally {
+      realtimeStarting = false;
+    }
   }
 
   /* =========================================
@@ -338,8 +510,6 @@
       return false;
     }
 
-    const requestId = ++activeRequest;
-
     closePicker();
 
     const currentRequest = activeRequest;
@@ -347,7 +517,9 @@
     try {
       await loadPostReactions(postId);
 
-      if (currentRequest !== activeRequest) return false;
+      if (currentRequest !== activeRequest) {
+        return false;
+      }
 
       const picker = renderPicker(
         postId,
@@ -392,7 +564,6 @@
     try {
       const { client, user } = await getSupabaseContext();
 
-      // पहिले हालको Reaction पढ्ने।
       const { data: existing, error: readError } = await client
         .from(TABLE)
         .select("id, emoji")
@@ -403,7 +574,6 @@
       if (readError) throw readError;
 
       if (existing?.emoji === emoji) {
-        // एउटै Reaction फेरि छान्दा हटाउने।
         const { error } = await client
           .from(TABLE)
           .delete()
@@ -413,7 +583,6 @@
         if (error) throw error;
 
       } else {
-        // नयाँ Reaction वा पुरानो Reaction परिवर्तन गर्ने।
         const { error } = await client
           .from(TABLE)
           .upsert(
@@ -431,7 +600,7 @@
         if (error) throw error;
       }
 
-      // Database बाट वास्तविक अवस्था फेरि पढ्ने।
+      // Database बाट वास्तविक अवस्था पुनः लोड गर्ने।
       await loadPostReactions(postId);
 
       return true;
@@ -464,24 +633,6 @@
   }
 
   /* =========================================
-     REFRESH UI
-  ========================================= */
-
-  function refreshFeed() {
-    if (typeof global.KSKHomePage?.renderFeed === "function") {
-      global.KSKHomePage.renderFeed();
-      return true;
-    }
-
-    if (typeof global.KSKApp?.refreshCurrentPage === "function") {
-      global.KSKApp.refreshCurrentPage();
-      return true;
-    }
-
-    return false;
-  }
-
-  /* =========================================
      HANDLE REACTION SELECTION
   ========================================= */
 
@@ -500,7 +651,6 @@
     const post = getPost(postId);
     const previousReaction = post?.myReaction || "";
 
-    // Double click रोक्ने।
     activePicker
       .querySelectorAll("button")
       .forEach(button => {
@@ -513,7 +663,6 @@
 
     if (!success) return false;
 
-    // नयाँ Reaction वा Reaction परिवर्तन हुँदा मात्र animation।
     if (
       previousReaction !== emoji &&
       animationRect
@@ -535,7 +684,6 @@
 
     if (!target?.closest) return;
 
-    // Reaction विकल्प।
     const option = target.closest("[data-ksk-reaction]");
 
     if (option && activePicker?.contains(option)) {
@@ -546,7 +694,6 @@
       return;
     }
 
-    // Comment Reaction हाल उपलब्ध छैन।
     const commentReactionButton = target.closest(
       "[data-comment-reaction]"
     );
@@ -562,7 +709,6 @@
       return;
     }
 
-    // Post Reaction Picker।
     const postReactionButton = target.closest(
       '[data-post-action="like"]'
     );
@@ -575,7 +721,6 @@
       return;
     }
 
-    // Picker बाहिर क्लिक गर्दा बन्द गर्ने।
     if (
       activePicker &&
       !activePicker.contains(target)
@@ -587,6 +732,32 @@
   function onKeyDown(event) {
     if (event.key === "Escape") {
       closePicker();
+    }
+  }
+
+  /* =========================================
+     AUTH EVENTS
+  ========================================= */
+
+  function onAuthChange(event) {
+    const user = event.detail?.user;
+
+    if (!user?.id) {
+      stopRealtime();
+      closePicker();
+      return;
+    }
+
+    startRealtime();
+  }
+
+  function onAuthReady(event) {
+    const user = event.detail?.user;
+
+    if (user?.id) {
+      startRealtime();
+    } else {
+      stopRealtime();
     }
   }
 
@@ -617,17 +788,50 @@
       onKeyDown
     );
 
-    global.removeEventListener("resize", closePicker);
+    global.removeEventListener(
+      "resize",
+      closePicker
+    );
 
-    global.addEventListener("resize", closePicker);
+    global.addEventListener(
+      "resize",
+      closePicker
+    );
 
-    global.removeEventListener("scroll", closePicker, true);
+    global.removeEventListener(
+      "scroll",
+      closePicker,
+      true
+    );
 
     global.addEventListener(
       "scroll",
       closePicker,
       true
     );
+
+    global.removeEventListener(
+      "ksk:auth-change",
+      onAuthChange
+    );
+
+    global.addEventListener(
+      "ksk:auth-change",
+      onAuthChange
+    );
+
+    global.removeEventListener(
+      "ksk:auth-ready",
+      onAuthReady
+    );
+
+    global.addEventListener(
+      "ksk:auth-ready",
+      onAuthReady
+    );
+
+    // पेज खुलिसकेपछि पनि Login अवस्था जाँच्ने।
+    startRealtime();
 
     return true;
   }
@@ -644,7 +848,10 @@
       onKeyDown
     );
 
-    global.removeEventListener("resize", closePicker);
+    global.removeEventListener(
+      "resize",
+      closePicker
+    );
 
     global.removeEventListener(
       "scroll",
@@ -652,7 +859,18 @@
       true
     );
 
+    global.removeEventListener(
+      "ksk:auth-change",
+      onAuthChange
+    );
+
+    global.removeEventListener(
+      "ksk:auth-ready",
+      onAuthReady
+    );
+
     closePicker();
+    stopRealtime();
 
     return true;
   }
@@ -672,6 +890,9 @@
     showLikeAnimation,
 
     loadPostReactions,
+
+    startRealtime,
+    stopRealtime,
 
     getReactions() {
       return REACTIONS.slice();
