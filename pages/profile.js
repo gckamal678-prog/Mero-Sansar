@@ -3,8 +3,6 @@
 
 /*
  * MERO SANSAR — SUPABASE CONNECTED PROFILE PAGE
- * Profile data: Supabase
- * Posts and social counts: Existing KSKData modules
  */
 
 (function (global) {
@@ -17,10 +15,6 @@
 
   let remoteProfile = null;
   let remoteLoadPromise = null;
-
-  /* =====================================================
-     LANGUAGE
-  ===================================================== */
 
   function isEnglish() {
     return global.KSKLanguage?.getLanguage?.() === "en";
@@ -44,9 +38,7 @@
     })[char]);
   }
 
-  /* =====================================================
-     STYLES
-  ===================================================== */
+  /* STYLES */
 
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -114,6 +106,7 @@
         width:100%;
         height:100%;
         object-fit:cover;
+        display:block;
       }
 
       .profile-section .ksk-profile-photo-hint {
@@ -125,7 +118,13 @@
         background:var(--color-surface);
       }
 
-      .profile-section .profile-avatar {
+      /*
+       * AVATAR FIX:
+       * बाहिरी सेतो अण्डाकार wrapper हटाइएको छ।
+       * फोटो देखिने एउटै गोलो avatar मात्र राखिएको छ।
+       */
+
+      .profile-section .profile-card .profile-avatar {
         display:flex;
         flex-direction:column;
         align-items:center;
@@ -136,7 +135,38 @@
         width:max-content;
         max-width:100%;
         margin:0 auto 4px;
+        padding:0 !important;
+        background:transparent !important;
+        border:0 !important;
+        border-radius:0 !important;
+        box-shadow:none !important;
         outline-offset:4px;
+      }
+
+      .profile-section .profile-avatar .avatar {
+        width:104px !important;
+        height:104px !important;
+        min-width:104px;
+        min-height:104px;
+        flex:0 0 104px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        overflow:hidden;
+        border-radius:50% !important;
+        font-size:34px;
+        border:4px solid var(--color-surface);
+        box-shadow:0 0 0 2px var(--color-primary-soft);
+        box-sizing:border-box;
+      }
+
+      .profile-section .profile-avatar .avatar img,
+      .profile-section .profile-avatar img {
+        width:100%;
+        height:100%;
+        display:block;
+        object-fit:cover;
+        border-radius:50% !important;
       }
 
       .profile-section .profile-avatar-label {
@@ -149,7 +179,7 @@
 
       .profile-section .ksk-profile-avatar-hint {
         position:absolute;
-        top:76px;
+        top:70px;
         right:2px;
         z-index:3;
         width:28px;
@@ -163,22 +193,6 @@
         border:2px solid var(--color-surface);
         font-size:12px;
         pointer-events:none;
-      }
-
-      .profile-section .profile-avatar .avatar {
-        width:104px;
-        height:104px;
-        flex-basis:104px;
-        font-size:34px;
-        border:4px solid var(--color-surface);
-        box-shadow:0 0 0 2px var(--color-primary-soft);
-      }
-
-      .profile-section .profile-avatar img {
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        border-radius:inherit;
       }
 
       .profile-section .profile-card h2 {
@@ -424,9 +438,15 @@
         }
 
         .profile-section .profile-avatar .avatar {
-          width:88px;
-          height:88px;
+          width:88px !important;
+          height:88px !important;
+          min-width:88px;
+          min-height:88px;
           flex-basis:88px;
+        }
+
+        .profile-section .ksk-profile-avatar-hint {
+          top:60px;
         }
 
         .profile-section .profile-card h2 {
@@ -448,9 +468,7 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
-  /* =====================================================
-     PROFILE DATA
-  ===================================================== */
+  /* PROFILE DATA */
 
   function getLocalProfile() {
     return global.KSKData?.getProfile?.() || {};
@@ -499,31 +517,21 @@
     if (!changed) return false;
 
     global.KSKData?.saveProfile?.(values);
-
     return true;
   }
 
   function refreshProfilePage() {
-    if (
-      global.KSKNavigation?.getCurrentPage?.() === "profile"
-    ) {
+    if (global.KSKNavigation?.getCurrentPage?.() === "profile") {
       global.KSKNavigation?.refreshCurrentPage?.();
     }
 
     global.KSKProfileMediaUI?.refresh?.();
   }
 
-  /*
-   * The page renderer is synchronous.
-   * This background request updates the local UI cache
-   * after Supabase returns the authenticated user's profile.
-   */
-
   function loadSupabaseProfile() {
     if (remoteLoadPromise) return remoteLoadPromise;
 
     const api = global.KSKSupabaseProfile;
-
     if (!api?.getMyProfile) return Promise.resolve(null);
 
     remoteLoadPromise = api.getMyProfile()
@@ -531,32 +539,22 @@
         if (!result) return null;
 
         remoteProfile = normalizeRemoteProfile(result);
-
         saveRemoteProfileToCache(remoteProfile);
-
         refreshProfilePage();
 
         console.info("KSK Profile: Supabase profile loaded.");
-
         return remoteProfile;
       })
       .catch(error => {
-        console.warn(
-          "KSK Profile: Supabase profile could not be loaded.",
-          error
-        );
-
+        console.warn("KSK Profile: Supabase profile could not be loaded.", error);
         remoteLoadPromise = null;
-
         return null;
       });
 
     return remoteLoadPromise;
   }
 
-  /* =====================================================
-     POSTS AND FRIENDS
-  ===================================================== */
+  /* POSTS AND FRIENDS */
 
   function getPosts() {
     const posts = global.KSKData?.getPosts?.();
@@ -569,20 +567,16 @@
   }
 
   function getDisplayName(user) {
-    return String(
-      user?.name || t("तपाईंको प्रोफाइल", "Your Profile")
-    );
+    return String(user?.name || t("तपाईंको प्रोफाइल", "Your Profile"));
   }
 
-  function renderAvatar(user) {
-    if (global.KSKUserCard?.renderAvatar) {
-      return global.KSKUserCard.renderAvatar({
-        name: user?.name || "",
-        avatar: user?.avatar || "",
-        avatarMediaId: user?.avatarMediaId || ""
-      });
-    }
+  /*
+   * Direct avatar markup.
+   * KSKUserCard wrapper intentionally not used here.
+   * This prevents the second outer avatar shape.
+   */
 
+  function renderAvatar(user) {
     const name = String(user?.name || "").trim();
     const avatar = String(user?.avatar || "").trim();
 
@@ -614,9 +608,7 @@
 
       const authorId = String(post.authorId || "");
 
-      if (userId && authorId) {
-        return authorId === userId;
-      }
+      if (userId && authorId) return authorId === userId;
 
       const author = String(post.author || "").trim();
 
@@ -741,9 +733,7 @@
     `;
   }
 
-  /* =====================================================
-     PROFILE LINK
-  ===================================================== */
+  /* PROFILE LINK */
 
   function getProfileLink() {
     try {
@@ -769,20 +759,14 @@
     const link = getProfileLink();
 
     if (!link) {
-      showToast(
-        t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."),
-        "error"
-      );
+      showToast(t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."), "error");
       return false;
     }
 
     let copied = false;
 
     try {
-      if (
-        global.isSecureContext &&
-        global.navigator?.clipboard?.writeText
-      ) {
+      if (global.isSecureContext && global.navigator?.clipboard?.writeText) {
         await global.navigator.clipboard.writeText(link);
         copied = true;
       }
@@ -818,13 +802,10 @@
     );
 
     button?.blur();
-
     return copied;
   }
 
-  /* =====================================================
-     ABOUT
-  ===================================================== */
+  /* ABOUT */
 
   function renderAbout(user) {
     const joinedAt = user?.joinedAt
@@ -885,18 +866,12 @@
     `;
   }
 
-  /* =====================================================
-     MAIN RENDER
-  ===================================================== */
+  /* MAIN RENDER */
 
   function render(options = {}) {
-    options = options && typeof options === "object"
-      ? options
-      : {};
+    options = options && typeof options === "object" ? options : {};
 
     ensureStyles();
-
-    // Start loading Supabase profile without blocking synchronous render.
     loadSupabaseProfile();
 
     const user = options.user && typeof options.user === "object"
@@ -955,15 +930,9 @@
 
           <h2>${escapeHTML(getDisplayName(user))}</h2>
 
-          ${user.bio
-            ? `<p>${escapeHTML(user.bio)}</p>`
-            : ""
-          }
+          ${user.bio ? `<p>${escapeHTML(user.bio)}</p>` : ""}
 
-          ${user.location
-            ? `<p>📍 ${escapeHTML(user.location)}</p>`
-            : ""
-          }
+          ${user.location ? `<p>📍 ${escapeHTML(user.location)}</p>` : ""}
 
           <div class="profile-stats">
             ${renderStat(counts.followers, t("फलोअर्स", "Followers"))}
@@ -976,18 +945,12 @@
           </div>
 
           <div class="profile-main-actions">
-            <button
-              class="profile-action-btn primary"
-              type="button"
-              data-edit-profile>
+            <button class="profile-action-btn primary" type="button" data-edit-profile>
               <span>✏️</span>
               <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
             </button>
 
-            <button
-              class="profile-action-btn"
-              type="button"
-              data-open-settings>
+            <button class="profile-action-btn" type="button" data-open-settings>
               <span>⚙️</span>
               <span>${t("सेटिङ", "Settings")}</span>
             </button>
@@ -996,7 +959,6 @@
         </section>
 
         <section class="card profile-tools-card">
-
           <div class="profile-tools-heading">
             <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
             <p>${t(
@@ -1006,19 +968,13 @@
           </div>
 
           <div class="profile-tool-grid" data-profile-extras>
-
-            <button
-              type="button"
-              data-copy-profile-link>
+            <button type="button" data-copy-profile-link>
               🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
             </button>
 
-            <button
-              type="button"
-              data-page="saved">
+            <button type="button" data-page="saved">
               🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
             </button>
-
           </div>
 
           <p class="profile-tool-note">
@@ -1027,11 +983,9 @@
               "QR, achievements and insights appear in this section."
             )}
           </p>
-
         </section>
 
         <div class="profile-tabs" role="tablist">
-
           <button
             class="profile-tab${activeTab === "posts" ? " is-active" : ""}"
             type="button"
@@ -1058,25 +1012,21 @@
             data-profile-tab="about">
             ${t("परिचय", "About")}
           </button>
-
         </div>
 
         <div
           class="profile-tab-panel${activeTab === "posts" ? "" : " hidden"}"
           data-profile-panel="posts"
           role="tabpanel">
-
           <div class="profile-posts">
             ${renderPostList(posts, options)}
           </div>
-
         </div>
 
         <div
           class="profile-tab-panel${activeTab === "photos" ? "" : " hidden"}"
           data-profile-panel="photos"
           role="tabpanel">
-
           <div class="profile-posts">
             ${photos.length
               ? renderPostList(photos, options)
@@ -1086,35 +1036,28 @@
                 )}</div>`
             }
           </div>
-
         </div>
 
         <div
           class="profile-tab-panel${activeTab === "about" ? "" : " hidden"}"
           data-profile-panel="about"
           role="tabpanel">
-
           <div class="card profile-about-card">
             ${renderAbout(user)}
           </div>
-
         </div>
 
       </section>
     `;
   }
 
-  /* =====================================================
-     TABS AND CLICK HANDLERS
-  ===================================================== */
+  /* TABS AND CLICK HANDLERS */
 
   function switchTab(button) {
     const section = button.closest("[data-profile-section]");
     const selected = button.dataset.profileTab;
 
-    if (!section || !VALID_TABS.has(selected)) {
-      return false;
-    }
+    if (!section || !VALID_TABS.has(selected)) return false;
 
     section.querySelectorAll("[data-profile-tab]").forEach(tab => {
       const active = tab === button;
@@ -1135,7 +1078,6 @@
 
   function handleClick(event) {
     const target = event.target;
-
     if (!target?.closest) return;
 
     const tab = target.closest("[data-profile-tab]");
@@ -1155,9 +1097,7 @@
 
   document.addEventListener("click", handleClick);
 
-  /* =====================================================
-     PUBLIC API
-  ===================================================== */
+  /* PUBLIC API */
 
   global.KSKProfilePage = Object.freeze({
     render,
