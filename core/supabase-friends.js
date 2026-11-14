@@ -5,9 +5,10 @@
  * =========================================================
  * MERO SANSAR — SUPABASE FRIENDS ADAPTER
  *
- * Version: 1.0.0
+ * Version: 1.1.0
  *
  * - Supabase Auth UUID आधारित सामाजिक सम्बन्ध
+ * - Profile search by display name
  * - Friend requests
  * - Accept / Reject / Cancel
  * - Accepted friendships
@@ -22,6 +23,7 @@
 
   const TABLE_REQUESTS = "friend_requests";
   const TABLE_FRIENDSHIPS = "friendships";
+  const TABLE_PROFILES = "profiles";
 
   const REQUEST_FIELDS =
     "id,sender_id,receiver_id,status,created_at,updated_at";
@@ -214,6 +216,78 @@
 
     } catch (error) {
       initialized = false;
+      return handleError(error);
+    }
+  }
+
+  /*
+   * SEARCH USERS
+   *
+   * Searches real Supabase profiles by display name.
+   * Returns actual Auth UUIDs for friend requests.
+   */
+
+  async function searchUsers(searchText, options = {}) {
+    const term = String(searchText ?? "")
+      .trim()
+      .replace(/\s+/g, " ");
+
+    if (term.length < 2) {
+      return failure(
+        "SEARCH_TOO_SHORT",
+        "कम्तीमा २ अक्षर लेखेर खोज्नुहोस्।"
+      );
+    }
+
+    if (term.length > 60) {
+      return failure(
+        "SEARCH_TOO_LONG",
+        "खोजी शब्द बढीमा ६० अक्षरको हुनुपर्छ।"
+      );
+    }
+
+    const ready = await requireClient();
+
+    if (!ready.ok) return ready;
+
+    const { client, userId } = ready.data;
+
+    const requestedLimit = Number(options.limit || 20);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(20, Math.max(1, Math.floor(requestedLimit)))
+      : 20;
+
+    /*
+     * Treat user-entered wildcard characters literally.
+     */
+
+    const safeTerm = term.replace(/[\\%_]/g, "\\$&");
+
+    try {
+      const { data, error } = await client
+        .from(TABLE_PROFILES)
+        .select("id,name")
+        .ilike("name", `%${safeTerm}%`)
+        .neq("id", userId)
+        .order("name", { ascending: true })
+        .limit(limit);
+
+      if (error) return handleError(error);
+
+      const profiles = (data || [])
+        .filter(row => normalizeUuid(row.id))
+        .map(row => ({
+          userId: row.id,
+          id: row.id,
+          name: String(row.name || "Mero Sansar User")
+        }));
+
+      return success(
+        profiles,
+        "USERS_SEARCHED"
+      );
+
+    } catch (error) {
       return handleError(error);
     }
   }
@@ -488,6 +562,7 @@
 
     getCurrentUserId,
 
+    searchUsers,
     sendFriendRequest,
     getIncomingRequests,
     getOutgoingRequests,
