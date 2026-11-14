@@ -3,10 +3,10 @@
 
 /* =========================================================
    MERO SANSAR — SERVICE WORKER
-   Version: v67
+   Version: v68
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v67";
+const CACHE_NAME = "hamro-sansar-v68";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -245,7 +245,7 @@ self.addEventListener("install", event => {
       }
 
       console.info(
-        "Mero Sansar v67 cached:",
+        "Mero Sansar v68 cached:",
         allFiles.size + 1,
         "files"
       );
@@ -295,7 +295,7 @@ self.addEventListener("activate", event => {
     await self.clients.claim();
 
     console.info(
-      "Mero Sansar Service Worker v67 activated."
+      "Mero Sansar Service Worker v68 activated."
     );
 
   })());
