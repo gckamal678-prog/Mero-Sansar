@@ -2,27 +2,19 @@
 "use strict";
 
 /*
- * MERO SANSAR — NOTIFICATIONS PAGE
+ * MERO SANSAR — SUPABASE NOTIFICATIONS PAGE
  *
- * Notifications:
+ * NOTIFICATION DATA: Supabase (KSKSupabaseNotifications)
+ * UI PREFERENCES: Local Storage (device only)
+ *
+ * Features:
  * - All / Unread filters
  * - Mark one / all as read
- * - Clear read notifications locally
+ * - Delete read notifications
  * - Group related notifications
  * - Notification type preferences
- *
- * Sounds:
- * - Only five MP3 files from KSKTone
- * - Individual sound buttons
- * - Tap a sound to save and preview immediately
- * - No select dropdown
- * - No page refresh after choosing a sound
- *
- * Storage:
- * - Notifications: KSKData
- * - UI preferences: ksk_notifications_ui_v1
- *
- * No backend or core/data.js changes.
+ * - MP3 notification sounds
+ * - Realtime updates
  */
 
 (function (global) {
@@ -30,13 +22,14 @@
 
   if (global.KSKNotificationsPage) return;
 
-  const DATA = () => global.KSKData || null;
+  const CLOUD = () => global.KSKSupabaseNotifications || null;
   const LANG = () => global.KSKLanguage || null;
   const TOAST = () => global.KSKToast || null;
   const TONE = () => global.KSKTone || null;
 
   const STORAGE_KEY = "ksk_notifications_ui_v1";
-  const VERSION = 2;
+  const VERSION = 3;
+  const PAGE_SIZE = 100;
 
   const TYPES = Object.freeze({
     friend_request: {
@@ -102,6 +95,17 @@
   });
 
   let initialized = false;
+  let notificationCache = [];
+  let loading = false;
+  let loaded = false;
+  let loadPromise = null;
+  let loadError = null;
+
+  const playedNotificationIds = new Set();
+
+  /* =========================================
+     LANGUAGE / UTILITIES
+  ========================================= */
 
   function isEnglish() {
     return LANG()?.getLanguage?.() === "en";
@@ -133,293 +137,14 @@
     }
   }
 
-  /* =======================================================
-     MP3 SOUND OPTIONS
-  ======================================================= */
-
-  function getToneOptions() {
-    const tones = TONE()?.getTones?.();
-
-    if (!Array.isArray(tones)) return [];
-
-    return tones.filter(tone => {
-      return (
-        tone &&
-        typeof tone.id === "string" &&
-        tone.id.trim() &&
-        typeof tone.src === "string" &&
-        /\.mp3(?:[?#].*)?$/i.test(tone.src)
-      );
-    });
+  function isCurrentPage() {
+    return global.KSKApp?.getCurrentPage?.() === "notifications";
   }
 
-  function isValidTone(id) {
-    const key = String(id || "");
-
-    return getToneOptions().some(tone => {
-      return tone.id === key;
-    });
-  }
-
-  /* =======================================================
-     PREFERENCES
-  ======================================================= */
-
-  function makeDefaultPreferences() {
-    const types = {};
-
-    Object.keys(TYPES).forEach(type => {
-      types[type] = true;
-    });
-
-    const tones = getToneOptions();
-    const firstTone = tones[0]?.id || "";
-
-    return {
-      version: VERSION,
-      enabled: true,
-      types,
-      filter: "all",
-      readOverrides: {},
-      dismissedIds: [],
-      expandedGroups: {},
-      soundEnabled: false,
-      soundTone: firstTone
-    };
-  }
-
-  function loadPreferences() {
-    const defaults = makeDefaultPreferences();
-
-    try {
-      const raw = global.localStorage.getItem(STORAGE_KEY);
-
-      if (!raw) return defaults;
-
-      const saved = JSON.parse(raw);
-
-      if (!saved || typeof saved !== "object") {
-        return defaults;
-      }
-
-      const savedTone = String(saved.soundTone || "");
-
-      const selectedTone = isValidTone(savedTone)
-        ? savedTone
-        : defaults.soundTone;
-
-      return {
-        ...defaults,
-        ...saved,
-
-        version: VERSION,
-
-        types: {
-          ...defaults.types,
-          ...(saved.types || {})
-        },
-
-        readOverrides:
-          saved.readOverrides &&
-          typeof saved.readOverrides === "object"
-            ? saved.readOverrides
-            : {},
-
-        dismissedIds: Array.isArray(saved.dismissedIds)
-          ? saved.dismissedIds.map(String)
-          : [],
-
-        expandedGroups:
-          saved.expandedGroups &&
-          typeof saved.expandedGroups === "object"
-            ? saved.expandedGroups
-            : {},
-
-        soundEnabled: Boolean(saved.soundEnabled),
-
-        soundTone: selectedTone
-      };
-
-    } catch (error) {
-      console.warn(
-        "Notification preferences load failed:",
-        error
-      );
-
-      return defaults;
+  function refresh() {
+    if (isCurrentPage()) {
+      global.KSKApp?.refreshCurrentPage?.();
     }
-  }
-
-  function savePreferences(preferences) {
-    try {
-      global.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(preferences)
-      );
-
-      return true;
-
-    } catch (error) {
-      console.error(
-        "Notification preferences save failed:",
-        error
-      );
-
-      notify(
-        t(
-          "सेटिङ सुरक्षित गर्न सकिएन।",
-          "Could not save settings."
-        ),
-        "error"
-      );
-
-      return false;
-    }
-  }
-
-  /* =======================================================
-     SOUND PLAYBACK
-  ======================================================= */
-
-  function playTone(id, purpose = "preview") {
-    const engine = TONE();
-
-    if (
-      typeof engine?.play !== "function" ||
-      !isValidTone(id)
-    ) {
-      if (purpose === "preview") {
-        notify(
-          t(
-            "ध्वनि उपलब्ध छैन। MP3 फाइलको नाम र स्थान जाँच गर्नुहोस्।",
-            "Sound is unavailable. Check the MP3 file name and path."
-          ),
-          "error"
-        );
-      }
-
-      return Promise.resolve(false);
-    }
-
-    let result;
-
-    try {
-      result = engine.play(id);
-
-    } catch (error) {
-      console.warn("Tone playback failed:", error);
-      return Promise.resolve(false);
-    }
-
-    return Promise.resolve(result)
-      .then(success => {
-        if (success === false && purpose === "preview") {
-          notify(
-            t(
-              "यो MP3 बजाउन सकिएन। फाइलको नाम र स्थान जाँच गर्नुहोस्।",
-              "This MP3 could not be played. Check the file name and path."
-            ),
-            "error"
-          );
-        }
-
-        return success !== false;
-      })
-      .catch(error => {
-        console.warn("Tone playback failed:", error);
-
-        if (purpose === "preview") {
-          notify(
-            t(
-              "यो ध्वनि अहिले बजाउन सकिएन।",
-              "This sound could not be played."
-            ),
-            "error"
-          );
-        }
-
-        return false;
-      });
-  }
-
-  function updateToneSelectionUI(selectedId) {
-    document.querySelectorAll(
-      "[data-notification-tone]"
-    ).forEach(button => {
-      const selected =
-        button.dataset.notificationTone === selectedId;
-
-      button.classList.toggle("selected", selected);
-
-      button.setAttribute(
-        "aria-pressed",
-        String(selected)
-      );
-
-      const tone = getToneOptions().find(item => {
-        return item.id === selectedId;
-      });
-
-      const label = tone
-        ? escapeHTML(isEnglish() ? tone.en : tone.ne)
-        : "";
-
-      button.textContent = selected
-        ? "✓ " + label
-        : label;
-    });
-  }
-
-  const playedNotificationIds = new Set();
-
-  function playIncomingNotification(item) {
-    if (
-      !item ||
-      document.visibilityState !== "visible"
-    ) {
-      return false;
-    }
-
-    const preferences = loadPreferences();
-    const type = classifyNotification(item);
-
-    if (
-      !preferences.enabled ||
-      !preferences.soundEnabled ||
-      preferences.types[type] === false
-    ) {
-      return false;
-    }
-
-    const id = getItemId(item);
-
-    if (id && playedNotificationIds.has(id)) {
-      return false;
-    }
-
-    if (id) {
-      playedNotificationIds.add(id);
-
-      if (playedNotificationIds.size > 500) {
-        playedNotificationIds.delete(
-          playedNotificationIds.values().next().value
-        );
-      }
-    }
-
-    playTone(preferences.soundTone, "incoming");
-
-    return true;
-  }
-
-  /* =======================================================
-     NOTIFICATION DATA
-  ======================================================= */
-
-  function getNotifications() {
-    const list = DATA()?.getNotifications?.();
-
-    return Array.isArray(list) ? list : [];
   }
 
   function getItemId(item) {
@@ -430,9 +155,7 @@
     const value = item?.createdAt || item?.time || 0;
     const date = new Date(value);
 
-    return Number.isNaN(date.getTime())
-      ? 0
-      : date.getTime();
+    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
   }
 
   function formatDate(item) {
@@ -453,9 +176,412 @@
     );
   }
 
-  /* =======================================================
+  /* =========================================
+     MP3 SOUND OPTIONS
+  ========================================= */
+
+  function getToneOptions() {
+    const tones = TONE()?.getTones?.();
+
+    if (!Array.isArray(tones)) return [];
+
+    return tones.filter(tone => (
+      tone &&
+      typeof tone.id === "string" &&
+      tone.id.trim() &&
+      typeof tone.src === "string" &&
+      /\.mp3(?:[?#].*)?$/i.test(tone.src)
+    ));
+  }
+
+  function isValidTone(id) {
+    return getToneOptions().some(tone => tone.id === String(id || ""));
+  }
+
+  function playTone(id, purpose = "preview") {
+    const engine = TONE();
+
+    if (
+      typeof engine?.play !== "function" ||
+      !isValidTone(id)
+    ) {
+      if (purpose === "preview") {
+        notify(
+          t(
+            "ध्वनि उपलब्ध छैन। MP3 फाइल जाँच गर्नुहोस्।",
+            "Sound is unavailable. Check the MP3 file."
+          ),
+          "error"
+        );
+      }
+
+      return Promise.resolve(false);
+    }
+
+    try {
+      return Promise.resolve(engine.play(id))
+        .then(success => {
+          if (success === false && purpose === "preview") {
+            notify(
+              t(
+                "यो ध्वनि बजाउन सकिएन।",
+                "This sound could not be played."
+              ),
+              "error"
+            );
+          }
+
+          return success !== false;
+        })
+        .catch(error => {
+          console.warn("Notification sound failed:", error);
+          return false;
+        });
+    } catch (error) {
+      console.warn("Notification sound failed:", error);
+      return Promise.resolve(false);
+    }
+  }
+
+  function updateToneSelectionUI(selectedId) {
+    document.querySelectorAll(
+      "[data-notification-tone]"
+    ).forEach(button => {
+      const selected =
+        button.dataset.notificationTone === selectedId;
+
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+
+      const tone = getToneOptions().find(item => {
+        return item.id === selectedId;
+      });
+
+      const label = tone
+        ? escapeHTML(isEnglish() ? tone.en : tone.ne)
+        : "";
+
+      button.textContent = selected ? "✓ " + label : label;
+    });
+  }
+
+  function playIncomingNotification(item) {
+    if (!item || document.visibilityState !== "visible") {
+      return false;
+    }
+
+    const preferences = loadPreferences();
+    const type = classifyNotification(item);
+    const id = getItemId(item);
+
+    if (
+      !preferences.enabled ||
+      !preferences.soundEnabled ||
+      preferences.types[type] === false
+    ) {
+      return false;
+    }
+
+    if (id && playedNotificationIds.has(id)) {
+      return false;
+    }
+
+    if (id) {
+      playedNotificationIds.add(id);
+
+      if (playedNotificationIds.size > 500) {
+        playedNotificationIds.delete(
+          playedNotificationIds.values().next().value
+        );
+      }
+    }
+
+    playTone(preferences.soundTone, "incoming");
+    return true;
+  }
+
+  /* =========================================
+     UI PREFERENCES
+  ========================================= */
+
+  function makeDefaultPreferences() {
+    const types = {};
+
+    Object.keys(TYPES).forEach(type => {
+      types[type] = true;
+    });
+
+    return {
+      version: VERSION,
+      enabled: true,
+      types,
+      filter: "all",
+      expandedGroups: {},
+      soundEnabled: false,
+      soundTone: getToneOptions()[0]?.id || ""
+    };
+  }
+
+  function loadPreferences() {
+    const defaults = makeDefaultPreferences();
+
+    try {
+      const raw = global.localStorage.getItem(STORAGE_KEY);
+
+      if (!raw) return defaults;
+
+      const saved = JSON.parse(raw);
+
+      if (!saved || typeof saved !== "object") {
+        return defaults;
+      }
+
+      const savedTone = String(saved.soundTone || "");
+
+      return {
+        ...defaults,
+        ...saved,
+        version: VERSION,
+
+        types: {
+          ...defaults.types,
+          ...(saved.types || {})
+        },
+
+        expandedGroups:
+          saved.expandedGroups &&
+          typeof saved.expandedGroups === "object"
+            ? saved.expandedGroups
+            : {},
+
+        filter:
+          saved.filter === "unread"
+            ? "unread"
+            : "all",
+
+        soundEnabled: Boolean(saved.soundEnabled),
+
+        soundTone: isValidTone(savedTone)
+          ? savedTone
+          : defaults.soundTone
+      };
+
+    } catch (error) {
+      console.warn("Notification preferences failed:", error);
+      return defaults;
+    }
+  }
+
+  function savePreferences(preferences) {
+    try {
+      global.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(preferences)
+      );
+
+      return true;
+
+    } catch (error) {
+      console.error("Notification preferences save failed:", error);
+
+      notify(
+        t(
+          "सेटिङ सुरक्षित गर्न सकिएन।",
+          "Could not save settings."
+        ),
+        "error"
+      );
+
+      return false;
+    }
+  }
+
+  /* =========================================
+     SUPABASE DATA
+  ========================================= */
+
+  function getNotifications() {
+    return notificationCache.slice();
+  }
+
+  function sortNotifications() {
+    notificationCache.sort((a, b) => {
+      return getItemDate(b) - getItemDate(a);
+    });
+  }
+
+  function upsertNotification(item) {
+    if (!item?.id) return;
+
+    const id = String(item.id);
+    const index = notificationCache.findIndex(
+      row => String(row.id) === id
+    );
+
+    if (index >= 0) {
+      notificationCache[index] = item;
+    } else {
+      notificationCache.push(item);
+    }
+
+    sortNotifications();
+  }
+
+  function removeNotification(id) {
+    const key = String(id || "");
+
+    notificationCache = notificationCache.filter(
+      item => String(item.id) !== key
+    );
+  }
+
+  async function loadCloudNotifications(options = {}) {
+    if (loading && loadPromise) {
+      return loadPromise;
+    }
+
+    const api = CLOUD();
+
+    if (typeof api?.getNotifications !== "function") {
+      loadError = t(
+        "Supabase Notification सेवा उपलब्ध छैन।",
+        "Supabase notification service is unavailable."
+      );
+
+      loaded = false;
+      refresh();
+
+      return {
+        ok: false,
+        code: "NOTIFICATION_MODULE_MISSING",
+        message: loadError
+      };
+    }
+
+    loading = true;
+    loadError = null;
+
+    if (!options.silent) refresh();
+
+    loadPromise = (async () => {
+      try {
+        const response = await api.getNotifications({
+          limit: PAGE_SIZE
+        });
+
+        if (!response?.ok) {
+          loadError = response?.message || t(
+            "सूचना लोड गर्न सकिएन।",
+            "Could not load notifications."
+          );
+
+          loaded = false;
+
+          return response || {
+            ok: false,
+            code: "LOAD_FAILED",
+            message: loadError
+          };
+        }
+
+        notificationCache = Array.isArray(response.data)
+          ? response.data.slice()
+          : [];
+
+        sortNotifications();
+
+        loaded = true;
+        loadError = null;
+
+        return {
+          ok: true,
+          code: "LOADED",
+          data: notificationCache
+        };
+
+      } catch (error) {
+        console.error("Notification load failed:", error);
+
+        loadError = error?.message || t(
+          "सूचना लोड गर्न सकिएन।",
+          "Could not load notifications."
+        );
+
+        loaded = false;
+
+        return {
+          ok: false,
+          code: "LOAD_ERROR",
+          message: loadError
+        };
+
+      } finally {
+        loading = false;
+        loadPromise = null;
+        refresh();
+      }
+    })();
+
+    return loadPromise;
+  }
+
+  function handleCloudChange(event) {
+    const detail = event?.detail || {};
+
+    if (detail.collection !== "user_notifications") {
+      return;
+    }
+
+    if (detail.action === "add" && detail.item) {
+      const isNew = !notificationCache.some(
+        item => String(item.id) === String(detail.item.id)
+      );
+
+      upsertNotification(detail.item);
+
+      if (isNew) {
+        playIncomingNotification(detail.item);
+      }
+
+    } else if (
+      (detail.action === "read" ||
+       detail.action === "update") &&
+      detail.item
+    ) {
+      upsertNotification(detail.item);
+
+    } else if (detail.action === "delete") {
+      removeNotification(detail.item?.id);
+
+    } else if (detail.action === "mark-all-read") {
+      notificationCache = notificationCache.map(item => ({
+        ...item,
+        read: true
+      }));
+    }
+
+    loaded = true;
+    refresh();
+  }
+
+  function handleAuthChange(event) {
+    const user = event?.detail?.user;
+
+    if (user?.id) {
+      notificationCache = [];
+      loaded = false;
+      loadCloudNotifications();
+    } else {
+      notificationCache = [];
+      loaded = false;
+      loadError = null;
+      refresh();
+    }
+  }
+
+  /* =========================================
      TYPE CLASSIFICATION
-  ======================================================= */
+  ========================================= */
 
   function normalizeType(value) {
     const type = String(value || "")
@@ -521,7 +647,6 @@
 
   function getTypeLabel(type) {
     const item = TYPES[type] || TYPES.other;
-
     return isEnglish() ? item.en : item.ne;
   }
 
@@ -529,32 +654,16 @@
     return (TYPES[type] || TYPES.other).icon;
   }
 
-  /* =======================================================
-     READ / HIDDEN STATE
-  ======================================================= */
+  /* =========================================
+     READ STATE / FILTERS
+  ========================================= */
 
-  function isRead(item, preferences) {
-    const id = getItemId(item);
-
-    if (
-      id &&
-      Object.prototype.hasOwnProperty.call(
-        preferences.readOverrides,
-        id
-      )
-    ) {
-      return Boolean(preferences.readOverrides[id]);
-    }
-
-    return Boolean(item.read);
+  function isRead(item) {
+    return Boolean(item?.read);
   }
 
-  function isDismissed(item, preferences) {
-    const id = getItemId(item);
-
-    return Boolean(
-      id && preferences.dismissedIds.includes(id)
-    );
+  function isDismissed() {
+    return false;
   }
 
   function visibleNotifications() {
@@ -563,34 +672,30 @@
     if (!preferences.enabled) return [];
 
     return getNotifications()
-      .filter(item => !isDismissed(item, preferences))
+      .filter(item => !isDismissed(item))
       .filter(item => {
         return preferences.types[
           classifyNotification(item)
         ] !== false;
       })
-      .filter(item => {
-        return (
-          preferences.filter !== "unread" ||
-          !isRead(item, preferences)
-        );
-      });
+      .filter(item => (
+        preferences.filter !== "unread" ||
+        !isRead(item)
+      ));
   }
 
   function getCounts() {
     const preferences = loadPreferences();
 
     const all = getNotifications()
-      .filter(item => !isDismissed(item, preferences))
+      .filter(item => !isDismissed(item))
       .filter(item => {
         return preferences.types[
           classifyNotification(item)
         ] !== false;
       });
 
-    const unread = all.filter(
-      item => !isRead(item, preferences)
-    );
+    const unread = all.filter(item => !isRead(item));
 
     return {
       all: all.length,
@@ -599,33 +704,24 @@
     };
   }
 
-  /* =======================================================
+  /* =========================================
      GROUPING
-  ======================================================= */
+  ========================================= */
 
   function getGroupKey(item, index) {
     const type = classifyNotification(item);
 
     const target =
+      item.entityId ||
       item.postId ||
       item.storyId ||
       item.groupId ||
       item.targetId ||
-      item.entityId ||
-      item.conversationId ||
       "";
 
-    if (!target) {
-      return (
-        type +
-        ":single:" +
-        getItemId(item) +
-        ":" +
-        index
-      );
-    }
-
-    return type + ":" + String(target);
+    return target
+      ? type + ":" + String(target)
+      : type + ":single:" + getItemId(item) + ":" + index;
   }
 
   function buildGroups(items) {
@@ -652,30 +748,22 @@
           (a, b) => getItemDate(b) - getItemDate(a)
         )
       }))
-      .sort((a, b) => {
-        return (
-          getItemDate(b.items[0]) -
-          getItemDate(a.items[0])
-        );
-      });
+      .sort((a, b) => (
+        getItemDate(b.items[0]) - getItemDate(a.items[0])
+      ));
   }
 
-  /* =======================================================
+  /* =========================================
      STYLES
-  ======================================================= */
+  ========================================= */
 
   function ensureStyles() {
-    if (
-      document.getElementById(
-        "ksk-notifications-v2-style"
-      )
-    ) {
+    if (document.getElementById("ksk-notifications-v3-style")) {
       return;
     }
 
     const style = document.createElement("style");
-
-    style.id = "ksk-notifications-v2-style";
+    style.id = "ksk-notifications-v3-style";
 
     style.textContent = `
       .ksk-notifications {
@@ -686,26 +774,24 @@
         color: var(--text-color, inherit);
       }
 
-      .ksk-notif-heading {
+      .ksk-notif-heading,
+      .ksk-notif-counts,
+      .ksk-notif-toolbar,
+      .ksk-notif-tabs {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 12px;
         flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .ksk-notif-heading {
+        justify-content: space-between;
         margin: 4px 0 16px;
       }
 
       .ksk-notif-heading h2 {
         margin: 0;
         font-size: 21px;
-      }
-
-      .ksk-notif-counts,
-      .ksk-notif-toolbar,
-      .ksk-notif-tabs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
       }
 
       .ksk-notif-counts {
@@ -811,35 +897,20 @@
       }
 
       .ksk-notif-tone-button {
-        min-width: 0;
-        min-height: 43px;
-        padding: 9px 11px;
-        border: 1px solid var(--border-color, #64748b);
-        border-radius: 11px;
+        border: 1px solid var(--border-color, #ddd);
+        border-radius: 10px;
+        padding: 10px;
         background: var(--card-bg, transparent);
         color: inherit;
         font: inherit;
         font-size: 13px;
-        text-align: left;
         cursor: pointer;
-        transition:
-          border-color .15s ease,
-          background .15s ease;
       }
 
       .ksk-notif-tone-button.selected {
-        border: 2px solid var(--primary-color, #3b82f6);
-        background: var(--secondary-bg, rgba(59,130,246,.12));
-        font-weight: 750;
-      }
-
-      .ksk-notif-tone-button:focus-visible,
-      .ksk-notif-btn:focus-visible,
-      .ksk-notif-tab:focus-visible,
-      .ksk-notif-small-btn:focus-visible,
-      .ksk-notif-group-toggle:focus-visible {
-        outline: 2px solid var(--primary-color, #3b82f6);
-        outline-offset: 2px;
+        border-color: var(--primary-color, #2563eb);
+        color: var(--primary-color, #2563eb);
+        font-weight: 700;
       }
 
       .ksk-notif-list {
@@ -986,6 +1057,10 @@
         margin-bottom: 8px;
       }
 
+      .ksk-notif-error {
+        color: var(--danger-color, #dc2626);
+      }
+
       @media (max-width: 480px) {
         .ksk-notif-heading h2 {
           font-size: 19px;
@@ -1022,17 +1097,15 @@
     document.head.appendChild(style);
   }
 
-  /* =======================================================
-     RENDER
-  ======================================================= */
+  /* =========================================
+     RENDER HELPERS
+  ========================================= */
 
   function renderEmpty(message) {
     return `
       <div class="ksk-notif-empty">
         <div class="ksk-notif-empty-icon">🔔</div>
-
         <strong>${escapeHTML(message)}</strong>
-
         <p>${escapeHTML(t(
           "नयाँ सूचना आएपछि यहाँ देखिनेछन्।",
           "New notifications will appear here."
@@ -1044,7 +1117,7 @@
   function renderSingle(item, preferences) {
     const id = getItemId(item);
     const type = classifyNotification(item);
-    const read = isRead(item, preferences);
+    const read = isRead(item);
     const text = escapeHTML(item.text || "");
     const date = escapeHTML(formatDate(item));
 
@@ -1064,11 +1137,7 @@
             <small class="ksk-notif-meta">
               ${escapeHTML(getTypeLabel(type))}
               ${date ? " · " + date : ""}
-              ${
-                read
-                  ? ""
-                  : " · " + escapeHTML(t("नयाँ", "New"))
-              }
+              ${read ? "" : " · " + escapeHTML(t("नयाँ", "New"))}
             </small>
           </div>
         </div>
@@ -1082,7 +1151,7 @@
                   class="ksk-notif-small-btn"
                   data-notification-action="hide"
                   data-notification-id="${escapeHTML(id)}">
-                  ${escapeHTML(t("हटाउनुहोस्", "Clear"))}
+                  ${escapeHTML(t("हटाउनुहोस्", "Delete"))}
                 </button>
               `
               : `
@@ -1104,7 +1173,7 @@
     const items = group.items;
 
     const unreadCount = items.filter(
-      item => !isRead(item, preferences)
+      item => !isRead(item)
     ).length;
 
     const expanded = Boolean(
@@ -1126,15 +1195,27 @@
       ? items.map(item => `
           <div class="ksk-notif-group-item">
             <p>${escapeHTML(item.text || "")}</p>
-
             <small class="ksk-notif-meta">
               ${escapeHTML(formatDate(item))}
               ${
-                isRead(item, preferences)
+                isRead(item)
                   ? ""
                   : " · " + escapeHTML(t("नपढेको", "Unread"))
               }
             </small>
+            ${
+              !isRead(item)
+                ? `
+                  <button
+                    type="button"
+                    class="ksk-notif-small-btn"
+                    data-notification-action="read"
+                    data-notification-id="${escapeHTML(getItemId(item))}">
+                    ${escapeHTML(t("पढेको बनाउनुहोस्", "Mark as read"))}
+                  </button>
+                `
+                : ""
+            }
           </div>
         `).join("")
       : "";
@@ -1153,7 +1234,6 @@
 
           <span class="ksk-notif-group-summary">
             <strong>${escapeHTML(summary)}</strong>
-
             <small>
               ${escapeHTML(title)}
               · ${escapeHTML(formatDate(first))}
@@ -1167,10 +1247,7 @@
           </span>
 
           <span class="ksk-notif-group-count">${count}</span>
-
-          <span aria-hidden="true">
-            ${expanded ? "⌃" : "⌄"}
-          </span>
+          <span aria-hidden="true">${expanded ? "⌃" : "⌄"}</span>
         </button>
 
         ${
@@ -1208,12 +1285,8 @@
           class="ksk-notif-tone-button ${selected ? "selected" : ""}"
           data-notification-tone="${escapeHTML(tone.id)}"
           aria-pressed="${selected ? "true" : "false"}">
-
           ${selected ? "✓ " : ""}
-
-          ${escapeHTML(
-            isEnglish() ? tone.en : tone.ne
-          )}
+          ${escapeHTML(isEnglish() ? tone.en : tone.ne)}
         </button>
       `;
     }).join("");
@@ -1253,9 +1326,7 @@
           </label>
 
           <strong>
-            ${escapeHTML(
-              t("आफ्नो ध्वनि छान्नुहोस्", "Choose your sound")
-            )}
+            ${escapeHTML(t("आफ्नो ध्वनि छान्नुहोस्", "Choose your sound"))}
           </strong>
 
           <div class="ksk-notif-tone-grid">
@@ -1272,8 +1343,8 @@
 
           <p class="ksk-notif-sound-note">
             ${escapeHTML(t(
-              "कुनै ध्वनि थिच्दा तुरुन्तै बज्छ र छनोट सुरक्षित हुन्छ। नयाँ सूचना आउँदा बजाउन माथिको ध्वनि विकल्प खोल्नुहोस्।",
-              "Tap a sound to play its preview and save your choice. Turn on notification sound above to use it for new notifications."
+              "कुनै ध्वनि थिच्दा तुरुन्तै बज्छ र छनोट सुरक्षित हुन्छ। नयाँ सूचना आउँदा बजाउन माथिको विकल्प खोल्नुहोस्।",
+              "Tap a sound to preview and save it. Turn on notification sound above to use it for new notifications."
             ))}
           </p>
         </div>
@@ -1298,6 +1369,43 @@
     ensureStyles();
 
     const preferences = loadPreferences();
+
+    if (!loaded) {
+      const message = loadError
+        ? loadError
+        : loading
+          ? t("सूचना लोड हुँदैछ...", "Loading notifications...")
+          : t("सूचना लोड हुँदैछ...", "Loading notifications...");
+
+      return `
+        <section class="ksk-notifications">
+          <header class="ksk-notif-heading">
+            <h2>${escapeHTML(t("सूचनाहरू", "Notifications"))}</h2>
+          </header>
+          <div class="ksk-notif-empty">
+            <div class="ksk-notif-empty-icon">🔔</div>
+            <strong class="${loadError ? "ksk-notif-error" : ""}">
+              ${escapeHTML(message)}
+            </strong>
+            ${
+              loadError
+                ? `
+                  <p>
+                    <button
+                      type="button"
+                      class="ksk-notif-btn primary"
+                      data-notification-action="retry">
+                      ${escapeHTML(t("फेरि प्रयास गर्नुहोस्", "Try again"))}
+                    </button>
+                  </p>
+                `
+                : ""
+            }
+          </div>
+        </section>
+      `;
+    }
+
     const counts = getCounts();
     const allNotifications = visibleNotifications();
     const groups = buildGroups(allNotifications);
@@ -1329,9 +1437,7 @@
       <section class="ksk-notifications">
 
         <header class="ksk-notif-heading">
-          <h2>
-            ${escapeHTML(t("सूचनाहरू", "Notifications"))}
-          </h2>
+          <h2>${escapeHTML(t("सूचनाहरू", "Notifications"))}</h2>
 
           <button
             type="button"
@@ -1379,15 +1485,12 @@
             ${counts.read ? "" : "disabled"}>
             ${escapeHTML(t(
               "पढेका सूचना हटाउनुहोस्",
-              "Clear read notifications"
+              "Delete read notifications"
             ))}
           </button>
         </div>
 
-        <nav
-          class="ksk-notif-tabs"
-          aria-label="Notification filters">
-
+        <nav class="ksk-notif-tabs" aria-label="Notification filters">
           <button
             type="button"
             class="ksk-notif-tab ${
@@ -1417,62 +1520,22 @@
     `;
   }
 
-  /* =======================================================
-     PAGE ACTIONS
-  ======================================================= */
+  /* =========================================
+     CLOUD ACTIONS
+  ========================================= */
 
-  function refresh() {
-    if (
-      global.KSKApp?.getCurrentPage?.() === "notifications"
-    ) {
-      global.KSKApp.refreshCurrentPage?.();
-    }
-  }
-
-  function markOneAsRead(id) {
+  async function markOneAsRead(id) {
     const key = String(id || "").trim();
 
     if (!key) return false;
 
-    const preferences = loadPreferences();
+    const response = await CLOUD()?.markAsRead?.(key);
 
-    preferences.readOverrides[key] = true;
-
-    const saved = savePreferences(preferences);
-
-    if (saved) refresh();
-
-    return saved;
-  }
-
-  function clearOne(id) {
-    const key = String(id || "").trim();
-
-    if (!key) return false;
-
-    const preferences = loadPreferences();
-
-    if (!preferences.dismissedIds.includes(key)) {
-      preferences.dismissedIds.push(key);
-    }
-
-    const saved = savePreferences(preferences);
-
-    if (saved) refresh();
-
-    return saved;
-  }
-
-  function markAllAsRead() {
-    const api = DATA();
-
-    if (
-      typeof api?.markNotificationsRead !== "function"
-    ) {
+    if (!response?.ok) {
       notify(
-        t(
-          "पढेको बनाउने सुविधा उपलब्ध छैन।",
-          "Mark as read is unavailable."
+        response?.message || t(
+          "सूचना पढेको बनाउन सकिएन।",
+          "Could not mark notification as read."
         ),
         "error"
       );
@@ -1480,11 +1543,41 @@
       return false;
     }
 
-    const result = api.markNotificationsRead();
+    upsertNotification(response.data);
+    refresh();
+    return true;
+  }
 
-    if (result === false) {
+  async function clearOne(id) {
+    const key = String(id || "").trim();
+
+    if (!key) return false;
+
+    const response = await CLOUD()?.deleteNotification?.(key);
+
+    if (!response?.ok) {
       notify(
-        t(
+        response?.message || t(
+          "सूचना हटाउन सकिएन।",
+          "Could not delete notification."
+        ),
+        "error"
+      );
+
+      return false;
+    }
+
+    removeNotification(key);
+    refresh();
+    return true;
+  }
+
+  async function markAllAsRead() {
+    const response = await CLOUD()?.markAllAsRead?.();
+
+    if (!response?.ok) {
+      notify(
+        response?.message || t(
           "सूचना पढेको बनाउन सकिएन।",
           "Could not mark notifications as read."
         ),
@@ -1494,11 +1587,11 @@
       return false;
     }
 
-    const preferences = loadPreferences();
+    notificationCache = notificationCache.map(item => ({
+      ...item,
+      read: true
+    }));
 
-    preferences.readOverrides = {};
-
-    savePreferences(preferences);
     refresh();
 
     notify(
@@ -1512,44 +1605,62 @@
     return true;
   }
 
-  function clearReadNotifications() {
-    const preferences = loadPreferences();
-
-    const readItems = getNotifications().filter(item => {
-      return (
-        !isDismissed(item, preferences) &&
-        isRead(item, preferences)
-      );
-    });
+  async function clearReadNotifications() {
+    const readItems = getNotifications().filter(isRead);
 
     if (!readItems.length) return false;
 
-    const ids = readItems
-      .map(getItemId)
-      .filter(Boolean);
+    const api = CLOUD();
 
-    preferences.dismissedIds = Array.from(
-      new Set([
-        ...preferences.dismissedIds,
-        ...ids
-      ])
-    );
-
-    const saved = savePreferences(preferences);
-
-    if (saved) {
-      refresh();
-
+    if (typeof api?.deleteNotification !== "function") {
       notify(
         t(
-          "पढेका सूचना यस डिभाइसको सूचीबाट हटाइयो।",
-          "Read notifications cleared from this device's list."
+          "सूचना हटाउने सुविधा उपलब्ध छैन।",
+          "Delete notification is unavailable."
         ),
-        "success"
+        "error"
       );
+
+      return false;
     }
 
-    return saved;
+    let deleted = 0;
+    let failed = 0;
+
+    for (const item of readItems) {
+      const response = await api.deleteNotification(item.id);
+
+      if (response?.ok) {
+        removeNotification(item.id);
+        deleted++;
+      } else {
+        failed++;
+      }
+    }
+
+    refresh();
+
+    if (failed) {
+      notify(
+        t(
+          `${deleted} सूचना हटाइयो, ${failed} हटाउन सकिएन।`,
+          `${deleted} deleted; ${failed} could not be deleted.`
+        ),
+        "error"
+      );
+
+      return false;
+    }
+
+    notify(
+      t(
+        "पढेका सूचना Supabase बाट हटाइयो।",
+        "Read notifications deleted from Supabase."
+      ),
+      "success"
+    );
+
+    return true;
   }
 
   function toggleGroup(key) {
@@ -1568,22 +1679,18 @@
       "kskNotificationSettings"
     );
 
-    if (!panel) return;
-
-    panel.hidden = !panel.hidden;
+    if (panel) {
+      panel.hidden = !panel.hidden;
+    }
   }
 
-  /* =======================================================
+  /* =========================================
      EVENT HANDLERS
-  ======================================================= */
+  ========================================= */
 
   function handleClick(event) {
     const target = event.target;
 
-    /*
-     * Sound button handling comes first.
-     * No refresh, navigation or page redraw here.
-     */
     const toneButton = target?.closest?.(
       "[data-notification-tone]"
     );
@@ -1596,16 +1703,10 @@
       if (!isValidTone(selectedTone)) return;
 
       const preferences = loadPreferences();
-
       preferences.soundTone = selectedTone;
 
       if (savePreferences(preferences)) {
         updateToneSelectionUI(selectedTone);
-
-        /*
-         * Preview is started directly from the user's tap.
-         * The current page remains open.
-         */
         playTone(selectedTone, "preview");
       }
 
@@ -1624,7 +1725,6 @@
       }
 
       const preferences = loadPreferences();
-
       preferences.filter = value;
 
       if (savePreferences(preferences)) {
@@ -1645,6 +1745,10 @@
         toggleSettings();
         break;
 
+      case "retry":
+        loadCloudNotifications();
+        break;
+
       case "mark-all":
         markAllAsRead();
         break;
@@ -1654,21 +1758,15 @@
         break;
 
       case "read":
-        markOneAsRead(
-          button.dataset.notificationId
-        );
+        markOneAsRead(button.dataset.notificationId);
         break;
 
       case "hide":
-        clearOne(
-          button.dataset.notificationId
-        );
+        clearOne(button.dataset.notificationId);
         break;
 
       case "toggle-group":
-        toggleGroup(
-          button.dataset.groupKey || ""
-        );
+        toggleGroup(button.dataset.groupKey || "");
         break;
 
       default:
@@ -1685,12 +1783,10 @@
 
     if (master) {
       const preferences = loadPreferences();
-
       preferences.enabled = Boolean(master.checked);
 
       savePreferences(preferences);
       refresh();
-
       return;
     }
 
@@ -1706,7 +1802,6 @@
       );
 
       savePreferences(preferences);
-
       return;
     }
 
@@ -1722,71 +1817,50 @@
 
     const preferences = loadPreferences();
 
-    preferences.types[type] = Boolean(
-      typeInput.checked
-    );
+    preferences.types[type] = Boolean(typeInput.checked);
 
     savePreferences(preferences);
     refresh();
   }
 
-  function handleExternalChange(event) {
-    const detail = event?.detail;
-
-    if (
-      detail?.collection === "ksk_notifications_v1" &&
-      detail?.action === "add"
-    ) {
-      playIncomingNotification(detail.item);
-    }
-
-    if (
-      global.KSKApp?.getCurrentPage?.() === "notifications"
-    ) {
+  function handleStorage(event) {
+    if (event.key === STORAGE_KEY && isCurrentPage()) {
       refresh();
     }
   }
 
-  function handleStorage(event) {
-    if (
-      event.key === STORAGE_KEY ||
-      event.key === "ksk_notifications_v1"
-    ) {
-      if (
-        global.KSKApp?.getCurrentPage?.() === "notifications"
-      ) {
-        refresh();
-      }
-    }
-  }
-
-  /* =======================================================
+  /* =========================================
      INITIALIZATION
-  ======================================================= */
+  ========================================= */
 
   function initialize() {
     if (initialized) return true;
 
     initialized = true;
 
-    document.addEventListener(
-      "click",
-      handleClick
-    );
+    document.addEventListener("click", handleClick);
+    document.addEventListener("change", handleChange);
 
-    document.addEventListener(
-      "change",
-      handleChange
+    global.addEventListener(
+      "ksk:notification-cloud-change",
+      handleCloudChange
     );
 
     global.addEventListener(
-      "ksk:data-change",
-      handleExternalChange
+      "ksk:auth-ready",
+      function () {
+        loadCloudNotifications();
+      }
     );
 
     global.addEventListener(
-      "ksk:social-change",
-      handleExternalChange
+      "ksk:auth-change",
+      handleAuthChange
+    );
+
+    global.addEventListener(
+      "ksk:language-change",
+      refresh
     );
 
     global.addEventListener(
@@ -1794,21 +1868,16 @@
       handleStorage
     );
 
-    global.addEventListener(
-      "ksk:language-change",
-      function () {
-        refresh();
-      }
-    );
-
     ensureStyles();
+
+    loadCloudNotifications();
 
     return true;
   }
 
-  /* =======================================================
+  /* =========================================
      PUBLIC API
-  ======================================================= */
+  ========================================= */
 
   global.KSKNotificationsPage = Object.freeze({
     initialize,
@@ -1818,7 +1887,8 @@
     getCounts,
     classifyNotification,
     markAllAsRead,
-    clearReadNotifications
+    clearReadNotifications,
+    loadCloudNotifications
   });
 
   if (document.readyState === "loading") {
