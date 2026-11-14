@@ -2,28 +2,40 @@
 "use strict";
 
 /*
- * KSK COMMENTS MODULE
- * Facebook-style Comments, Replies and Mentions
+ * MERO SANSAR — SUPABASE LIVE COMMENTS
  *
- * Dependencies:
- * core/data.js
- * core/modal.js
- * core/reactions.js
+ * Features:
+ * - Supabase comments and nested replies
+ * - Edit / Delete own comments
+ * - Comment likes and emoji reactions
+ * - @mentions
+ * - Realtime updates
  *
- * Public API:
- * KSKComments.open(postId)
- * KSKComments.refresh()
- * KSKComments.close()
+ * DATA SOURCE: SUPABASE ONLY
  */
 
 (function (global) {
+  "use strict";
+
+  if (global.KSKComments) return;
+
+  const COMMENTS_TABLE = "post_comments";
+  const REACTIONS_TABLE = "comment_reactions";
   const MAX_COMMENT_LENGTH = 3000;
+
+  const EMOJIS = ["❤️", "🌹", "😘", "😢", "😠", "🤓"];
 
   let activePostId = null;
   let activeModal = null;
+  let activeChannel = null;
+
+  let comments = [];
+  let reactions = [];
+
   let replyTarget = null;
   let editTarget = null;
-  let deletingComment = false;
+  let busy = false;
+  let loading = false;
 
   const boundBodies = new WeakSet();
 
@@ -31,124 +43,103 @@
      HELPERS
   ========================================= */
 
-  function data() {
-    return global.KSKData;
+  function t(ne, en) {
+    return global.KSKLanguage?.getLanguage?.() === "en"
+      ? en
+      : ne;
   }
 
   function escapeHTML(value = "") {
-    return String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+    return String(value).replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    })[char]);
   }
 
-  function text(value, limit = 3000) {
+  function cleanText(value, limit = MAX_COMMENT_LENGTH) {
     return String(value ?? "").trim().slice(0, limit);
   }
 
-  function isEnglish() {
-    const language = global.KSKLanguage;
-
-    if (typeof language?.getLanguage === "function") {
-      return language.getLanguage() === "en";
-    }
-
-    return document.documentElement.lang === "en";
-  }
-
-  function t(nepali, english) {
-    return isEnglish() ? english : nepali;
-  }
-
   function toast(message, type = "info") {
-    if (global.KSKToast?.show) {
-      global.KSKToast.show(message, type);
-    }
+    global.KSKToast?.show?.(message, type);
   }
 
-  function profile() {
-    return data()?.getProfile?.() || {};
-  }
+  function formatDate(value) {
+    if (!value) return "";
 
-  function currentUser() {
-    const user = profile();
-    const name = text(user.name || "सदस्य", 60);
+    const date = new Date(value);
 
-    return {
-      id: text(user.id || user.userId || "", 120),
-      name,
-      avatar: text(user.avatar || "", 200000),
-      initial: name.charAt(0) || "स"
-    };
-  }
-
-  function friends() {
-    return data()?.getFriends?.() || [];
-  }
-
-  function makeId() {
-    return data()?.makeId?.("mention") ||
-      `mention_${Date.now()}`;
-  }
-
-  function formatDate(date) {
-    if (!date) return "";
-
-    const value = new Date(date);
-
-    if (Number.isNaN(value.getTime())) return "";
+    if (Number.isNaN(date.getTime())) return "";
 
     return new Intl.DateTimeFormat(
-      isEnglish() ? "en-IN" : "ne-NP",
+      global.KSKLanguage?.getLanguage?.() === "en"
+        ? "en-IN"
+        : "ne-NP",
       {
         dateStyle: "medium",
         timeStyle: "short"
       }
-    ).format(value);
-  }
-
-  function getComments() {
-    return data()?.getComments?.(activePostId) || [];
+    ).format(date);
   }
 
   function getComment(id) {
-    return data()?.getComment?.(activePostId, id) || null;
+    return comments.find(item =>
+      String(item.id) === String(id)
+    ) || null;
   }
 
-  function getAvatarHTML(author, avatar, initial) {
+  function getMyReaction(commentId) {
+    const authUser = global.KSKSupabaseAuth?.getUser?.();
+
+    return reactions.find(item =>
+      String(item.comment_id) === String(commentId) &&
+      String(item.user_id) === String(authUser?.id || "")
+    ) || null;
+  }
+
+  function getCommentReactions(commentId) {
+    return reactions.filter(item =>
+      String(item.comment_id) === String(commentId)
+    );
+  }
+
+  function getReactionCount(commentId) {
+    return getCommentReactions(commentId).filter(item =>
+      item.emoji === "❤️"
+    ).length;
+  }
+
+  function getAvatarHTML(name, avatar, initial) {
     if (avatar) {
       return `
         <img
           class="ksk-comment-avatar"
           src="${escapeHTML(avatar)}"
-          alt="${escapeHTML(author)}"
+          alt="${escapeHTML(name)}"
           loading="lazy"
         >
       `;
     }
 
     return `
-      <span
-        class="ksk-comment-avatar ksk-comment-avatar-fallback"
-        aria-label="${escapeHTML(author)}"
-      >
-        ${escapeHTML(initial || author?.charAt(0) || "स")}
+      <span class="ksk-comment-avatar ksk-comment-avatar-fallback">
+        ${escapeHTML(initial || name?.charAt(0) || "स")}
       </span>
     `;
   }
 
-  function getAuthor(comment) {
-    return escapeHTML(comment.author || "सदस्य");
+  function getFriends() {
+    return global.KSKData?.getFriends?.() || [];
   }
 
-  function getMentionedFriends(commentText) {
-    const availableFriends = friends();
+  function getMentionedFriends(value) {
     const found = [];
 
-    availableFriends.forEach(friend => {
-      const name = text(friend.name, 60);
+    getFriends().forEach(friend => {
+      const name = cleanText(friend.name, 60);
 
       if (!name) return;
 
@@ -162,7 +153,7 @@
         "i"
       );
 
-      if (regex.test(commentText)) {
+      if (regex.test(value)) {
         found.push({
           id: String(friend.id || ""),
           name
@@ -173,31 +164,21 @@
     return found;
   }
 
-  /* =========================================
-     MENTION RENDERING
-  ========================================= */
+  function renderMentionText(value) {
+    let output = escapeHTML(value || "");
 
-  function renderMentionText(value, availableFriends = []) {
-    const safe = escapeHTML(value || "");
-
-    if (!availableFriends.length) {
-      return safe.replace(/\n/g, "<br>");
-    }
-
-    let output = safe;
-
-    availableFriends.forEach(friend => {
-      const name = text(friend.name, 60);
+    getFriends().forEach(friend => {
+      const name = cleanText(friend.name, 60);
 
       if (!name) return;
 
-      const escapedName = name.replace(
+      const escaped = name.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
       );
 
       const regex = new RegExp(
-        `(^|\\s)(@${escapedName})(?=\\s|$|[.,!?])`,
+        `(^|\\s)(@${escaped})(?=\\s|$|[.,!?])`,
         "gi"
       );
 
@@ -210,77 +191,164 @@
     return output.replace(/\n/g, "<br>");
   }
 
-  function renderMentionSuggestions(query) {
-    const list = friends();
-    const search = text(query, 60).toLowerCase();
+  function getAuthor(comment) {
+    return escapeHTML(comment.author || "सदस्य");
+  }
 
-    const matches = list.filter(friend =>
-      text(friend.name, 60)
-        .toLowerCase()
-        .includes(search)
-    ).slice(0, 6);
+  function isMine(comment) {
+    const user = global.KSKSupabaseAuth?.getUser?.();
 
-    if (!matches.length) {
-      return `
-        <div class="ksk-mention-empty">
-          ${t("साथी भेटिएन।", "No friends found.")}
-        </div>
-      `;
+    return Boolean(
+      user?.id &&
+      String(comment.authorId) === String(user.id)
+    );
+  }
+
+  /* =========================================
+     SUPABASE CONTEXT
+  ========================================= */
+
+  async function getContext() {
+    const auth = global.KSKSupabaseAuth;
+
+    if (!auth) {
+      throw new Error("Supabase Authentication उपलब्ध छैन।");
     }
 
-    return matches.map(friend => `
-      <button
-        type="button"
-        class="ksk-mention-option"
-        data-mention-id="${escapeHTML(friend.id || "")}"
-        data-mention-name="${escapeHTML(friend.name)}"
-      >
-        ${getAvatarHTML(
-          friend.name,
-          friend.avatar,
-          friend.name?.charAt(0)
-        )}
+    const initialized = await auth.initialize();
 
-        <span>${escapeHTML(friend.name)}</span>
-      </button>
-    `).join("");
+    if (!initialized || !auth.isAuthenticated()) {
+      throw new Error("पहिले आफ्नो खातामा Login गर्नुहोस्।");
+    }
+
+    const client = auth.getClient();
+    const user = auth.getUser();
+
+    if (!client || !user?.id) {
+      throw new Error("Login User प्राप्त भएन।");
+    }
+
+    return { client, user };
+  }
+
+  async function getAuthorProfile() {
+    const profileAPI = global.KSKSupabaseProfile;
+
+    if (!profileAPI?.getMyProfile) {
+      throw new Error("Supabase Profile सेवा उपलब्ध छैन।");
+    }
+
+    const profile = await profileAPI.getMyProfile();
+
+    if (!profile) {
+      throw new Error("आफ्नो Profile प्राप्त गर्न सकिएन।");
+    }
+
+    const name = cleanText(profile.name, 120);
+
+    if (!name) {
+      throw new Error("आफ्नो Profile मा नाम राख्नुहोस्।");
+    }
+
+    return {
+      name,
+      avatar: String(profile.avatar || "").trim()
+    };
+  }
+
+  /* =========================================
+     LOAD COMMENTS AND REACTIONS
+  ========================================= */
+
+  async function loadComments() {
+    if (!activePostId) return false;
+
+    const { client } = await getContext();
+
+    const [commentResult, reactionResult] = await Promise.all([
+      client
+        .from(COMMENTS_TABLE)
+        .select([
+          "id",
+          "post_id",
+          "user_id",
+          "parent_id",
+          "content",
+          "mentions",
+          "author_name",
+          "author_avatar_url",
+          "created_at",
+          "updated_at"
+        ].join(","))
+        .eq("post_id", activePostId)
+        .order("created_at", { ascending: true }),
+
+      client
+        .from(REACTIONS_TABLE)
+        .select("id,comment_id,user_id,emoji")
+    ]);
+
+    if (commentResult.error) throw commentResult.error;
+    if (reactionResult.error) throw reactionResult.error;
+
+    comments = (commentResult.data || []).map(row => {
+      const parent = (commentResult.data || []).find(item =>
+        String(item.id) === String(row.parent_id || "")
+      );
+
+      return {
+        id: row.id,
+        postId: row.post_id,
+        authorId: row.user_id,
+        parentId: row.parent_id || null,
+        author: row.author_name || "सदस्य",
+        avatar: row.author_avatar_url || "",
+        authorInitial: String(row.author_name || "स").charAt(0),
+        text: row.content || "",
+        mentions: Array.isArray(row.mentions) ? row.mentions : [],
+        replyTo: parent?.author_name || "",
+        createdAt: row.created_at,
+        editedAt:
+          row.updated_at !== row.created_at
+            ? row.updated_at
+            : ""
+      };
+    });
+
+    // केवल सक्रिय पोस्टका कमेन्टका Reaction राख्ने।
+    const commentIds = new Set(
+      comments.map(item => String(item.id))
+    );
+
+    reactions = (reactionResult.data || []).filter(item =>
+      commentIds.has(String(item.comment_id))
+    );
+
+    return true;
   }
 
   /* =========================================
      COMMENT TREE
   ========================================= */
 
-  function renderComment(
-    comment,
-    childrenByParent,
-    availableFriends,
-    user,
-    depth = 0
-  ) {
+  function renderComment(comment, childrenByParent, depth = 0) {
     const id = escapeHTML(comment.id);
-    const postId = escapeHTML(activePostId);
 
     const children =
       childrenByParent.get(String(comment.id)) || [];
 
-    const isMine =
-      (comment.authorId && user.id &&
-        String(comment.authorId) === String(user.id)) ||
-      (
-        !comment.authorId &&
-        String(comment.author || "") === user.name
-      );
+    const mine = isMine(comment);
+    const myReaction = getMyReaction(comment.id);
+    const heartCount = getReactionCount(comment.id);
 
-    const replyLabel = comment.replyTo
-      ? `<span class="ksk-comment-reply-to">
-           ${t("जवाफ दिँदै", "replying to")}
-           @${escapeHTML(comment.replyTo)}
-         </span>`
-      : "";
-
-    const currentReaction = REACTION_EMOJI(
-      comment.myReaction
-    );
+    const emojiOptions = EMOJIS.map(emoji => `
+      <button
+        type="button"
+        data-comment-emoji="${escapeHTML(emoji)}"
+        data-comment-id="${id}"
+        aria-label="${escapeHTML(emoji)}"
+      >${emoji}</button>
+    `).join("");
 
     return `
       <article
@@ -305,13 +373,15 @@
                 ${getAuthor(comment)}
               </strong>
 
-              ${replyLabel}
+              ${comment.replyTo ? `
+                <span class="ksk-comment-reply-to">
+                  ${t("जवाफ दिँदै", "replying to")}
+                  @${escapeHTML(comment.replyTo)}
+                </span>
+              ` : ""}
 
               <div class="ksk-comment-text">
-                ${renderMentionText(
-                  comment.text,
-                  availableFriends
-                )}
+                ${renderMentionText(comment.text)}
               </div>
 
             </div>
@@ -327,24 +397,27 @@
 
               <button
                 type="button"
-                class="ksk-comment-action ${comment.liked ? "is-liked" : ""}"
+                class="ksk-comment-action ${myReaction?.emoji === "❤️" ? "is-liked" : ""}"
                 data-comment-like="${id}"
               >
-                ${comment.liked ? "❤️" : "♡"}
-                ${Number(comment.likes || 0)}
+                ${myReaction?.emoji === "❤️" ? "❤️" : "♡"}
+                ${heartCount}
               </button>
 
               <button
                 type="button"
                 class="ksk-comment-action ksk-comment-reaction-button"
-                data-comment-reaction
-                data-post-id="${postId}"
-                data-comment-id="${id}"
-                aria-label="${t("टिप्पणीमा Reaction दिनुहोस्", "React to comment")}"
-                title="${t("Reaction छान्नुहोस्", "Choose reaction")}"
+                data-comment-reaction-open="${id}"
               >
-                ${currentReaction || "☺️"}
+                ${escapeHTML(myReaction?.emoji || "☺️")}
               </button>
+
+              <div
+                class="ksk-comment-reaction-picker hidden"
+                data-comment-reaction-picker="${id}"
+              >
+                ${emojiOptions}
+              </div>
 
               <button
                 type="button"
@@ -354,7 +427,7 @@
                 ${t("जवाफ", "Reply")}
               </button>
 
-              ${isMine ? `
+              ${mine ? `
                 <button
                   type="button"
                   class="ksk-comment-action"
@@ -380,8 +453,6 @@
                   renderComment(
                     child,
                     childrenByParent,
-                    availableFriends,
-                    user,
                     depth + 1
                   )
                 ).join("")}
@@ -389,27 +460,19 @@
             ` : ""}
 
           </div>
-
         </div>
-
       </article>
     `;
   }
 
-  function REACTION_EMOJI(value) {
-    const allowed = [
-      "🌹",
-      "😘",
-      "😢",
-      "😠",
-      "🤓"
-    ];
-
-    return allowed.includes(value) ? value : "";
-  }
-
   function renderCommentList() {
-    const comments = getComments();
+    if (loading) {
+      return `
+        <div class="ksk-comments-empty">
+          ${t("टिप्पणीहरू लोड हुँदैछन्...", "Loading comments...")}
+        </div>
+      `;
+    }
 
     if (!comments.length) {
       return `
@@ -425,20 +488,14 @@
       `;
     }
 
-    /*
-     * Build the comment tree index once.
-     * This avoids filtering the full array
-     * for every rendered comment.
-     */
-
     const childrenByParent = new Map();
-    const rootComments = [];
+    const roots = [];
 
     comments.forEach(comment => {
       const parentId = String(comment.parentId || "");
 
       if (!parentId) {
-        rootComments.push(comment);
+        roots.push(comment);
         return;
       }
 
@@ -449,21 +506,100 @@
       childrenByParent.get(parentId).push(comment);
     });
 
-    /*
-     * Read shared data once per render.
-     */
-
-    const availableFriends = friends();
-    const user = currentUser();
-
-    return rootComments.map(comment =>
-      renderComment(
-        comment,
-        childrenByParent,
-        availableFriends,
-        user
-      )
+    return roots.map(comment =>
+      renderComment(comment, childrenByParent)
     ).join("");
+  }
+
+  /* =========================================
+     MENTIONS
+  ========================================= */
+
+  function renderMentionSuggestions(query) {
+    const search = cleanText(query, 60).toLowerCase();
+
+    const matches = getFriends().filter(friend =>
+      cleanText(friend.name, 60)
+        .toLowerCase()
+        .includes(search)
+    ).slice(0, 6);
+
+    if (!matches.length) {
+      return `
+        <div class="ksk-mention-empty">
+          ${t("साथी भेटिएन।", "No friends found.")}
+        </div>
+      `;
+    }
+
+    return matches.map(friend => `
+      <button
+        type="button"
+        class="ksk-mention-option"
+        data-mention-id="${escapeHTML(friend.id || "")}"
+        data-mention-name="${escapeHTML(friend.name)}"
+      >
+        ${getAvatarHTML(
+          friend.name,
+          friend.avatar,
+          friend.name?.charAt(0)
+        )}
+        <span>${escapeHTML(friend.name)}</span>
+      </button>
+    `).join("");
+  }
+
+  function updateMentionSuggestions(input) {
+    const container = activeModal?.element?.querySelector(
+      "[data-mention-suggestions]"
+    );
+
+    if (!container) return;
+
+    const before = input.value.slice(0, input.selectionStart);
+    const match = before.match(/(?:^|\s)@([^\s@]*)$/);
+
+    if (!match) {
+      container.classList.add("hidden");
+      container.innerHTML = "";
+      return;
+    }
+
+    container.innerHTML = renderMentionSuggestions(match[1] || "");
+    container.classList.remove("hidden");
+  }
+
+  function insertMention(name) {
+    const input = activeModal?.element?.querySelector(
+      "[data-comment-input]"
+    );
+
+    if (!input) return;
+
+    const cursor = input.selectionStart;
+    const before = input.value.slice(0, cursor);
+    const after = input.value.slice(cursor);
+
+    const match = before.match(/(?:^|\s)@([^\s@]*)$/);
+
+    if (!match) return;
+
+    const start = before.length - match[0].length;
+    const prefix = before.slice(0, start);
+
+    const insertion =
+      `${match[0].startsWith(" ") ? " " : ""}@${name} `;
+
+    input.value = prefix + insertion + after;
+
+    const nextCursor = (prefix + insertion).length;
+
+    input.focus();
+    input.setSelectionRange(nextCursor, nextCursor);
+
+    activeModal.element
+      .querySelector("[data-mention-suggestions]")
+      ?.classList.add("hidden");
   }
 
   /* =========================================
@@ -472,10 +608,8 @@
 
   function renderComposer() {
     const editing = Boolean(editTarget);
-
-    const target = replyTarget
-      ? getComment(replyTarget)
-      : null;
+    const target = replyTarget ? getComment(replyTarget) : null;
+    const edited = editTarget ? getComment(editTarget) : null;
 
     return `
       <section class="ksk-comment-composer">
@@ -486,23 +620,14 @@
               ${t("जवाफ दिँदै:", "Replying to:")}
               <strong>${getAuthor(target)}</strong>
             </span>
-
-            <button
-              type="button"
-              data-cancel-reply
-              aria-label="${t("जवाफ रद्द", "Cancel reply")}"
-            >×</button>
+            <button type="button" data-cancel-reply>×</button>
           </div>
         ` : ""}
 
         ${editing ? `
           <div class="ksk-reply-indicator">
             <span>${t("टिप्पणी सम्पादन गर्दै", "Editing comment")}</span>
-
-            <button
-              type="button"
-              data-cancel-edit
-            >×</button>
+            <button type="button" data-cancel-edit>×</button>
           </div>
         ` : ""}
 
@@ -516,12 +641,13 @@
             placeholder="${escapeHTML(
               editing
                 ? t("टिप्पणी परिवर्तन गर्नुहोस्...", "Edit your comment...")
-                : t("टिप्पणी लेख्नुहोस्... @ टाइप गरेर साथी Tag गर्नुहोस्", "Write a comment... Type @ to mention a friend")
+                : t(
+                    "टिप्पणी लेख्नुहोस्... @ टाइप गरेर साथी Tag गर्नुहोस्",
+                    "Write a comment... Type @ to mention a friend"
+                  )
             )}"
-            required>${editing
-              ? escapeHTML(getComment(editTarget)?.text || "")
-              : ""
-            }</textarea>
+            required
+          >${editing ? escapeHTML(edited?.text || "") : ""}</textarea>
 
           <div
             class="ksk-mention-suggestions hidden"
@@ -529,7 +655,6 @@
           ></div>
 
           <div class="ksk-comment-composer-footer">
-
             <span class="ksk-comment-hint">
               ${t("@ टाइप गर्दा साथीहरू देखिन्छन्", "Type @ to mention friends")}
             </span>
@@ -538,23 +663,23 @@
               type="submit"
               class="btn btn-primary"
               data-comment-submit
+              ${busy ? "disabled" : ""}
             >
-              ${editing
-                ? t("अपडेट", "Update")
-                : t("प्रकाशित", "Comment")
+              ${busy
+                ? t("कृपया पर्खनुहोस्...", "Please wait...")
+                : editing
+                  ? t("अपडेट", "Update")
+                  : t("प्रकाशित", "Comment")
               }
             </button>
-
           </div>
-
         </form>
-
       </section>
     `;
   }
 
   /* =========================================
-     MODAL CONTENT
+     MODAL RENDER
   ========================================= */
 
   function renderModal() {
@@ -577,89 +702,113 @@
 
       </div>
     `;
-
-    // Do not bind listeners here.
-    // The modal body is the same DOM element after every render.
-    // Binding here repeatedly causes duplicate listeners and UI lag.
   }
 
   /* =========================================
-     MENTION INPUT EVENTS
+     REFRESH FROM DATABASE
   ========================================= */
 
-  function updateMentionSuggestions(input) {
-    const container = activeModal?.element?.querySelector(
-      "[data-mention-suggestions]"
-    );
+  async function refreshFromDatabase() {
+    if (!activePostId || !activeModal) return false;
 
-    if (!container) return;
+    try {
+      await loadComments();
 
-    const cursor = input.selectionStart;
-    const beforeCursor = input.value.slice(0, cursor);
+      if (!activeModal) return false;
 
-    const match = beforeCursor.match(
-      /(?:^|\s)@([^\s@]*)$/
-    );
+      renderModal();
+      return true;
 
-    if (!match) {
-      container.classList.add("hidden");
-      container.innerHTML = "";
-      return;
+    } catch (error) {
+      console.error("Comments refresh failed:", error);
+
+      toast(
+        t(
+          "टिप्पणीहरू लोड गर्न सकिएन।",
+          "Could not load comments."
+        ),
+        "error"
+      );
+
+      return false;
     }
-
-    const query = match[1] || "";
-
-    container.innerHTML = renderMentionSuggestions(query);
-    container.classList.remove("hidden");
-  }
-
-  function insertMention(name) {
-    const input = activeModal?.element?.querySelector(
-      "[data-comment-input]"
-    );
-
-    if (!input) return;
-
-    const cursor = input.selectionStart;
-    const before = input.value.slice(0, cursor);
-    const after = input.value.slice(cursor);
-
-    const match = before.match(
-      /(?:^|\s)@([^\s@]*)$/
-    );
-
-    if (!match) return;
-
-    const start = before.length - match[0].length;
-    const prefix = before.slice(0, start);
-
-    const insertion =
-      `${match[0].startsWith(" ") ? " " : ""}@${name} `;
-
-    input.value = prefix + insertion + after;
-
-    const nextCursor = (prefix + insertion).length;
-
-    input.focus();
-    input.setSelectionRange(nextCursor, nextCursor);
-
-    const suggestions = activeModal.element.querySelector(
-      "[data-mention-suggestions]"
-    );
-
-    suggestions?.classList.add("hidden");
   }
 
   /* =========================================
-     COMMENT ACTIONS
+     REALTIME
+  ========================================= */
+
+  async function subscribeRealtime() {
+    const { client } = await getContext();
+
+    if (activeChannel) {
+      await client.removeChannel(activeChannel);
+      activeChannel = null;
+    }
+
+    const postId = activePostId;
+
+    activeChannel = client
+      .channel(`ksk-comments-${postId}-${Date.now()}`)
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: COMMENTS_TABLE,
+          filter: `post_id=eq.${postId}`
+        },
+        () => {
+          if (String(activePostId) === String(postId)) {
+            refreshFromDatabase();
+          }
+        }
+      )
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: REACTIONS_TABLE
+        },
+        () => {
+          if (String(activePostId) === String(postId)) {
+            refreshFromDatabase();
+          }
+        }
+      )
+
+      .subscribe();
+  }
+
+  async function stopRealtime() {
+    if (!activeChannel) return;
+
+    const channel = activeChannel;
+    activeChannel = null;
+
+    try {
+      const auth = global.KSKSupabaseAuth;
+      const client = auth?.getClient?.();
+
+      if (client) {
+        await client.removeChannel(channel);
+      }
+    } catch (error) {
+      console.warn("Comments realtime cleanup failed:", error);
+    }
+  }
+
+  /* =========================================
+     REPLY AND EDIT
   ========================================= */
 
   function setReply(commentId) {
-    const comment = getComment(commentId);
+    if (!getComment(commentId)) return;
 
-    if (!comment) return;
-
-    replyTarget = comment.id;
+    replyTarget = commentId;
     editTarget = null;
 
     renderModal();
@@ -669,27 +818,10 @@
       ?.focus();
   }
 
-  function cancelReply() {
-    replyTarget = null;
-    renderModal();
-  }
-
   function setEdit(commentId) {
     const comment = getComment(commentId);
 
-    if (!comment) return;
-
-    const user = currentUser();
-
-    const allowed =
-      (comment.authorId && user.id &&
-        String(comment.authorId) === String(user.id)) ||
-      (
-        !comment.authorId &&
-        String(comment.author || "") === user.name
-      );
-
-    if (!allowed) {
+    if (!comment || !isMine(comment)) {
       toast(
         t(
           "आफ्नो टिप्पणी मात्र सम्पादन गर्न सकिन्छ।",
@@ -700,7 +832,7 @@
       return;
     }
 
-    editTarget = comment.id;
+    editTarget = commentId;
     replyTarget = null;
 
     renderModal();
@@ -710,19 +842,20 @@
       ?.focus();
   }
 
-  function cancelEdit() {
-    editTarget = null;
-    renderModal();
-  }
+  /* =========================================
+     CREATE / UPDATE COMMENT
+  ========================================= */
 
-  function submitComment(event) {
+  async function submitComment(event) {
     event.preventDefault();
+
+    if (busy) return;
 
     const input = activeModal?.element?.querySelector(
       "[data-comment-input]"
     );
 
-    const value = text(input?.value, MAX_COMMENT_LENGTH);
+    const value = cleanText(input?.value);
 
     if (!value) {
       toast(
@@ -732,103 +865,163 @@
       return;
     }
 
-    if (editTarget) {
-      const result = data()?.updateComment?.(
-        activePostId,
-        editTarget,
-        { text: value }
-      );
+    busy = true;
+    renderModal();
 
-      if (!result) {
+    try {
+      const { client, user } = await getContext();
+
+      if (editTarget) {
+        const comment = getComment(editTarget);
+
+        if (!comment || !isMine(comment)) {
+          throw new Error("आफ्नो टिप्पणी मात्र सम्पादन गर्न सकिन्छ।");
+        }
+
+        const { data, error } = await client
+          .from(COMMENTS_TABLE)
+          .update({
+            content: value,
+            mentions: getMentionedFriends(value)
+          })
+          .eq("id", editTarget)
+          .eq("user_id", user.id)
+          .select("id")
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!data) throw new Error("टिप्पणी अपडेट भएन।");
+
+        editTarget = null;
+
         toast(
-          t(
-            "टिप्पणी परिवर्तन गर्न सकिएन।",
-            "Could not update comment."
-          ),
-          "error"
+          t("टिप्पणी परिवर्तन भयो।", "Comment updated."),
+          "success"
         );
-        return;
+
+      } else {
+        const profile = await getAuthorProfile();
+
+        const payload = {
+          post_id: activePostId,
+          user_id: user.id,
+          parent_id: replyTarget || null,
+          content: value,
+          mentions: getMentionedFriends(value),
+          author_name: profile.name,
+          author_avatar_url: profile.avatar || null
+        };
+
+        const { error } = await client
+          .from(COMMENTS_TABLE)
+          .insert(payload);
+
+        if (error) throw error;
+
+        replyTarget = null;
+
+        toast(
+          t("टिप्पणी प्रकाशित भयो।", "Comment published."),
+          "success"
+        );
       }
 
-      editTarget = null;
+      await refreshFromDatabase();
+
+    } catch (error) {
+      console.error("Comment submit failed:", error);
 
       toast(
-        t("टिप्पणी परिवर्तन भयो।", "Comment updated."),
-        "success"
-      );
-
-      renderModal();
-      return;
-    }
-
-    const user = currentUser();
-    const mentions = getMentionedFriends(value);
-
-    const result = data()?.addComment?.(
-      activePostId,
-      {
-        author: user.name,
-        authorId: user.id,
-        authorInitial: user.initial,
-        avatar: user.avatar,
-        text: value,
-        mentions
-      },
-      {
-        parentId: replyTarget || null,
-        replyTo: replyTarget
-          ? getComment(replyTarget)?.author || ""
-          : ""
-      }
-    );
-
-    if (!result) {
-      toast(
-        t(
+        error?.message || t(
           "टिप्पणी प्रकाशित गर्न सकिएन।",
           "Could not publish comment."
         ),
         "error"
       );
-      return;
+
+    } finally {
+      busy = false;
+      renderModal();
     }
-
-    replyTarget = null;
-
-    toast(
-      t("टिप्पणी प्रकाशित भयो।", "Comment published."),
-      "success"
-    );
-
-    renderModal();
   }
 
-  function likeComment(commentId, button) {
+  /* =========================================
+     LIKE / EMOJI REACTION
+  ========================================= */
+
+  async function setCommentReaction(commentId, emoji) {
+    if (!EMOJIS.includes(emoji)) return false;
+
+    try {
+      const { client, user } = await getContext();
+
+      if (!getComment(commentId)) return false;
+
+      const existing = getMyReaction(commentId);
+
+      if (existing?.emoji === emoji) {
+        const { error } = await client
+          .from(REACTIONS_TABLE)
+          .delete()
+          .eq("comment_id", commentId)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+
+      } else {
+        const { error } = await client
+          .from(REACTIONS_TABLE)
+          .upsert(
+            {
+              comment_id: commentId,
+              user_id: user.id,
+              emoji
+            },
+            {
+              onConflict: "comment_id,user_id"
+            }
+          );
+
+        if (error) throw error;
+      }
+
+      await refreshFromDatabase();
+      return true;
+
+    } catch (error) {
+      console.error("Comment reaction failed:", error);
+
+      toast(
+        t(
+          "Reaction सुरक्षित गर्न सकिएन।",
+          "Could not save reaction."
+        ),
+        "error"
+      );
+
+      return false;
+    }
+  }
+
+  /* =========================================
+     DELETE COMMENT
+  ========================================= */
+
+  async function removeComment(commentId) {
+    if (busy) return;
+
     const comment = getComment(commentId);
 
-    const shouldAnimate = Boolean(
-      comment && !comment.liked
-    );
-
-    const result = data()?.toggleCommentLike?.(
-      activePostId,
-      commentId
-    );
-
-    if (!result) return;
-
-    if (shouldAnimate) {
-      global.KSKReactions?.showLikeAnimation?.(
-        button,
-        "❤️"
+    if (!comment || !isMine(comment)) {
+      toast(
+        t(
+          "आफ्नो टिप्पणी मात्र मेटाउन सकिन्छ।",
+          "You can only delete your own comment."
+        ),
+        "warning"
       );
+      return;
     }
-
-    renderModal();
-  }
-
-  function removeComment(commentId) {
-    if (deletingComment) return;
 
     const confirmed = global.confirm(
       t(
@@ -839,112 +1032,53 @@
 
     if (!confirmed) return;
 
-    deletingComment = true;
+    busy = true;
 
     try {
-      /*
-       * Collect the selected comment and all descendant
-       * reply IDs before deleting them.
-       *
-       * This prevents stale reply/edit targets.
-       */
-      const deletedIds = new Set([
-        String(commentId)
-      ]);
+      const { client, user } = await getContext();
 
-      const commentsBeforeDelete = getComments();
+      const { error } = await client
+        .from(COMMENTS_TABLE)
+        .delete()
+        .eq("id", commentId)
+        .eq("user_id", user.id);
 
-      let foundDescendant = true;
+      if (error) throw error;
 
-      while (foundDescendant) {
-        foundDescendant = false;
-
-        commentsBeforeDelete.forEach(comment => {
-          const currentId = String(comment.id);
-          const parentId = String(comment.parentId || "");
-
-          if (
-            parentId &&
-            deletedIds.has(parentId) &&
-            !deletedIds.has(currentId)
-          ) {
-            deletedIds.add(currentId);
-            foundDescendant = true;
-          }
-        });
-      }
-
-      // Delete the comment and its replies.
-      const result = data()?.deleteComment?.(
-        activePostId,
-        commentId
-      );
-
-      if (!result) {
-        toast(
-          t(
-            "टिप्पणी मेटाउन सकिएन।",
-            "Could not delete comment."
-          ),
-          "error"
-        );
-        return;
-      }
-
-      /*
-       * Clear reply target if it belongs to
-       * the deleted comment or any deleted reply.
-       */
-      if (
-        replyTarget !== null &&
-        deletedIds.has(String(replyTarget))
-      ) {
+      if (String(replyTarget) === String(commentId)) {
         replyTarget = null;
       }
 
-      /*
-       * Clear edit target if it belongs to
-       * the deleted comment or any deleted reply.
-       */
-      if (
-        editTarget !== null &&
-        deletedIds.has(String(editTarget))
-      ) {
+      if (String(editTarget) === String(commentId)) {
         editTarget = null;
       }
 
       toast(
-        t(
-          "टिप्पणी मेटाइयो।",
-          "Comment deleted."
-        ),
+        t("टिप्पणी मेटाइयो।", "Comment deleted."),
         "success"
       );
 
-      renderModal();
+      await refreshFromDatabase();
 
     } catch (error) {
-      console.error(
-        "KSK comment delete failed:",
-        error
-      );
+      console.error("Comment delete failed:", error);
 
       toast(
-        t(
-          "टिप्पणी मेटाउँदा समस्या आयो।",
-          "An error occurred while deleting the comment."
+        error?.message || t(
+          "टिप्पणी मेटाउन सकिएन।",
+          "Could not delete comment."
         ),
         "error"
       );
 
     } finally {
-      deletingComment = false;
+      busy = false;
+      renderModal();
     }
   }
 
   /* =========================================
-     MODAL EVENT BINDING
-     Bind exactly once per modal body.
+     EVENT BINDING
   ========================================= */
 
   function bindModalEvents() {
@@ -981,41 +1115,61 @@
       }
 
       if (target.hasAttribute("data-comment-reply")) {
-        setReply(
-          target.getAttribute("data-comment-reply")
-        );
+        setReply(target.getAttribute("data-comment-reply"));
         return;
       }
 
       if (target.hasAttribute("data-comment-edit")) {
-        setEdit(
-          target.getAttribute("data-comment-edit")
-        );
+        setEdit(target.getAttribute("data-comment-edit"));
         return;
       }
 
       if (target.hasAttribute("data-comment-delete")) {
-        removeComment(
-          target.getAttribute("data-comment-delete")
-        );
+        removeComment(target.getAttribute("data-comment-delete"));
         return;
       }
 
       if (target.hasAttribute("data-comment-like")) {
-        likeComment(
-          target.getAttribute("data-comment-like"),
-          target
+        const id = target.getAttribute("data-comment-like");
+        const current = getMyReaction(id);
+
+        setCommentReaction(
+          id,
+          current?.emoji === "❤️" ? "❤️" : "❤️"
         );
         return;
       }
 
+      if (target.hasAttribute("data-comment-reaction-open")) {
+        const id = target.getAttribute("data-comment-reaction-open");
+
+        const picker = body.querySelector(
+          `[data-comment-reaction-picker="${CSS.escape(id)}"]`
+        );
+
+        if (picker) {
+          picker.classList.toggle("hidden");
+        }
+        return;
+      }
+
+      if (target.hasAttribute("data-comment-emoji")) {
+        const id = target.getAttribute("data-comment-id");
+        const emoji = target.getAttribute("data-comment-emoji");
+
+        setCommentReaction(id, emoji);
+        return;
+      }
+
       if (target.hasAttribute("data-cancel-reply")) {
-        cancelReply();
+        replyTarget = null;
+        renderModal();
         return;
       }
 
       if (target.hasAttribute("data-cancel-edit")) {
-        cancelEdit();
+        editTarget = null;
+        renderModal();
       }
     });
   }
@@ -1024,10 +1178,18 @@
      PUBLIC API
   ========================================= */
 
-  function open(postId) {
-    const post = data()?.getPost?.(postId);
+  async function open(postId) {
+    const id = String(postId || "").trim();
 
-    if (!post) {
+    if (!id) return false;
+
+    const posts = global.KSKHomePage?.getPosts?.() || [];
+
+    const postExists = posts.some(post =>
+      String(post.id) === id
+    );
+
+    if (!postExists) {
       toast(
         t("पोस्ट भेटिएन।", "Post not found."),
         "error"
@@ -1037,61 +1199,87 @@
 
     if (!global.KSKModal?.openModal) {
       toast(
-        t(
-          "Modal सुविधा उपलब्ध छैन।",
-          "Modal is unavailable."
-        ),
+        t("Modal सुविधा उपलब्ध छैन।", "Modal is unavailable."),
         "error"
       );
       return false;
     }
 
-    activePostId = String(postId);
-    replyTarget = null;
-    editTarget = null;
-    deletingComment = false;
+    try {
+      await getContext();
 
-    activeModal = global.KSKModal.openModal({
-      title: t("टिप्पणीहरू", "Comments"),
-      content: "",
-      closeButtonLabel: t("बन्द गर्नुहोस्", "Close")
-    });
+      await stopRealtime();
 
-    if (!activeModal) {
-      activePostId = null;
+      activePostId = id;
+      replyTarget = null;
+      editTarget = null;
+      comments = [];
+      reactions = [];
+      loading = true;
+
+      activeModal = global.KSKModal.openModal({
+        title: t("टिप्पणीहरू", "Comments"),
+        content: "",
+        closeButtonLabel: t("बन्द गर्नुहोस्", "Close")
+      });
+
+      if (!activeModal) {
+        activePostId = null;
+        loading = false;
+        return false;
+      }
+
+      renderModal();
+      bindModalEvents();
+
+      await loadComments();
+
+      loading = false;
+      renderModal();
+
+      await subscribeRealtime();
+
+      return true;
+
+    } catch (error) {
+      console.error("Comments open failed:", error);
+
+      loading = false;
+
+      toast(
+        error?.message || t(
+          "टिप्पणीहरू खोल्न सकिएन।",
+          "Could not open comments."
+        ),
+        "error"
+      );
+
       return false;
     }
-
-    renderModal();
-
-    bindModalEvents();
-
-    return true;
   }
 
-  function refresh() {
-    if (!activePostId || !activeModal) return false;
-
-    if (!activeModal.element?.isConnected) {
-      close();
-      return false;
-    }
-
-    renderModal();
-
-    return true;
+  async function refresh() {
+    return await refreshFromDatabase();
   }
 
-  function close() {
+  async function close() {
+    await stopRealtime();
+
     if (activeModal) {
       activeModal.close();
     }
 
     activeModal = null;
     activePostId = null;
+
+    comments = [];
+    reactions = [];
+
     replyTarget = null;
     editTarget = null;
-    deletingComment = false;
+
+    busy = false;
+    loading = false;
   }
 
   global.KSKComments = Object.freeze({
@@ -1099,5 +1287,7 @@
     refresh,
     close
   });
+
+  console.info("KSK Supabase Live Comments loaded.");
 
 })(window);
