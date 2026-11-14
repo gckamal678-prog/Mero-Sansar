@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -604,13 +603,76 @@
           : "केही लेख्नुहोस् वा फोटो थप्नुहोस्।",
         "warning"
       );
-
       return;
     }
 
-    let media = null;
+    /*
+     * POSTS: Publish directly to Supabase.
+     * STORIES: Keep the existing local workflow.
+     */
 
-    /* SAVE IMAGE */
+    if (type === "post") {
+      const postsAPI = global.KSKSupabasePosts;
+
+      if (typeof postsAPI?.createPost !== "function") {
+        toast(
+          isEnglish()
+            ? "Cloud post service is unavailable."
+            : "Cloud पोस्ट सेवा उपलब्ध छैन।",
+          "error"
+        );
+        return;
+      }
+
+      try {
+        const result = await postsAPI.createPost({
+          text,
+          media: file
+        });
+
+        if (!result?.ok || !result.data) {
+          toast(
+            result?.message ||
+            (isEnglish()
+              ? "Could not publish post."
+              : "पोस्ट प्रकाशित गर्न सकिएन।"),
+            "error"
+          );
+          return;
+        }
+
+        closeModal();
+
+        toast(
+          isEnglish()
+            ? "Post published successfully."
+            : "पोस्ट सफलतापूर्वक प्रकाशित भयो।",
+          "success"
+        );
+
+        return;
+
+      } catch (error) {
+        console.error(
+          "Supabase post publishing failed:",
+          error
+        );
+
+        toast(
+          error?.message ||
+          (isEnglish()
+            ? "Could not publish post."
+            : "पोस्ट प्रकाशित गर्न सकिएन।"),
+          "error"
+        );
+
+        return;
+      }
+    }
+
+    /* STORY: EXISTING LOCAL STORAGE WORKFLOW */
+
+    let media = null;
 
     if (file) {
       try {
@@ -622,8 +684,12 @@
         if (!media?.id) {
           throw new Error("Image could not be saved.");
         }
+
       } catch (error) {
-        console.error("KSK media save failed:", error);
+        console.error(
+          "KSK media save failed:",
+          error
+        );
 
         toast(
           error.message ||
@@ -636,8 +702,6 @@
         return;
       }
     }
-
-    /* PREPARE DATA */
 
     const user = getProfile();
 
@@ -653,26 +717,16 @@
       payload.mediaType = media.type;
     }
 
-    /* SAVE TO SINGLE DATA LAYER */
-
     let result = false;
 
     try {
-      if (type === "story") {
-        result = global.KSKData?.addStory?.(payload);
-      } else {
-        result = global.KSKData?.addPost?.({
-          ...payload,
-          likes: 0,
-          liked: false
-        });
-      }
+      result = global.KSKData?.addStory?.(payload);
     } catch (error) {
-      console.error("KSK publishing failed:", error);
-      result = false;
+      console.error(
+        "KSK story publishing failed:",
+        error
+      );
     }
-
-    /* CLEANUP IF PUBLISH FAILED */
 
     if (!result) {
       if (media?.id) {
@@ -683,34 +737,20 @@
 
       toast(
         isEnglish()
-          ? "Could not publish. Please try again."
-          : "प्रकाशित गर्न सकिएन। फेरि प्रयास गर्नुहोस्।",
+          ? "Could not publish story."
+          : "Story प्रकाशित गर्न सकिएन।",
         "error"
       );
 
       return;
     }
 
-    /*
-     * KSKData emits ksk:data-change.
-     * KSKDataRefresh updates the affected page.
-     * MutationObserver detects changed DOM.
-     */
-
     closeModal();
 
     toast(
-      type === "story"
-        ? (
-            isEnglish()
-              ? "Story published."
-              : "Story प्रकाशित भयो।"
-          )
-        : (
-            isEnglish()
-              ? "Post published."
-              : "पोस्ट प्रकाशित भयो।"
-          ),
+      isEnglish()
+        ? "Story published."
+        : "Story प्रकाशित भयो।",
       "success"
     );
   }
