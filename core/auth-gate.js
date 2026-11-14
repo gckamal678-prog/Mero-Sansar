@@ -3,7 +3,8 @@
 
 /* =========================================================
    MERO SANSAR — PREMIUM AUTHENTICATION GATE
-   Welcome Splash → Email Verification → Login → Dashboard
+   Welcome Splash → Sign Up → Email Verification → Login
+   Supabase Email + Password + Profile Metadata
 ========================================================= */
 
 (function (global) {
@@ -15,7 +16,6 @@
   const STYLE_ID = "ksk-auth-gate-style";
 
   let authReady = false;
-  let splashGone = false;
   let currentMode = "login";
   let splashObserver = null;
 
@@ -28,6 +28,20 @@
   function t(ne, en) {
     return isEnglish() ? en : ne;
   }
+
+  function escapeHTML(value = "") {
+    return String(value).replace(/[&<>"']/g, character => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    })[character]);
+  }
+
+  /* =======================================================
+     STYLES
+  ======================================================= */
 
   function addStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -74,14 +88,20 @@
       }
 
       #${ROOT_ID} .ksk-gate-wrap {
-        width: min(100%, 430px);
+        width: min(100%, 450px);
         margin: auto;
         animation: kskGateAppear .55s ease both;
       }
 
       @keyframes kskGateAppear {
-        from { opacity: 0; transform: translateY(16px); }
-        to { opacity: 1; transform: translateY(0); }
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       #${ROOT_ID} .ksk-gate-brand {
@@ -97,8 +117,14 @@
         margin: 0 auto 13px;
         border: 1px solid rgba(255,255,255,.25);
         border-radius: 23px;
-        background: linear-gradient(145deg,rgba(255,255,255,.2),rgba(255,255,255,.05));
-        box-shadow: 0 14px 40px rgba(0,0,0,.3), inset 0 1px rgba(255,255,255,.2);
+        background: linear-gradient(
+          145deg,
+          rgba(255,255,255,.2),
+          rgba(255,255,255,.05)
+        );
+        box-shadow:
+          0 14px 40px rgba(0,0,0,.3),
+          inset 0 1px rgba(255,255,255,.2);
         font-size: 31px;
       }
 
@@ -111,7 +137,12 @@
       }
 
       #${ROOT_ID} .ksk-gate-brand h1 span {
-        background: linear-gradient(100deg,#e8dcff,#b69aff,#8de5e5);
+        background: linear-gradient(
+          100deg,
+          #e8dcff,
+          #b69aff,
+          #8de5e5
+        );
         -webkit-background-clip: text;
         background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -170,7 +201,7 @@
 
       #${ROOT_ID} .ksk-gate-field {
         display: block;
-        margin: 14px 0;
+        margin: 13px 0;
       }
 
       #${ROOT_ID} .ksk-gate-field > span {
@@ -181,26 +212,24 @@
         font-weight: 850;
       }
 
-      #${ROOT_ID} .ksk-gate-input-wrap {
-        position: relative;
-      }
-
-      #${ROOT_ID} .ksk-gate-field input {
+      #${ROOT_ID} .ksk-gate-field input,
+      #${ROOT_ID} .ksk-gate-field select {
         display: block;
         width: 100%;
-        min-height: 49px;
-        padding: 12px 45px 12px 13px;
+        min-height: 47px;
+        padding: 11px 13px;
         border: 1px solid #dfe4ed;
-        border-radius: 13px;
+        border-radius: 12px;
         outline: none;
         background: #f8f9fc;
         color: #172033;
         font: inherit;
-        font-size: 14px;
-        transition: border-color .2s, box-shadow .2s, background .2s;
+        font-size: 13px;
+        transition: border-color .2s, box-shadow .2s;
       }
 
-      #${ROOT_ID} .ksk-gate-field input:focus {
+      #${ROOT_ID} .ksk-gate-field input:focus,
+      #${ROOT_ID} .ksk-gate-field select:focus {
         border-color: #8068d8;
         background: #fff;
         box-shadow: 0 0 0 4px rgba(128,104,216,.13);
@@ -208,6 +237,20 @@
 
       #${ROOT_ID} .ksk-gate-field input::placeholder {
         color: #a1a9b8;
+      }
+
+      #${ROOT_ID} .ksk-gate-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 11px;
+      }
+
+      #${ROOT_ID} .ksk-gate-input-wrap {
+        position: relative;
+      }
+
+      #${ROOT_ID} .ksk-gate-input-wrap input {
+        padding-right: 45px;
       }
 
       #${ROOT_ID} .ksk-gate-eye {
@@ -269,10 +312,6 @@
         transform: translateY(-1px);
       }
 
-      #${ROOT_ID} .ksk-gate-primary:active {
-        transform: scale(.99);
-      }
-
       #${ROOT_ID} .ksk-gate-secondary {
         width: 100%;
         min-height: 45px;
@@ -331,7 +370,8 @@
       }
 
       #${ROOT_ID} button:disabled,
-      #${ROOT_ID} input:disabled {
+      #${ROOT_ID} input:disabled,
+      #${ROOT_ID} select:disabled {
         opacity: .6;
         cursor: wait;
       }
@@ -342,7 +382,7 @@
         justify-content: center;
         gap: 6px;
         margin-top: 17px;
-        color: #929bad;
+        color: rgba(226,217,247,.7);
         font-size: 10px;
       }
 
@@ -362,13 +402,22 @@
         letter-spacing: 1.2px;
       }
 
-      @media (max-width: 360px) {
+      @media (max-width: 380px) {
+        #${ROOT_ID} {
+          padding: 16px 11px;
+        }
+
         #${ROOT_ID} .ksk-gate-card {
           padding: 20px 15px;
         }
 
         #${ROOT_ID} .ksk-gate-brand h1 {
           font-size: 25px;
+        }
+
+        #${ROOT_ID} .ksk-gate-grid {
+          grid-template-columns: 1fr;
+          gap: 0;
         }
       }
 
@@ -381,6 +430,10 @@
 
     document.head.appendChild(style);
   }
+
+  /* =======================================================
+     PASSWORD ICON
+  ======================================================= */
 
   function eyeIcon(open) {
     return open
@@ -409,6 +462,7 @@
             maxlength="128"
             placeholder="${t("कम्तीमा ६ अक्षर", "At least 6 characters")}"
             required>
+
           <button
             type="button"
             class="ksk-gate-eye"
@@ -424,19 +478,30 @@
     `;
   }
 
+  /* =======================================================
+     CREATE AUTH SCREEN
+  ======================================================= */
+
   function createScreen() {
     if (document.getElementById(ROOT_ID)) return;
 
     const root = document.createElement("section");
+
     root.id = ROOT_ID;
     root.hidden = true;
-    root.setAttribute("aria-label", "Mero Sansar Authentication");
+    root.setAttribute(
+      "aria-label",
+      "Mero Sansar Authentication"
+    );
 
     root.innerHTML = `
       <div class="ksk-gate-wrap">
+
         <div class="ksk-gate-brand">
           <div class="ksk-gate-logo">🌐</div>
+
           <h1>हाम्रो <span>संसार</span></h1>
+
           <p>
             ${t(
               "आफ्नो संसारमा जोडिनुहोस्। साथी बनाउनुहोस् र कुराकानी गर्नुहोस्।",
@@ -453,12 +518,17 @@
             <path d="M8 10V7a4 4 0 018 0v3"/>
             <path d="M12 14v3"/>
           </svg>
-          ${t("सुरक्षित Email Authentication", "Secure email authentication")}
+
+          ${t(
+            "सुरक्षित Email Authentication",
+            "Secure email authentication"
+          )}
         </div>
 
         <p class="ksk-gate-footer">
           MERO SANSAR · YOUR COMMUNITY
         </p>
+
       </div>
     `;
 
@@ -470,6 +540,10 @@
     renderForm();
   }
 
+  /* =======================================================
+     FORM RENDERING
+  ======================================================= */
+
   function renderForm(message = "", messageType = "info") {
     const card = document.getElementById("kskGateCard");
     if (!card) return;
@@ -480,8 +554,8 @@
       <div class="ksk-gate-topline">
         <span class="ksk-gate-dot"></span>
         ${signup
-          ? t("JOIN OUR COMMUNITY", "JOIN OUR COMMUNITY")
-          : t("WELCOME BACK", "WELCOME BACK")
+          ? "JOIN OUR COMMUNITY"
+          : "WELCOME BACK"
         }
       </div>
 
@@ -495,8 +569,8 @@
       <p class="ksk-gate-subtitle">
         ${signup
           ? t(
-              "Mero Sansar मा जोडिन आफ्नो इमेल र विवरण भर्नुहोस्।",
-              "Enter your email and details to join Mero Sansar."
+              "Mero Sansar मा जोडिन आफ्नो विवरण भर्नुहोस्।",
+              "Enter your details to join Mero Sansar."
             )
           : t(
               "आफ्नो खातामा सुरक्षित रूपमा प्रवेश गर्नुहोस्।",
@@ -505,7 +579,66 @@
         }
       </p>
 
-      <form data-gate-form data-mode="${signup ? "signup" : "login"}">
+      <form
+        data-gate-form
+        data-mode="${signup ? "signup" : "login"}">
+
+        ${signup ? `
+          <div class="ksk-gate-grid">
+
+            <label class="ksk-gate-field">
+              <span>${t("नाम", "First name")}</span>
+              <input
+                type="text"
+                name="first_name"
+                maxlength="40"
+                autocomplete="given-name"
+                placeholder="${t("आफ्नो नाम", "First name")}"
+                required>
+            </label>
+
+            <label class="ksk-gate-field">
+              <span>${t("थर", "Last name")}</span>
+              <input
+                type="text"
+                name="last_name"
+                maxlength="40"
+                autocomplete="family-name"
+                placeholder="${t("आफ्नो थर", "Last name")}"
+                required>
+            </label>
+
+          </div>
+
+          <label class="ksk-gate-field">
+            <span>${t("जन्ममिति", "Date of birth")}</span>
+            <input
+              type="date"
+              name="birth_date"
+              autocomplete="bday"
+              max="${new Date().toISOString().slice(0, 10)}"
+              required>
+          </label>
+
+          <label class="ksk-gate-field">
+            <span>${t("लिङ्ग", "Gender")}</span>
+            <select name="gender" required>
+              <option value="">
+                ${t("लिङ्ग छान्नुहोस्", "Select gender")}
+              </option>
+              <option value="पुरुष">
+                ${t("पुरुष", "Male")}
+              </option>
+              <option value="महिला">
+                ${t("महिला", "Female")}
+              </option>
+              <option value="अन्य">
+                ${t("अन्य", "Other")}
+              </option>
+            </select>
+          </label>
+        ` : ""}
+
         <label class="ksk-gate-field">
           <span>${t("इमेल ठेगाना", "Email address")}</span>
           <input
@@ -539,6 +672,7 @@
             : t("लगइन गर्नुहोस् →", "Log in →")
           }
         </button>
+
       </form>
 
       ${!signup ? `
@@ -551,7 +685,7 @@
       ` : `
         <p class="ksk-gate-hint" style="text-align:center;margin-top:12px">
           ${t(
-            "खाता बनाउनपछि तपाईंको इमेलमा पुष्टि गर्ने Link पठाइनेछ।",
+            "खाता बनाएपछि तपाईंको इमेलमा पुष्टि गर्ने Link पठाइनेछ।",
             "A verification link will be sent to your email after signup."
           )}
         </p>
@@ -572,11 +706,14 @@
         id="kskGateStatus"
         role="status"
         aria-live="polite"
-        ${message ? "" : "hidden"}>${message}</p>
+        ${message ? "" : "hidden"}>${escapeHTML(message)}</p>
     `;
 
     const status = document.getElementById("kskGateStatus");
-    if (status && message) status.dataset.type = messageType;
+
+    if (status && message) {
+      status.dataset.type = messageType;
+    }
   }
 
   function showStatus(message, type = "info") {
@@ -592,14 +729,145 @@
     const root = document.getElementById(ROOT_ID);
     if (!root) return;
 
-    root.querySelectorAll("button, input").forEach(element => {
+    root.querySelectorAll("button, input, select").forEach(element => {
       element.disabled = Boolean(busy);
     });
   }
 
+  /* =======================================================
+     VALIDATION
+  ======================================================= */
+
   function emailIsValid(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
   }
+
+  function isValidBirthDate(value) {
+    if (!value) return false;
+
+    const parts = value.split("-").map(Number);
+
+    if (parts.length !== 3 || parts.some(Number.isNaN)) {
+      return false;
+    }
+
+    const [year, month, day] = parts;
+
+    const date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return false;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return date <= today;
+  }
+
+  /* =======================================================
+     SIGN UP — SEND REQUIRED PROFILE METADATA
+  ======================================================= */
+
+  async function registerUser(email, password, metadata) {
+    const auth = global.KSKSupabaseAuth;
+
+    if (!auth) {
+      throw new Error(
+        t(
+          "Authentication प्रणाली लोड भएन।",
+          "Authentication system is unavailable."
+        )
+      );
+    }
+
+    await auth.initialize();
+
+    const client = auth.getClient();
+
+    if (!client) {
+      throw new Error(
+        t(
+          "Supabase जडान हुन सकेन।",
+          "Could not connect to Supabase."
+        )
+      );
+    }
+
+    /*
+      These metadata keys must match the existing
+      public.handle_new_user() database function exactly:
+
+      first_name
+      last_name
+      birth_date
+      gender
+    */
+
+    const result = await client.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          first_name: metadata.first_name,
+          last_name: metadata.last_name,
+          birth_date: metadata.birth_date,
+          gender: metadata.gender
+        },
+
+        emailRedirectTo:
+          global.location.origin + global.location.pathname
+      }
+    });
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    const user = result.data?.user || null;
+    const session = result.data?.session || null;
+
+    /*
+      Email confirmation must be required.
+      Do not allow an unverified account into the app.
+    */
+
+    const verified = Boolean(
+      user?.email_confirmed_at ||
+      user?.confirmed_at
+    );
+
+    if (session || verified) {
+      try {
+        await auth.signOut();
+      } catch (error) {
+        console.error(
+          "Could not clear signup session:",
+          error
+        );
+      }
+
+      throw new Error(
+        t(
+          "इमेल पुष्टि आवश्यक छ। Supabase मा Confirm email सक्रिय भएको जाँच गर्नुहोस्।",
+          "Email verification is required. Check that Confirm email is enabled in Supabase."
+        )
+      );
+    }
+
+    return {
+      user,
+      confirmationRequired: Boolean(user)
+    };
+  }
+
+  /* =======================================================
+     FORM SUBMISSION
+  ======================================================= */
 
   async function handleSubmit(event) {
     const form = event.target.closest("[data-gate-form]");
@@ -611,12 +879,18 @@
       .trim()
       .toLowerCase();
 
-    const password = String(form.elements.password?.value || "");
+    const password = String(
+      form.elements.password?.value || ""
+    );
+
     const mode = form.dataset.mode;
 
     if (!emailIsValid(email)) {
       showStatus(
-        t("कृपया सही इमेल ठेगाना लेख्नुहोस्।", "Please enter a valid email address."),
+        t(
+          "कृपया सही इमेल ठेगाना लेख्नुहोस्।",
+          "Please enter a valid email address."
+        ),
         "error"
       );
       return;
@@ -624,71 +898,143 @@
 
     if (password.length < 6) {
       showStatus(
-        t("पासवर्ड कम्तीमा ६ अक्षरको हुनुपर्छ।", "Password must be at least 6 characters."),
+        t(
+          "पासवर्ड कम्तीमा ६ अक्षरको हुनुपर्छ।",
+          "Password must be at least 6 characters."
+        ),
         "error"
       );
       return;
     }
 
+    let metadata = null;
+
     if (mode === "signup") {
+      const firstName = String(
+        form.elements.first_name?.value || ""
+      ).trim();
+
+      const lastName = String(
+        form.elements.last_name?.value || ""
+      ).trim();
+
+      const birthDate = String(
+        form.elements.birth_date?.value || ""
+      ).trim();
+
+      const gender = String(
+        form.elements.gender?.value || ""
+      ).trim();
+
       const confirmPassword = String(
         form.elements.confirmPassword?.value || ""
       );
 
-      if (password !== confirmPassword) {
+      if (!firstName || !lastName) {
         showStatus(
-          t("दुवै पासवर्ड मिलेनन्। फेरि जाँच गर्नुहोस्।", "Passwords do not match. Please check again."),
+          t(
+            "नाम र थर अनिवार्य छन्।",
+            "First name and last name are required."
+          ),
           "error"
         );
         return;
       }
+
+      if (firstName.length > 40 || lastName.length > 40) {
+        showStatus(
+          t(
+            "नाम र थर ४० अक्षरभन्दा लामो हुनु हुँदैन।",
+            "Names must not exceed 40 characters."
+          ),
+          "error"
+        );
+        return;
+      }
+
+      if (!isValidBirthDate(birthDate)) {
+        showStatus(
+          t(
+            "सही जन्ममिति छान्नुहोस्।",
+            "Please select a valid date of birth."
+          ),
+          "error"
+        );
+        return;
+      }
+
+      if (!["पुरुष", "महिला", "अन्य"].includes(gender)) {
+        showStatus(
+          t(
+            "कृपया लिङ्ग छान्नुहोस्।",
+            "Please select your gender."
+          ),
+          "error"
+        );
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        showStatus(
+          t(
+            "दुवै पासवर्ड मिलेनन्। फेरि जाँच गर्नुहोस्।",
+            "Passwords do not match. Please check again."
+          ),
+          "error"
+        );
+        return;
+      }
+
+      metadata = {
+        first_name: firstName,
+        last_name: lastName,
+        birth_date: birthDate,
+        gender
+      };
     }
 
     const auth = global.KSKSupabaseAuth;
 
     if (!auth) {
       showStatus(
-        t("Authentication प्रणाली लोड भएन। पेज Refresh गर्नुहोस्।", "Authentication did not load. Please refresh the page."),
+        t(
+          "Authentication प्रणाली लोड भएन। पेज Refresh गर्नुहोस्।",
+          "Authentication did not load. Please refresh the page."
+        ),
         "error"
       );
       return;
     }
 
     setBusy(true);
-    showStatus(t("कृपया पर्खनुहोस्...", "Please wait..."));
+
+    showStatus(
+      t("कृपया पर्खनुहोस्...", "Please wait...")
+    );
 
     try {
       if (mode === "signup") {
-        const result = await auth.signUp(email, password);
+        const result = await registerUser(
+          email,
+          password,
+          metadata
+        );
 
-        /*
-         * If Supabase email confirmation is disabled,
-         * signup may return an active session.
-         * Immediately sign it out and refuse entry.
-         */
-        if (!result.confirmationRequired || result.session) {
-          try {
-            await auth.signOut();
-          } catch (signOutError) {
-            console.error("Could not clear unverified session:", signOutError);
-          }
-
-          showStatus(
+        if (!result.confirmationRequired) {
+          throw new Error(
             t(
-              "इमेल पुष्टि सुविधा Supabase मा सक्रिय छैन। कृपया Admin ले Authentication → Providers → Email मा Confirm email ON गर्नुपर्छ।",
-              "Email confirmation is not enabled. The administrator must turn on Confirm email in Supabase Authentication → Providers → Email."
-            ),
-            "error"
+              "खाता पुष्टि गर्न सकिएन। फेरि प्रयास गर्नुहोस्।",
+              "Account confirmation could not be started. Please try again."
+            )
           );
-          return;
         }
 
         currentMode = "login";
 
         renderForm(
           t(
-            "खाता अनुरोध सफल भयो! आफ्नो इमेल Inbox वा Spam मा आएको Confirmation Link खोल्नुहोस्। इमेल पुष्टि भएपछि मात्र Login गर्न सक्नुहुन्छ।",
-            "Signup request received! Open the confirmation link sent to your email inbox or spam folder. You can log in only after confirming your email."
+            "खाता सफलतापूर्वक बनाउने अनुरोध पठाइयो! आफ्नो इमेल Inbox वा Spam मा आएको Confirmation Link खोल्नुहोस्। इमेल पुष्टि भएपछि मात्र Login गर्न सक्नुहुन्छ।",
+            "Your signup request was successful! Open the confirmation link sent to your inbox or spam folder. You can log in after verifying your email."
           ),
           "success"
         );
@@ -697,14 +1043,17 @@
       }
 
       await auth.signIn(email, password);
+
       syncAccess();
 
     } catch (error) {
+      console.error("Authentication error:", error);
+
       showStatus(
         error?.message ||
         t(
-          "प्रक्रिया सफल भएन। इमेल र पासवर्ड जाँचेर फेरि प्रयास गर्नुहोस्।",
-          "The request failed. Check your email and password and try again."
+          "प्रक्रिया सफल भएन। विवरण जाँचेर फेरि प्रयास गर्नुहोस्।",
+          "The request failed. Check your details and try again."
         ),
         "error"
       );
@@ -714,6 +1063,10 @@
     }
   }
 
+  /* =======================================================
+     BUTTON ACTIONS
+  ======================================================= */
+
   async function handleClick(event) {
     const button = event.target.closest("[data-gate-action]");
     if (!button) return;
@@ -722,6 +1075,7 @@
 
     if (action === "eye") {
       const targetName = button.dataset.target;
+
       const input = document.querySelector(
         `#${ROOT_ID} [name="${targetName}"]`
       );
@@ -729,22 +1083,36 @@
       if (!input) return;
 
       const reveal = input.type === "password";
+
       input.type = reveal ? "text" : "password";
 
       button.innerHTML = eyeIcon(reveal);
+
       button.setAttribute(
         "aria-label",
         reveal
           ? t("पासवर्ड लुकाउनुहोस्", "Hide password")
           : t("पासवर्ड देखाउनुहोस्", "Show password")
       );
-      button.setAttribute("aria-pressed", String(reveal));
+
+      button.setAttribute(
+        "aria-pressed",
+        String(reveal)
+      );
+
       return;
     }
 
     if (action === "toggle") {
-      currentMode = currentMode === "login" ? "signup" : "login";
+      currentMode =
+        currentMode === "login" ? "signup" : "login";
+
       renderForm();
+      return;
+    }
+
+    if (action === "reload") {
+      global.location.reload();
       return;
     }
 
@@ -759,9 +1127,13 @@
 
       if (!emailIsValid(email)) {
         showStatus(
-          t("पहिले सही इमेल ठेगाना लेख्नुहोस्।", "Enter a valid email address first."),
+          t(
+            "पहिले सही इमेल ठेगाना लेख्नुहोस्।",
+            "Enter a valid email address first."
+          ),
           "error"
         );
+
         emailInput?.focus();
         return;
       }
@@ -781,7 +1153,8 @@
 
       } catch (error) {
         showStatus(
-          error?.message || t("अनुरोध सफल भएन।", "The request failed."),
+          error?.message ||
+          t("अनुरोध सफल भएन।", "The request failed."),
           "error"
         );
 
@@ -800,7 +1173,7 @@
     if (!root) return;
 
     const splash = document.getElementById("welcomeSplash");
-    splashGone = !splash;
+    const splashGone = !splash;
 
     if (!authReady) {
       root.hidden = true;
@@ -818,6 +1191,12 @@
     }
 
     document.body.classList.add("ksk-auth-locked");
+
+    /*
+      Keep the existing Welcome Splash visible.
+      Show authentication only after the splash disappears.
+    */
+
     root.hidden = !splashGone;
   }
 
@@ -825,16 +1204,12 @@
     const splash = document.getElementById("welcomeSplash");
 
     if (!splash) {
-      splashGone = true;
       syncAccess();
       return;
     }
 
-    splashGone = false;
-
     splashObserver = new MutationObserver(() => {
       if (!document.getElementById("welcomeSplash")) {
-        splashGone = true;
         syncAccess();
 
         splashObserver?.disconnect();
@@ -874,14 +1249,20 @@
 
       if (card) {
         card.innerHTML = `
-          <h2>${t("जडान हुन सकेन", "Connection unavailable")}</h2>
+          <h2>
+            ${t("जडान हुन सकेन", "Connection unavailable")}
+          </h2>
+
           <p class="ksk-gate-subtitle">
             ${t(
               "Authentication सेवा लोड हुन सकेन। इन्टरनेट जाँच गरेर पेज Refresh गर्नुहोस्।",
               "Authentication could not load. Check your connection and refresh."
             )}
           </p>
-          <button class="ksk-gate-primary" type="button"
+
+          <button
+            class="ksk-gate-primary"
+            type="button"
             data-gate-action="reload">
             ${t("फेरि प्रयास गर्नुहोस्", "Try again")}
           </button>
@@ -896,7 +1277,11 @@
   });
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initialize, { once: true });
+    document.addEventListener(
+      "DOMContentLoaded",
+      initialize,
+      { once: true }
+    );
   } else {
     initialize();
   }
