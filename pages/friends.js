@@ -7,7 +7,6 @@
  *
  * - Existing LocalStorage schema preserved
  * - Existing Social API preserved
- * - UUID generated through KSKData.makeId()
  * - Modern compact mobile-first interface
  * - Friend requests, friends, followers, following
  * - Mutual friends, block/unblock, search
@@ -37,13 +36,15 @@
       };
     }
 
-    // Central UUID service — KSKData
-    function makeId() {
-      if (typeof global.KSKData?.makeId !== "function") {
-        throw new Error("KSKData UUID service is unavailable.");
-      }
+    function makeId(prefix) {
+      try {
+        if (global.crypto?.randomUUID) {
+          return prefix + "_" + global.crypto.randomUUID();
+        }
+      } catch (error) {}
 
-      return global.KSKData.makeId();
+      return prefix + "_" + Date.now().toString(36) +
+        "_" + Math.random().toString(36).slice(2, 12);
     }
 
     function normalizeId(value) {
@@ -144,19 +145,15 @@
         return state.localUserId;
       }
 
-      try {
-        state.localUserId = makeId();
+      state.localUserId = makeId("local-user");
 
-        const saved = saveState(
-          state,
-          "LOCAL_USER_ID_CREATED",
-          { userId: state.localUserId }
-        );
+      const saved = saveState(
+        state,
+        "LOCAL_USER_ID_CREATED",
+        { userId: state.localUserId }
+      );
 
-        return saved.ok ? state.localUserId : "";
-      } catch (error) {
-        return "";
-      }
+      return saved.ok ? state.localUserId : "";
     }
 
     function pairKey(a, b) {
@@ -235,16 +232,8 @@
         return failure("ALREADY_BLOCKED");
       }
 
-      let blockId;
-
-      try {
-        blockId = makeId();
-      } catch (error) {
-        return failure("UUID_SERVICE_UNAVAILABLE");
-      }
-
       state.blocks.push({
-        id: blockId,
+        id: makeId("block"),
         blockerId: blocker,
         blockedUserId: blocked,
         createdAt: new Date().toISOString()
@@ -413,16 +402,8 @@
 
       const now = new Date().toISOString();
 
-      let requestId;
-
-      try {
-        requestId = makeId();
-      } catch (error) {
-        return failure("UUID_SERVICE_UNAVAILABLE");
-      }
-
       const request = {
-        id: requestId,
+        id: makeId("request"),
         fromUserId: from,
         toUserId: to,
         status: "pending",
@@ -541,16 +522,8 @@
           request.toUserId
         ].sort();
 
-        let friendshipId;
-
-        try {
-          friendshipId = makeId();
-        } catch (error) {
-          return failure("UUID_SERVICE_UNAVAILABLE");
-        }
-
         state.friendships.push({
-          id: friendshipId,
+          id: makeId("friendship"),
           userAId: ids[0],
           userBId: ids[1],
           createdAt: new Date().toISOString()
@@ -607,16 +580,8 @@
         return failure("ALREADY_FOLLOWING");
       }
 
-      let relationId;
-
-      try {
-        relationId = makeId();
-      } catch (error) {
-        return failure("UUID_SERVICE_UNAVAILABLE");
-      }
-
       const relation = {
-        id: relationId,
+        id: makeId("follow"),
         followerId: follower,
         followingId: following,
         createdAt: new Date().toISOString()
@@ -1365,8 +1330,10 @@
         outline-offset:2px;
       }
 
+      /* Social counts are already displayed on Profile.
+         Keep Friends page focused on relationship management. */
       .ksf-page .ksf-stats {
-        display:none !important;
+        display: none !important;
       }
 
       @media(max-width:390px) {
@@ -2146,11 +2113,7 @@
 
       CORRUPT_DATA: english
         ? "Social data is invalid."
-        : "Social डाटा बिग्रिएको छ।",
-
-      UUID_SERVICE_UNAVAILABLE: english
-        ? "KSKData UUID service is unavailable."
-        : "KSKData UUID सेवा उपलब्ध छैन।"
+        : "Social डाटा बिग्रिएको छ।"
     };
 
     toast(
