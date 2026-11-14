@@ -17,7 +17,8 @@
  * COMMENTS      : KSKComments
  * TOAST         : KSKToast
  *
- * Authentication is required before starting the app.
+ * This file integrates the application.
+ * Feature modules own their own interfaces.
  * =========================================================
  */
 
@@ -46,10 +47,6 @@
   const UI_ACTIONS = () => global.KSKUIActions;
 
   let initialized = false;
-  let authStarted = false;
-  let authListenerRegistered = false;
-  let authenticationPromise = null;
-  let socialIdentityBridgeInstalled = false;
 
   const els = {};
 
@@ -303,7 +300,7 @@
   }
 
   /* =======================================================
-     MAIN APPLICATION INITIALIZATION
+     INITIALIZATION
   ======================================================= */
 
   function initialize() {
@@ -313,13 +310,6 @@
       console.error(
         "KSKAppEvents is unavailable. Check index.html script order."
       );
-
-      toast(
-        "एपका केही आवश्यक भाग तयार छैनन्। पृष्ठ पुनः खोल्नुहोस्।",
-        "error",
-        5000
-      );
-
       return;
     }
 
@@ -421,179 +411,6 @@
   }
 
   /* =======================================================
-     AUTHENTICATION
-  ======================================================= */
-
-  function showAuth(mode = "welcome") {
-    global.KSKAuthPage?.show?.(mode);
-  }
-
-  /*
-   * The social module previously generated a browser-local ID.
-   * That ID cannot identify the same member on another device.
-   * Use the authenticated Supabase UUID as the single member ID.
-   */
-
-  function bindAuthenticatedIdentity(user) {
-    const userId = String(user?.id || "").trim();
-
-    if (!userId) {
-      throw new Error("AUTHENTICATED_USER_ID_MISSING");
-    }
-
-    global.KSKAuthenticatedUserId = userId;
-
-    const social = global.KSKSocialData;
-
-    if (
-      social &&
-      typeof social.getLocalUserId === "function" &&
-      !socialIdentityBridgeInstalled
-    ) {
-      global.KSKSocialData = Object.freeze({
-        ...social,
-
-        getLocalUserId() {
-          return String(global.KSKAuthenticatedUserId || "");
-        }
-      });
-
-      socialIdentityBridgeInstalled = true;
-    }
-
-    global.dispatchEvent(new CustomEvent("ksk:identity-ready", {
-      detail: { userId }
-    }));
-
-    return userId;
-  }
-
-  async function completeAuthentication(userFromSession = null) {
-    if (authenticationPromise) {
-      return authenticationPromise;
-    }
-
-    authenticationPromise = (async () => {
-      const user = userFromSession?.id
-        ? userFromSession
-        : await global.KSKSupabase.getUser();
-
-      if (!user?.id) {
-        throw new Error("AUTHENTICATED_USER_NOT_FOUND");
-      }
-
-      bindAuthenticatedIdentity(user);
-      global.KSKAuthPage?.hide?.();
-      initialize();
-
-      return true;
-    })();
-
-    try {
-      return await authenticationPromise;
-
-    } catch (error) {
-      global.KSKAuthenticatedUserId = "";
-
-      console.error(
-        "Could not initialize authenticated identity:",
-        error
-      );
-
-      toast(
-        "प्रयोगकर्ता पहिचान पुष्टि हुन सकेन। कृपया फेरि लगइन गर्नुहोस्।",
-        "error",
-        6000
-      );
-
-      showAuth("welcome");
-      return false;
-
-    } finally {
-      authenticationPromise = null;
-    }
-  }
-
-  function handleAuthStateChange(event, session) {
-    if (session?.user) {
-      completeAuthentication(session.user);
-      return;
-    }
-
-    if (event === "SIGNED_OUT") {
-      global.KSKAuthenticatedUserId = "";
-      global.KSKAuthPage?.show?.("welcome");
-    }
-  }
-
-  async function startWithAuthentication() {
-    if (authStarted) return;
-
-    authStarted = true;
-
-    try {
-      if (!global.KSKSupabase) {
-        throw new Error("AUTH_NOT_READY");
-      }
-
-      if (!global.KSKAuthPage) {
-        throw new Error("AUTH_PAGE_NOT_READY");
-      }
-
-      global.KSKAuthPage.initialize({
-        show: false
-      });
-
-      global.KSKSupabase.initialize();
-
-      /*
-       * Register the listener before checking the session.
-       * This prevents missing a login event during startup.
-       */
-
-      if (!authListenerRegistered) {
-        global.KSKSupabase.onAuthStateChange(
-          handleAuthStateChange
-        );
-
-        authListenerRegistered = true;
-      }
-
-      const session = await global.KSKSupabase.getSession();
-
-      if (session?.user) {
-        await completeAuthentication(session.user);
-      } else {
-        global.KSKAuthenticatedUserId = "";
-        showAuth("welcome");
-      }
-
-    } catch (error) {
-      console.error(
-        "Authentication startup failed:",
-        error
-      );
-
-      showAuth("welcome");
-
-      toast(
-        "प्रवेश प्रणालीमा जडान हुन सकेन। इन्टरनेट जाँच गरेर फेरि प्रयास गर्नुहोस्।",
-        "error",
-        6000
-      );
-    }
-  }
-
-  /* =======================================================
-     AUTHENTICATION EVENTS
-  ======================================================= */
-
-  global.addEventListener(
-    "ksk:auth-complete",
-    completeAuthentication
-  );
-
-  /* =======================================================
      PUBLIC APPLICATION API
   ======================================================= */
 
@@ -648,17 +465,17 @@
   });
 
   /* =======================================================
-     START APPLICATION AFTER AUTH CHECK
+     START APPLICATION
   ======================================================= */
 
   if (document.readyState === "loading") {
     document.addEventListener(
       "DOMContentLoaded",
-      startWithAuthentication,
+      initialize,
       { once: true }
     );
   } else {
-    startWithAuthentication();
+    initialize();
   }
 
 })(window);
