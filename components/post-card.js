@@ -10,17 +10,7 @@
  * - Render one reusable post card
  * - Display author, avatar, date and post text
  * - Display reaction, comment, save and share actions
- *
- * DOES NOT:
- * - Fetch or update posts
- * - Handle click events
- * - Edit or delete posts
- * - Manage application navigation
- *
- * DEPENDENCIES:
- * - KSKData
- * - KSKUtils
- * - KSKLanguage
+ * - Expose remote Supabase media URL for Media UI
  * =========================================================
  */
 
@@ -31,17 +21,9 @@
     return;
   }
 
-  /* =======================================================
-     SHARED MODULES
-  ======================================================= */
-
   const DATA = () => global.KSKData || null;
   const UTILS = () => global.KSKUtils || null;
   const LANG = () => global.KSKLanguage || null;
-
-  /* =======================================================
-     HELPERS
-  ======================================================= */
 
   function escapeHTML(value = "") {
     if (typeof UTILS()?.escapeHTML === "function") {
@@ -115,11 +97,14 @@
       (english ? "U" : "स");
   }
 
-  /* =======================================================
-     AUTHOR AVATAR
-  ======================================================= */
+  /* AUTHOR AVATAR */
 
-  function renderAvatar(name, avatar = "", size = "", english = false) {
+  function renderAvatar(
+    name,
+    avatar = "",
+    size = "",
+    english = false
+  ) {
     const image = isImageSource(avatar);
 
     const content = image
@@ -138,9 +123,7 @@
     `;
   }
 
-  /* =======================================================
-     SAVED STATUS
-  ======================================================= */
+  /* SAVED STATUS */
 
   function isPostSaved(postId) {
     const savedPosts = DATA()?.getSavedPosts?.() || [];
@@ -151,9 +134,7 @@
       );
   }
 
-  /* =======================================================
-     REACTION SUMMARY
-  ======================================================= */
+  /* REACTION SUMMARY */
 
   function getReactionSummary(post) {
     const validReactions = [
@@ -182,9 +163,7 @@
       .join("");
   }
 
-  /* =======================================================
-     RENDER POST CARD
-  ======================================================= */
+  /* RENDER POST CARD */
 
   function render(post, options = {}) {
     if (!post || typeof post !== "object") {
@@ -236,12 +215,23 @@
 
     const commentCount = Array.isArray(post.comments)
       ? post.comments.length
-      : 0;
+      : Number(post.commentCount || 0);
+
+    /*
+     * Supabase private Storage signed URL.
+     * Media UI will use this URL to display the photo.
+     */
+    const mediaUrl = isImageSource(post.mediaUrl)
+      ? escapeHTML(post.mediaUrl.trim())
+      : "";
 
     return `
       <article
         class="post-card"
-        data-post-id="${id}">
+        data-post-id="${id}"
+        ${mediaUrl
+          ? `data-post-media-url="${mediaUrl}"`
+          : ""}>
 
         <header class="post-header">
 
@@ -343,9 +333,7 @@
     `;
   }
 
-  /* =======================================================
-     PUBLIC API
-  ======================================================= */
+  /* PUBLIC API */
 
   global.KSKPostCard = Object.freeze({
     render,
