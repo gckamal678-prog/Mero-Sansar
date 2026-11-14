@@ -59,6 +59,9 @@
   <link rel="stylesheet" href="app.css">
   <link rel="stylesheet" href="core/comments.css">
 
+  <!-- Welcome Splash Stylesheet -->
+  <link rel="stylesheet" href="welcome.css">
+
   <!-- App Icons -->
   <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="icon-192.png" sizes="192x192">
@@ -69,255 +72,95 @@
   <meta name="apple-mobile-web-app-title" content="हाम्रो संसार">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
-  <!-- WELCOME SPLASH STYLES -->
-  <style>
-    #welcomeSplash {
-      position: fixed;
-      inset: 0;
-      z-index: 99999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      padding: 24px;
-      background:
-        radial-gradient(
-          circle at 50% 35%,
-          rgba(37, 99, 235, 0.12),
-          transparent 42%
-        ),
-        var(--color-background, #f4f7fb);
-      color: var(--color-text, #172033);
-      font-family: var(--font-main, "Noto Sans Devanagari", sans-serif);
-      opacity: 1;
-      visibility: visible;
-      transition:
-        opacity 0.55s ease,
-        visibility 0.55s ease;
-    }
-
-    #welcomeSplash.is-hidden {
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-    }
-
-    .welcome-content {
-      width: min(100%, 360px);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      animation: welcome-enter 0.85s ease both;
-    }
-
-    .welcome-logo-wrap {
-      width: 116px;
-      height: 116px;
-      display: grid;
-      place-items: center;
-      margin-bottom: 25px;
-      border-radius: 34px;
-      background: var(--color-surface, #ffffff);
-      border: 1px solid var(--color-border, #e2e8f0);
-      box-shadow:
-        0 15px 40px rgba(37, 99, 235, 0.14),
-        0 0 0 9px rgba(37, 99, 235, 0.045);
-      animation: welcome-float 2.6s ease-in-out infinite;
-    }
-
-    .welcome-logo {
-      width: 88px;
-      height: 88px;
-      object-fit: contain;
-      border-radius: 24px;
-    }
-
-    .welcome-logo-fallback {
-      display: none;
-      width: 88px;
-      height: 88px;
-      align-items: center;
-      justify-content: center;
-      border-radius: 24px;
-      background: var(--color-primary, #2563eb);
-      color: #ffffff;
-      font-size: 43px;
-      font-weight: 800;
-    }
-
-    .welcome-title {
-      margin: 0;
-      color: var(--color-text, #172033);
-      font-size: clamp(27px, 7vw, 35px);
-      font-weight: 800;
-      letter-spacing: -0.8px;
-      line-height: 1.5;
-    }
-
-    .welcome-tagline {
-      margin: 9px 0 0;
-      color: var(--color-text-secondary, #475569);
-      font-size: 14px;
-      font-weight: 500;
-      letter-spacing: 0.1px;
-    }
-
-    .welcome-divider {
-      width: 54px;
-      height: 4px;
-      margin: 25px 0 23px;
-      border-radius: 99px;
-      background: var(--color-primary, #2563eb);
-      opacity: 0.85;
-    }
-
-    .welcome-loading {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      color: var(--color-muted, #64748b);
-      font-size: 12px;
-      font-weight: 600;
-    }
-
-    .welcome-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--color-primary, #2563eb);
-      animation: welcome-pulse 1s ease-in-out infinite;
-    }
-
-    .welcome-dot:nth-child(2) {
-      animation-delay: 0.15s;
-    }
-
-    .welcome-dot:nth-child(3) {
-      animation-delay: 0.3s;
-    }
-
-    .welcome-footer {
-      position: absolute;
-      bottom: 25px;
-      left: 0;
-      width: 100%;
-      padding: 0 15px;
-      color: var(--color-muted, #64748b);
-      font-size: 11px;
-      text-align: center;
-      opacity: 0.8;
-    }
-
-    @keyframes welcome-enter {
-      from {
-        opacity: 0;
-        transform: translateY(18px) scale(0.97);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
-    }
-
-    @keyframes welcome-float {
-      0%, 100% {
-        transform: translateY(0);
-      }
-      50% {
-        transform: translateY(-7px);
-      }
-    }
-
-    @keyframes welcome-pulse {
-      0%, 80%, 100% {
-        opacity: 0.35;
-        transform: scale(0.75);
-      }
-      40% {
-        opacity: 1;
-        transform: scale(1.15);
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      #welcomeSplash *,
-      #welcomeSplash *::before,
-      #welcomeSplash *::after {
-        animation: none !important;
-        transition: none !important;
-      }
-    }
-  </style>
 </head>
 
 <body>
 
   <!-- WELCOME SPLASH -->
-  <div id="welcomeSplash" role="status" aria-label="हाम्रो संसार खुल्दैछ">
+  <div id="welcomeSplash" class="welcome-splash">
+
+    <div class="welcome-orbit welcome-orbit-one"></div>
+    <div class="welcome-orbit welcome-orbit-two"></div>
+    <div class="welcome-bottom-glow"></div>
 
     <div class="welcome-content">
 
-      <div class="welcome-logo-wrap">
-        <img
-          src="Nepal.jpg"
-          class="welcome-logo"
-          alt="हाम्रो संसार"
-          onerror="
-            this.style.display='none';
-            document.getElementById('welcomeLogoFallback').style.display='flex';
-          "
-        >
-
-        <div
-          id="welcomeLogoFallback"
-          class="welcome-logo-fallback"
-          aria-hidden="true"
-        >
-          ह
-        </div>
+      <div class="welcome-kicker">
+        <span class="welcome-kicker-dot"></span>
+        WELCOME TO OUR WORLD
+        <span class="welcome-kicker-dot"></span>
       </div>
 
-      <h1 class="welcome-title">हाम्रो संसार</h1>
+      <div class="welcome-emblem">
 
-      <p class="welcome-tagline">
-        साथी जोडौँ, कुरा गरौँ
+        <div class="welcome-emblem-ring"></div>
+
+        <div class="welcome-logo-wrap">
+          <img
+            src="Nepal.jpg"
+            class="welcome-logo"
+            alt="हाम्रो संसार लोगो"
+          >
+        </div>
+
+        <div class="welcome-emblem-star">✦</div>
+
+      </div>
+
+      <p class="welcome-eyebrow">
+        तपाईंहरूको आफ्नै संसार
       </p>
 
-      <div class="welcome-divider"></div>
+      <h1 class="welcome-title">
+        हाम्रो <span>संसार</span>
+      </h1>
 
-      <div class="welcome-loading" aria-label="लोड हुँदैछ">
-        <span>तयार हुँदैछ</span>
-        <span class="welcome-dot"></span>
-        <span class="welcome-dot"></span>
-        <span class="welcome-dot"></span>
+      <p class="welcome-description">
+        साथी जोडौँ, विचार बाँडौँ र नयाँ सम्बन्धहरू बनाऔँ।
+        हाम्रो आफ्नै डिजिटल संसारमा तपाईंलाई स्वागत छ।
+      </p>
+
+      <div class="welcome-divider">
+        <span></span>
+        ✦
+        <span></span>
       </div>
 
-    </div>
+      <button
+        type="button"
+        id="welcomeStartButton"
+        class="welcome-start-button"
+      >
+        संसारभित्र प्रवेश गर्नुहोस्
+        <b>→</b>
+      </button>
 
-    <div class="welcome-footer">
-      तपाईंहरूको आफ्नै डिजिटल संसार
-    </div>
+      <p class="welcome-footer">
+        MERO SANSAR · CONNECT · SHARE · GROW
+      </p>
 
+    </div>
   </div>
   <!-- END WELCOME SPLASH -->
 
 
   <!-- APPLICATION HEADER -->
   <header class="app-header">
+
     <div class="header-inner">
 
       <div class="brand">
+
         <div class="brand-logo">
           <img
             src="Nepal.jpg"
             class="brand-logo-image"
             alt="हाम्रो संसार लोगो"
-            loading="eager"
           >
         </div>
 
         <div class="brand-text">
+
           <h1 class="brand-name" data-i18n="appName">
             हाम्रो संसार
           </h1>
@@ -325,7 +168,9 @@
           <p class="brand-tagline" data-i18n="tagline">
             साथी जोडौँ, कुरा गरौँ
           </p>
+
         </div>
+
       </div>
 
       <div class="header-actions">
@@ -356,7 +201,9 @@
         >⬇</button>
 
       </div>
+
     </div>
+
   </header>
 
 
@@ -378,14 +225,21 @@
     aria-live="polite"
     hidden
   >
+
     <div class="pwa-update-content">
-      <strong id="pwaUpdateTitle">नयाँ संस्करण उपलब्ध छ</strong>
+
+      <strong id="pwaUpdateTitle">
+        नयाँ संस्करण उपलब्ध छ
+      </strong>
+
       <p id="pwaUpdateMessage">
         हाम्रो संसारको नयाँ संस्करण तयार छ।
       </p>
+
     </div>
 
     <div class="pwa-update-actions">
+
       <button
         id="pwaUpdateLater"
         class="pwa-update-button pwa-update-later"
@@ -397,7 +251,9 @@
         class="pwa-update-button pwa-update-now"
         type="button"
       >Update Now</button>
+
     </div>
+
   </div>
 
 
@@ -430,11 +286,13 @@
     <section id="homePage" class="page">
 
       <section class="stories-section">
+
         <h2 class="section-title" data-i18n="stories">
           स्टोरीहरू
         </h2>
 
         <div id="storiesList" class="stories-row"></div>
+
       </section>
 
 
@@ -456,11 +314,13 @@
         </div>
 
         <div class="composer-actions">
+
           <button
             class="composer-tool"
             id="quickText"
             type="button"
           >✍️ लेख्नुहोस्</button>
+
         </div>
 
       </section>
@@ -612,9 +472,11 @@
       </header>
 
       <div class="modal-body" id="settingsBody">
+
         <div class="empty-state">
           <p>सेटिङ लोड हुँदैछ...</p>
         </div>
+
       </div>
 
     </section>
@@ -700,39 +562,7 @@
 
 
   <!-- WELCOME SPLASH CONTROLLER -->
-  <script>
-    (function () {
-      "use strict";
-
-      var splash = document.getElementById("welcomeSplash");
-
-      if (!splash) return;
-
-      // Splash is shown briefly, then removed from the screen.
-      function hideWelcomeSplash() {
-        if (!splash || splash.classList.contains("is-hidden")) {
-          return;
-        }
-
-        splash.classList.add("is-hidden");
-
-        window.setTimeout(function () {
-          if (splash && splash.parentNode) {
-            splash.parentNode.removeChild(splash);
-          }
-        }, 650);
-      }
-
-      // Normal welcome duration.
-      window.setTimeout(hideWelcomeSplash, 2200);
-
-      // Fallback: do not leave the splash covering the app.
-      window.addEventListener("load", function () {
-        window.setTimeout(hideWelcomeSplash, 900);
-      });
-
-    })();
-  </script>
+  <script src="welcome.js" defer></script>
 
 </body>
 </html>
