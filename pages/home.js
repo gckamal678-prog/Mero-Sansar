@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -20,6 +19,11 @@
   let searchQuery = String(
     global.KSKState?.getState?.()?.searchQuery || ""
   );
+
+  // SUPABASE POSTS CACHE
+  let cloudFeedPosts = null;
+  let cloudFeedLoading = false;
+  let cloudFeedRequest = 0;
 
   const $ = (selector, root = document) =>
     root.querySelector(selector);
@@ -43,7 +47,16 @@
   }
 
   function getPosts() {
+    // Cloud Feed सफलतापूर्वक लोड भएको छ भने
+    // Supabase का पोस्ट प्रयोग गर्ने।
+    if (Array.isArray(cloudFeedPosts)) {
+      return cloudFeedPosts;
+    }
+
+    // Cloud Feed उपलब्ध नभएसम्म पुरानो
+    // Local Storage डेटा सुरक्षित राख्ने।
     const posts = global.KSKData?.getPosts?.();
+
     return Array.isArray(posts) ? posts : [];
   }
 
