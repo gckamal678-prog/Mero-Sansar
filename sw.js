@@ -2,10 +2,10 @@
 
 /* =========================================================
    MERO SANSAR — SERVICE WORKER
-   Version: v65
+   Version: v66
 ========================================================= */
 
-const CACHE_NAME = "hamro-sansar-v65";
+const CACHE_NAME = "hamro-sansar-v66";
 const CACHE_PREFIX = "hamro-sansar-";
 
 const APP_FILES = [
@@ -18,10 +18,6 @@ const APP_FILES = [
   "./icon-192.png",
   "./icon-512.png",
   "./Nepal.jpg",
-
-  /* Authentication and Supabase */
-  "./core/supabase.js",
-  "./pages/auth.js",
 
   "./core/state.js",
   "./core/settings.js",
@@ -232,7 +228,7 @@ self.addEventListener("install", event => {
       }
 
       console.info(
-        "Mero Sansar v65 cached:",
+        "Mero Sansar v66 cached:",
         allFiles.size + 1,
         "files"
       );
@@ -266,7 +262,7 @@ self.addEventListener("activate", event => {
     await self.clients.claim();
 
     console.info(
-      "Mero Sansar Service Worker v65 activated."
+      "Mero Sansar Service Worker v66 activated."
     );
   })());
 });
