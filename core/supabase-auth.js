@@ -1,33 +1,15 @@
-
 "use strict";
 
-/*
- * =========================================================
- * MERO SANSAR — SUPABASE AUTHENTICATION
- *
- * Features:
- * - Email + Password Sign Up
- * - Email + Password Login
- * - Logout
- * - Password reset email
- * - Persistent Supabase session
- * - Existing Settings UI integration
- *
- * IMPORTANT:
- * - Does not modify existing local social data.
- * - Does not expose a Supabase service-role key.
- * - Does not redesign the existing application UI.
- * =========================================================
- */
+/* =========================================================
+   MERO SANSAR — SUPABASE AUTHENTICATION
+   Email + Password
+   Login / Signup / Logout / Password Reset
+========================================================= */
 
 (function (global) {
   "use strict";
 
   if (global.KSKSupabaseAuth) return;
-
-  /* =======================================================
-     SUPABASE PROJECT CONFIGURATION
-  ======================================================= */
 
   const SUPABASE_URL =
     "https://sacyjxnobzunrwzxhwjs.supabase.co";
@@ -38,15 +20,15 @@
   const SUPABASE_SDK_URL =
     "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
 
-  const STYLE_ID = "ksk-supabase-auth-style";
   const PANEL_ID = "ksk-supabase-auth-panel";
+  const STYLE_ID = "ksk-supabase-auth-style";
 
   let client = null;
   let session = null;
   let initialized = false;
   let sdkPromise = null;
-  let settingsObserver = null;
-  let authSubscription = null;
+  let observer = null;
+  let currentMode = "login";
 
   /* =======================================================
      LANGUAGE
@@ -74,21 +56,36 @@
     })[char]);
   }
 
-  function notify(message, type = "info") {
-    const toast = global.KSKToast;
+  function getSettingsBody() {
+    return document.getElementById("settingsBody");
+  }
 
-    if (typeof toast?.show === "function") {
-      toast.show(message, type);
-      return;
-    }
+  function isAccountOpen() {
+    return (
+      global.KSKSettingsUI?.getActiveSection?.() === "account"
+    );
+  }
 
-    if (type === "success") {
-      toast?.success?.(message);
-    } else if (type === "error") {
-      toast?.error?.(message);
-    } else {
-      console.info(message);
-    }
+  function getErrorMessage(error) {
+    return String(
+      error?.message ||
+      t(
+        "अनुरोध पूरा हुन सकेन। फेरि प्रयास गर्नुहोस्।",
+        "The request could not be completed. Please try again."
+      )
+    );
+  }
+
+  function getEmail(form) {
+    return String(
+      new FormData(form).get("email") || ""
+    ).trim().toLowerCase();
+  }
+
+  function getPassword(form) {
+    return String(
+      new FormData(form).get("password") || ""
+    );
   }
 
   function setStatus(message, type = "info") {
@@ -108,53 +105,28 @@
 
     if (!panel) return;
 
-    panel.querySelectorAll(
-      "button, input"
-    ).forEach(element => {
+    panel.querySelectorAll("button, input").forEach(element => {
       element.disabled = Boolean(busy);
     });
 
-    panel.classList.toggle(
-      "ksk-auth-busy",
-      Boolean(busy)
-    );
+    panel.classList.toggle("ksk-auth-busy", Boolean(busy));
   }
 
-  function getErrorMessage(error) {
-    const message = String(
-      error?.message || ""
-    ).trim();
+  function notify(message, type = "info") {
+    const toast = global.KSKToast;
 
-    if (!message) {
-      return t(
-        "अनुरोध पूरा हुन सकेन। फेरि प्रयास गर्नुहोस्।",
-        "The request could not be completed. Please try again."
-      );
+    if (typeof toast?.show === "function") {
+      toast.show(message, type);
+      return;
     }
 
-    return message;
-  }
-
-  function getEmail(form) {
-    return String(
-      new FormData(form).get("email") || ""
-    ).trim().toLowerCase();
-  }
-
-  function getPassword(form) {
-    return String(
-      new FormData(form).get("password") || ""
-    );
-  }
-
-  function getSettingsBody() {
-    return document.getElementById("settingsBody");
-  }
-
-  function isAccountSectionOpen() {
-    return (
-      global.KSKSettingsUI?.getActiveSection?.() === "account"
-    );
+    if (type === "success") {
+      toast?.success?.(message);
+    } else if (type === "error") {
+      toast?.error?.(message);
+    } else {
+      console.info(message);
+    }
   }
 
   /* =======================================================
@@ -169,36 +141,6 @@
     if (sdkPromise) return sdkPromise;
 
     sdkPromise = new Promise((resolve, reject) => {
-      const existing = document.querySelector(
-        'script[data-ksk-supabase-sdk]'
-      );
-
-      if (existing) {
-        existing.addEventListener(
-          "load",
-          () => {
-            if (global.supabase?.createClient) {
-              resolve(global.supabase);
-            } else {
-              reject(new Error(
-                "Supabase SDK loaded but createClient is unavailable."
-              ));
-            }
-          },
-          { once: true }
-        );
-
-        existing.addEventListener(
-          "error",
-          () => reject(new Error(
-            "Supabase SDK could not be loaded."
-          )),
-          { once: true }
-        );
-
-        return;
-      }
-
       const script = document.createElement("script");
 
       script.src = SUPABASE_SDK_URL;
@@ -209,15 +151,13 @@
         if (global.supabase?.createClient) {
           resolve(global.supabase);
         } else {
-          reject(new Error(
-            "Supabase SDK is not available."
-          ));
+          reject(new Error("Supabase SDK उपलब्ध भएन।"));
         }
       };
 
       script.onerror = () => {
         reject(new Error(
-          "Supabase SDK could not be downloaded. Check your internet connection."
+          "Supabase SDK लोड भएन। इन्टरनेट जडान जाँच गर्नुहोस्।"
         ));
       };
 
@@ -228,7 +168,7 @@
   }
 
   /* =======================================================
-     INITIALIZE SUPABASE CLIENT
+     INITIALIZE CLIENT
   ======================================================= */
 
   async function initializeClient() {
@@ -250,41 +190,31 @@
 
     const result = await client.auth.getSession();
 
-    if (result.error) {
-      throw result.error;
-    }
+    if (result.error) throw result.error;
 
     session = result.data?.session || null;
 
-    const authResult = client.auth.onAuthStateChange(
-      (_event, nextSession) => {
-        session = nextSession || null;
+    client.auth.onAuthStateChange((_event, nextSession) => {
+      session = nextSession || null;
 
-        /*
-         * Keep the callback synchronous.
-         * UI refresh is scheduled outside the callback.
-         */
-        global.setTimeout(() => {
-          renderPanel();
-          global.dispatchEvent(
-            new CustomEvent("ksk:auth-change", {
-              detail: {
-                user: session?.user || null
-              }
-            })
-          );
-        }, 0);
-      }
-    );
+      global.setTimeout(() => {
+        renderPanel(true);
 
-    authSubscription =
-      authResult.data?.subscription || null;
+        global.dispatchEvent(
+          new CustomEvent("ksk:auth-change", {
+            detail: {
+              user: session?.user || null
+            }
+          })
+        );
+      }, 0);
+    });
 
     return client;
   }
 
   /* =======================================================
-     AUTHENTICATION API
+     AUTH API
   ======================================================= */
 
   async function signUp(email, password) {
@@ -333,7 +263,7 @@
 
     session = null;
 
-    renderPanel();
+    renderPanel(true);
 
     return true;
   }
@@ -356,7 +286,7 @@
   }
 
   /* =======================================================
-     AUTH PANEL STYLES
+     STYLES
   ======================================================= */
 
   function ensureStyles() {
@@ -538,7 +468,7 @@
 
   function renderLoadingPanel() {
     return `
-      <div class="ksk-settings-card" id="${PANEL_ID}">
+      <div id="${PANEL_ID}">
         <div class="ksk-auth-heading">
           <span class="ksk-auth-icon">🔐</span>
           <span>
@@ -556,8 +486,8 @@
     `;
   }
 
-  function renderLoginPanel(mode = "login", message = "") {
-    const signup = mode === "signup";
+  function renderLoginPanel() {
+    const signup = currentMode === "signup";
 
     return `
       <div id="${PANEL_ID}">
@@ -631,14 +561,13 @@
           data-auth-status
           role="status"
           aria-live="polite"
-          ${message ? "" : "hidden"}>${escapeHTML(message)}</p>
+          hidden></p>
       </div>
     `;
   }
 
   function renderSignedInPanel() {
-    const user = session?.user;
-    const email = user?.email || "";
+    const email = session?.user?.email || "";
 
     return `
       <div id="${PANEL_ID}">
@@ -676,19 +605,25 @@
   }
 
   /* =======================================================
-     RENDER AUTH PANEL
+     RENDER PANEL
+
+     Important:
+     Existing panel is not recreated unnecessarily.
+     This prevents MutationObserver loops.
   ======================================================= */
 
-  let currentMode = "login";
-
-  function renderPanel() {
-    if (!isAccountSectionOpen()) return false;
+  function renderPanel(force = false) {
+    if (!isAccountOpen()) return false;
 
     const body = getSettingsBody();
 
     if (!body) return false;
 
     const oldPanel = document.getElementById(PANEL_ID);
+
+    if (oldPanel && !force) {
+      return true;
+    }
 
     if (oldPanel) oldPanel.remove();
 
@@ -699,7 +634,7 @@
     } else if (session?.user) {
       html = renderSignedInPanel();
     } else {
-      html = renderLoginPanel(currentMode);
+      html = renderLoginPanel();
     }
 
     const wrapper = document.createElement("div");
@@ -734,7 +669,10 @@
 
     if (!email || !password) {
       setStatus(
-        t("इमेल र पासवर्ड दुवै आवश्यक छन्।", "Email and password are required."),
+        t(
+          "इमेल र पासवर्ड दुवै आवश्यक छन्।",
+          "Email and password are required."
+        ),
         "error"
       );
       return;
@@ -742,13 +680,17 @@
 
     if (password.length < 6) {
       setStatus(
-        t("पासवर्ड कम्तीमा ६ अक्षरको हुनुपर्छ।", "Password must be at least 6 characters."),
+        t(
+          "पासवर्ड कम्तीमा ६ अक्षरको हुनुपर्छ।",
+          "Password must be at least 6 characters."
+        ),
         "error"
       );
       return;
     }
 
     setBusy(true);
+
     setStatus(
       t("प्रक्रिया हुँदैछ...", "Please wait..."),
       "info"
@@ -760,7 +702,7 @@
 
         if (result.confirmationRequired) {
           currentMode = "login";
-          renderPanel();
+          renderPanel(true);
 
           setStatus(
             t(
@@ -773,7 +715,7 @@
           return;
         }
 
-        renderPanel();
+        renderPanel(true);
 
         notify(
           t("खाता सफलतापूर्वक बन्यो।", "Account created successfully."),
@@ -783,7 +725,7 @@
       } else {
         await signIn(email, password);
 
-        renderPanel();
+        renderPanel(true);
 
         notify(
           t("लगइन सफल भयो।", "Login successful."),
@@ -813,7 +755,7 @@
       currentMode =
         currentMode === "login" ? "signup" : "login";
 
-      renderPanel();
+      renderPanel(true);
       return;
     }
 
@@ -884,15 +826,19 @@
   function observeSettings() {
     const body = getSettingsBody();
 
-    if (!body || settingsObserver) return;
+    if (!body || observer) return;
 
-    settingsObserver = new MutationObserver(() => {
-      if (isAccountSectionOpen()) {
-        renderPanel();
+    observer = new MutationObserver(() => {
+      if (isAccountOpen()) {
+        /*
+         * renderPanel() does nothing when the panel
+         * already exists. This prevents observer loops.
+         */
+        renderPanel(false);
       }
     });
 
-    settingsObserver.observe(body, {
+    observer.observe(body, {
       childList: true,
       subtree: true
     });
@@ -916,7 +862,7 @@
     try {
       await initializeClient();
 
-      renderPanel();
+      renderPanel(false);
 
       global.dispatchEvent(
         new CustomEvent("ksk:auth-ready", {
@@ -934,7 +880,7 @@
         error
       );
 
-      if (isAccountSectionOpen()) {
+      if (isAccountOpen()) {
         const body = getSettingsBody();
 
         if (body) {
@@ -942,6 +888,7 @@
           oldPanel?.remove();
 
           const panel = document.createElement("div");
+
           panel.id = PANEL_ID;
           panel.className = "ksk-settings-info";
           panel.textContent = getErrorMessage(error);
@@ -983,7 +930,9 @@
     signOut,
     resetPassword,
 
-    render: renderPanel
+    render() {
+      return renderPanel(true);
+    }
 
   });
 
