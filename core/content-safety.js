@@ -515,20 +515,22 @@
     return true;
   }
 
-  function handleSubmit(event) {
+    function handleSubmit(event) {
     const form = event.target;
 
     if (!(form instanceof global.HTMLFormElement)) return;
-
-    const composer =
-      form.id === "kskMediaPostForm" ||
-      form.id === "kskMediaStoryForm";
 
     const comment = form.matches("[data-comment-form]");
     const reply = form.matches("[data-home-story-reply]");
     const editPost = form.id === "kskEditPostForm";
 
-    if (!composer && !comment && !reply && !editPost) return;
+    const composer =
+      form.id === "kskMediaPostForm" ||
+      form.id === "kskMediaStoryForm";
+
+    if (!comment && !reply && !editPost && !composer) {
+      return;
+    }
 
     const textarea = $("textarea", form);
     const value = textarea?.value || "";
@@ -547,21 +549,6 @@
 
       textarea?.focus();
       return;
-    }
-
-    if (composer) {
-      const file = $("input[type=file]", form)?.files?.[0];
-
-      if (file && !photoConfirmedForms.has(form)) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        openPhotoSafetyConfirmation(form, event.submitter || null);
-        return;
-      }
-
-      if (photoConfirmedForms.has(form)) {
-        photoConfirmedForms.delete(form);
-      }
     }
   }
 
