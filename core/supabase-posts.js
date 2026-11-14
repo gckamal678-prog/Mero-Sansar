@@ -17,6 +17,7 @@
  *
  * Tables / Storage:
  * - public.posts
+ * - public.profiles
  * - posts-media
  */
 
@@ -274,7 +275,59 @@
     return url;
   }
 
-  async function normalizePost(row, client) {
+  /*
+   * AUTHOR AVATAR LOOKUP
+   *
+   * Current avatar URLs are loaded from profiles.
+   * This also fixes older posts with empty or outdated
+   * author_avatar_url snapshots.
+   *
+   * Profile photos use the public profile-media bucket.
+   */
+
+  async function getAuthorAvatarMap(rows, client) {
+    const userIds = [
+      ...new Set(
+        (rows || [])
+          .map(row => String(row?.user_id || "").trim())
+          .filter(Boolean)
+      )
+    ];
+
+    const avatarMap = new Map();
+
+    if (!userIds.length || !client) {
+      return avatarMap;
+    }
+
+    try {
+      const { data, error } = await client
+        .from("profiles")
+        .select("id,avatar_url")
+        .in("id", userIds);
+
+      if (error) throw error;
+
+      (data || []).forEach(profile => {
+        const id = String(profile?.id || "").trim();
+        const avatar = String(profile?.avatar_url || "").trim();
+
+        if (id && avatar) {
+          avatarMap.set(id, avatar);
+        }
+      });
+
+    } catch (error) {
+      console.warn(
+        "Author avatar lookup failed; using post snapshots:",
+        error
+      );
+    }
+
+    return avatarMap;
+  }
+
+  async function normalizePost(row, client, avatarMap = null) {
     if (!row) return null;
 
     let mediaUrl = "";
@@ -293,12 +346,22 @@
       }
     }
 
+    const authorId = String(row.user_id || "").trim();
+
+    const currentAvatar = avatarMap instanceof Map
+      ? avatarMap.get(authorId)
+      : "";
+
+    const authorAvatar =
+      currentAvatar ||
+      String(row.author_avatar_url || "").trim();
+
     return {
       id: row.id,
 
       author: row.author_name || "सदस्य",
-      authorId: row.user_id || "",
-      authorAvatar: row.author_avatar_url || "",
+      authorId,
+      authorAvatar,
       authorInitial: String(row.author_name || "स").charAt(0),
 
       text: row.content || "",
@@ -318,15 +381,22 @@
   }
 
   async function normalizeRows(rows, client) {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+
+    const avatarMap = await getAuthorAvatarMap(
+      sourceRows,
+      client
+    );
+
     return Promise.all(
-      (rows || []).map(row => normalizePost(row, client))
+      sourceRows.map(row =>
+        normalizePost(row, client, avatarMap)
+      )
     );
   }
 
   /* =====================================================
      REALTIME
-     Requires public.posts to be enabled in Supabase
-     Realtime publication.
   ===================================================== */
 
   async function stopRealtime() {
@@ -431,7 +501,6 @@
     try {
       const context = await getContext();
 
-      // Realtime उपलब्ध नभए पनि सामान्य Feed चल्न सक्छ।
       startRealtime().catch(error => {
         console.warn("Posts Realtime startup failed:", error);
       });
@@ -593,7 +662,6 @@
 
       const post = await normalizePost(data, client);
 
-      // Realtime नचले पनि यही Device मा तुरुन्त Feed Refresh।
       dispatchPostChange({
         action: "create",
         post
