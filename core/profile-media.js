@@ -1,22 +1,36 @@
-
 "use strict";
 
 /*
- * MERO SANSAR — SUPABASE CONNECTED PROFILE PAGE
- * Profile data: Supabase
- * Posts and social counts: Existing KSKData modules
+ * KSK PROFILE MEDIA UI
+ * Avatar + Cover Photo + Crop + Preview
+ *
+ * RESPONSIBILITY:
+ * - Profile Avatar and Cover Photo
+ * - Direct Gallery opening
+ * - Image crop, zoom and positioning
+ * - Profile information editing
+ * - Profile media display
+ *
+ * DEPENDENCIES:
+ * KSKData, KSKMedia, KSKModal, KSKToast
+ * KSKSupabaseAuth, KSKSupabaseProfile
  */
 
 (function (global) {
-  "use strict";
 
-  if (global.KSKProfilePage) return;
+  /* =====================================================
+     CORE
+  ===================================================== */
 
-  const VALID_TABS = new Set(["posts", "photos", "about"]);
-  const STYLE_ID = "ksk-profile-upgrade-styles";
+  const $ = (selector, root = document) =>
+    root.querySelector(selector);
 
-  let remoteProfile = null;
-  let remoteLoadPromise = null;
+  let initialized = false;
+  let busy = false;
+  let activeCropURL = "";
+
+  const objectURLs = new Map();
+
 
   /* =====================================================
      LANGUAGE
@@ -26,1074 +40,1346 @@
     return global.KSKLanguage?.getLanguage?.() === "en";
   }
 
+
   function t(nepali, english) {
     return isEnglish() ? english : nepali;
   }
 
-  function escapeHTML(value) {
-    if (global.KSKUtils?.escapeHTML) {
-      return global.KSKUtils.escapeHTML(String(value ?? ""));
-    }
-
-    return String(value ?? "").replace(/[&<>"']/g, char => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;"
-    })[char]);
-  }
-
-  /* =====================================================
-     STYLES
-  ===================================================== */
-
-  function ensureStyles() {
-    if (document.getElementById(STYLE_ID)) return;
-
-    const style = document.createElement("style");
-    style.id = STYLE_ID;
-
-    style.textContent = `
-      .profile-section {
-        width:100%;
-        min-width:0;
-        display:flex;
-        flex-direction:column;
-        gap:14px;
-      }
-
-      .profile-section .profile-card {
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        gap:11px;
-        min-width:0;
-        padding:22px 16px 18px;
-        text-align:center;
-        overflow:hidden;
-      }
-
-      .profile-section .ksk-profile-cover {
-        width:100%;
-        height:150px;
-        position:relative;
-        overflow:hidden;
-        border-radius:14px;
-        background:var(--color-surface-secondary);
-        cursor:pointer;
-      }
-
-      .profile-section .ksk-profile-cover img {
-        width:100%;
-        height:100%;
-        object-fit:cover;
-      }
-
-      .profile-section .ksk-profile-cover-empty {
-        width:100%;
-        height:100%;
-        display:grid;
-        place-items:center;
-        font-size:30px;
-      }
-
-      .profile-section .ksk-profile-photo-hint {
-        position:absolute;
-        right:10px;
-        bottom:10px;
-        padding:6px;
-        border-radius:50%;
-        background:var(--color-surface);
-      }
-
-      .profile-section .profile-avatar {
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        cursor:pointer;
-      }
-
-      .profile-section .profile-avatar .avatar {
-        width:104px;
-        height:104px;
-        flex-basis:104px;
-        font-size:34px;
-        border:4px solid var(--color-surface);
-        box-shadow:0 0 0 2px var(--color-primary-soft);
-      }
-
-      .profile-section .profile-avatar img {
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        border-radius:inherit;
-      }
-
-      .profile-section .profile-card h2 {
-        max-width:100%;
-        margin:2px 0 0;
-        color:var(--color-text);
-        font-size:22px;
-        font-weight:850;
-        line-height:1.3;
-        overflow-wrap:anywhere;
-      }
-
-      .profile-section .profile-card > p {
-        max-width:560px;
-        margin:0;
-        color:var(--color-text-secondary);
-        font-size:13px;
-        line-height:1.55;
-        overflow-wrap:anywhere;
-      }
-
-      .profile-section .profile-stats {
-        width:min(100%,460px);
-        display:grid;
-        grid-template-columns:repeat(3,minmax(0,1fr));
-        gap:8px;
-        margin-top:5px;
-      }
-
-      .profile-section .profile-stat {
-        min-width:0;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        gap:3px;
-        padding:11px 5px;
-        border:1px solid var(--color-border);
-        border-radius:13px;
-        background:var(--color-surface-secondary);
-      }
-
-      .profile-section .profile-stat strong {
-        color:var(--color-text);
-        font-size:19px;
-        font-weight:850;
-      }
-
-      .profile-section .profile-stat span {
-        color:var(--color-muted);
-        font-size:11px;
-        font-weight:700;
-      }
-
-      .profile-section .profile-post-count {
-        color:var(--color-muted);
-        font-size:12px;
-        font-weight:750;
-      }
-
-      .profile-section .profile-main-actions {
-        width:min(100%,460px);
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:9px;
-        margin-top:3px;
-      }
-
-      .profile-section .profile-action-btn {
-        min-width:0;
-        min-height:46px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        gap:7px;
-        padding:10px 9px;
-        border:1px solid var(--color-border);
-        border-radius:12px;
-        background:var(--color-surface-secondary);
-        color:var(--color-text);
-        font:inherit;
-        font-size:12px;
-        font-weight:800;
-        cursor:pointer;
-      }
-
-      .profile-section .profile-action-btn.primary {
-        border-color:var(--color-primary);
-        background:var(--color-primary);
-        color:#fff;
-      }
-
-      .profile-section .profile-tools-card {
-        min-width:0;
-        padding:15px;
-      }
-
-      .profile-section .profile-tools-heading {
-        margin:0 0 12px;
-      }
-
-      .profile-section .profile-tools-heading h3 {
-        margin:0;
-        color:var(--color-text);
-        font-size:15px;
-        font-weight:850;
-      }
-
-      .profile-section .profile-tools-heading p {
-        margin:3px 0 0;
-        color:var(--color-muted);
-        font-size:11px;
-      }
-
-      .profile-section .profile-tool-grid {
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:9px;
-      }
-
-      .profile-section .profile-tool-grid button {
-        min-width:0;
-        min-height:54px;
-        padding:10px;
-        border:1px solid var(--color-border);
-        border-radius:12px;
-        background:var(--color-surface-secondary);
-        color:var(--color-text);
-        font:inherit;
-        font-size:12px;
-        font-weight:750;
-        text-align:left;
-        cursor:pointer;
-      }
-
-      .profile-section .profile-tool-note {
-        margin:11px 2px 0;
-        color:var(--color-muted);
-        font-size:10px;
-      }
-
-      .profile-section .profile-tabs {
-        width:100%;
-        display:grid;
-        grid-template-columns:repeat(3,minmax(0,1fr));
-        gap:5px;
-        padding:5px;
-        border:1px solid var(--color-border);
-        border-radius:13px;
-        background:var(--color-surface);
-      }
-
-      .profile-section .profile-tab {
-        min-width:0;
-        min-height:42px;
-        padding:8px 5px;
-        border:1px solid transparent;
-        border-radius:10px;
-        background:transparent;
-        color:var(--color-muted);
-        font-size:12px;
-        font-weight:750;
-        cursor:pointer;
-      }
-
-      .profile-section .profile-tab.is-active {
-        border-color:var(--color-primary);
-        background:var(--color-primary-soft);
-        color:var(--color-primary);
-      }
-
-      .profile-section .profile-tab-panel {
-        width:100%;
-        min-width:0;
-      }
-
-      .profile-section .profile-posts {
-        display:flex;
-        flex-direction:column;
-        gap:12px;
-      }
-
-      .profile-section .profile-about-card {
-        min-width:0;
-        padding:15px;
-      }
-
-      .profile-section .profile-about-list {
-        display:flex;
-        flex-direction:column;
-      }
-
-      .profile-section .profile-about-item {
-        display:flex;
-        align-items:flex-start;
-        gap:12px;
-        padding:13px 2px;
-        border-bottom:1px solid var(--color-border);
-      }
-
-      .profile-section .profile-about-item:last-child {
-        border-bottom:0;
-      }
-
-      .profile-section .profile-about-icon {
-        width:36px;
-        height:36px;
-        flex:0 0 36px;
-        display:grid;
-        place-items:center;
-        border-radius:11px;
-        background:var(--color-surface-secondary);
-      }
-
-      .profile-section .profile-about-item > div {
-        min-width:0;
-        flex:1;
-      }
-
-      .profile-section .profile-about-item small {
-        display:block;
-        margin-bottom:3px;
-        color:var(--color-muted);
-        font-size:11px;
-        font-weight:750;
-      }
-
-      .profile-section .profile-about-item p {
-        margin:0;
-        color:var(--color-text);
-        font-size:14px;
-        overflow-wrap:anywhere;
-        white-space:pre-wrap;
-      }
-
-      @media(max-width:480px) {
-        .profile-section {
-          gap:11px;
-        }
-
-        .profile-section .profile-card {
-          padding:18px 12px 15px;
-        }
-
-        .profile-section .profile-avatar .avatar {
-          width:88px;
-          height:88px;
-          flex-basis:88px;
-        }
-
-        .profile-section .profile-card h2 {
-          font-size:19px;
-        }
-
-        .profile-section .profile-tools-card {
-          padding:12px;
-        }
-      }
-
-      @media(max-width:340px) {
-        .profile-section .profile-tool-grid {
-          grid-template-columns:1fr;
-        }
-      }
-    `;
-
-    (document.head || document.documentElement).appendChild(style);
-  }
 
   /* =====================================================
      PROFILE DATA
   ===================================================== */
 
-  function getLocalProfile() {
+  function profile() {
     return global.KSKData?.getProfile?.() || {};
   }
 
-  function getProfile() {
-    return remoteProfile || getLocalProfile();
+
+  /* =====================================================
+     TOAST
+  ===================================================== */
+
+  function toast(message, type = "info") {
+    const api = global.KSKToast;
+
+    if (api?.[type]) {
+      api[type](message);
+    } else {
+      api?.show?.(message, type);
+    }
   }
 
-  function normalizeRemoteProfile(profile) {
-    if (!profile) return null;
 
-    const firstName = String(profile.firstName || "").trim();
-    const lastName = String(profile.lastName || "").trim();
+  /* =====================================================
+     MODAL
+  ===================================================== */
 
-    const fullName = [firstName, lastName]
-      .filter(Boolean)
-      .join(" ");
+  function openModal(options) {
 
-    return {
-      ...profile,
-      name: String(profile.name || fullName || "").trim(),
-      bio: profile.bio || "",
-      location: profile.location || "",
-      avatar: profile.avatar || "",
-      cover: profile.cover || "",
-      joinedAt: profile.createdAt || ""
-    };
+    if (!global.KSKModal?.openModal) {
+      toast(
+        t("यो सुविधा अहिले उपलब्ध छैन।", "This feature is unavailable."),
+        "error"
+      );
+
+      return null;
+    }
+
+    return global.KSKModal.openModal(options);
   }
 
-  function saveRemoteProfileToCache(profile) {
-    const current = getLocalProfile();
 
-    const values = {
-      name: profile.name || "",
-      bio: profile.bio || "",
-      location: profile.location || "",
-      avatar: profile.avatar || "",
-      cover: profile.cover || ""
-    };
+  function closeModal() {
+    global.KSKModal?.closeModal?.();
+  }
 
-    const changed = Object.keys(values).some(
-      key => String(current[key] || "") !== String(values[key] || "")
+
+  /* =====================================================
+     HELPERS
+  ===================================================== */
+
+  function escapeHTML(value) {
+    return String(value ?? "").replace(
+      /[&<>"']/g,
+      char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[char]
     );
-
-    if (!changed) return false;
-
-    global.KSKData?.saveProfile?.(values);
-
-    return true;
   }
 
-  function refreshProfilePage() {
+
+  function getMediaId(value) {
+
+    const text = String(value || "");
+
     if (
-      global.KSKNavigation?.getCurrentPage?.() === "profile"
+      text.startsWith("ksk_media_") ||
+      text.startsWith("media_")
     ) {
-      global.KSKNavigation?.refreshCurrentPage?.();
+      return text;
     }
 
-    global.KSKProfileMediaUI?.refresh?.();
+    return "";
   }
 
-  /*
-   * The page renderer is synchronous.
-   * This background request updates the local UI cache
-   * after Supabase returns the authenticated user's profile.
-   */
 
-  function loadSupabaseProfile() {
-    if (remoteLoadPromise) return remoteLoadPromise;
+  function getImageSource(value) {
 
-    const api = global.KSKSupabaseProfile;
+    const id = getMediaId(value);
+    if (id) return getImageURL(id);
 
-    if (!api?.getMyProfile) return Promise.resolve(null);
+    const source = String(value || "").trim();
 
-    remoteLoadPromise = api.getMyProfile()
-      .then(result => {
-        if (!result) return null;
-
-        remoteProfile = normalizeRemoteProfile(result);
-
-        saveRemoteProfileToCache(remoteProfile);
-
-        refreshProfilePage();
-
-        console.info("KSK Profile: Supabase profile loaded.");
-
-        return remoteProfile;
-      })
-      .catch(error => {
-        console.warn(
-          "KSK Profile: Supabase profile could not be loaded.",
-          error
-        );
-
-        remoteLoadPromise = null;
-
-        return null;
-      });
-
-    return remoteLoadPromise;
-  }
-
-  /* =====================================================
-     POSTS AND FRIENDS
-  ===================================================== */
-
-  function getPosts() {
-    const posts = global.KSKData?.getPosts?.();
-    return Array.isArray(posts) ? posts : [];
-  }
-
-  function getFriends() {
-    const friends = global.KSKData?.getFriends?.();
-    return Array.isArray(friends) ? friends : [];
-  }
-
-  function getDisplayName(user) {
-    return String(
-      user?.name || t("तपाईंको प्रोफाइल", "Your Profile")
-    );
-  }
-
-  function renderAvatar(user) {
-    if (global.KSKUserCard?.renderAvatar) {
-      return global.KSKUserCard.renderAvatar({
-        name: user?.name || "",
-        avatar: user?.avatar || "",
-        avatarMediaId: user?.avatarMediaId || ""
-      });
+    if (/^(https?:\/\/|data:image\/)/i.test(source)) {
+      return Promise.resolve(source);
     }
 
-    const name = String(user?.name || "").trim();
-    const avatar = String(user?.avatar || "").trim();
-
-    if (/^(https?:\/\/|data:image\/|blob:)/i.test(avatar)) {
-      return `
-        <div class="avatar avatar-xl">
-          <img
-            src="${escapeHTML(avatar)}"
-            alt="${escapeHTML(name)}"
-            loading="lazy">
-        </div>
-      `;
-    }
-
-    return `
-      <div class="avatar avatar-xl">
-        ${escapeHTML(name.charAt(0) || "स")}
-      </div>
-    `;
+    return Promise.resolve("");
   }
 
-  function getProfilePosts(user, posts) {
-    const safePosts = Array.isArray(posts) ? posts : [];
-    const userId = String(user?.id || "");
-    const userName = String(user?.name || "").trim();
 
-    return safePosts.filter(post => {
-      if (!post || typeof post !== "object") return false;
+  async function getImageURL(id) {
 
-      const authorId = String(post.authorId || "");
+    if (!id) return "";
 
-      if (userId && authorId) {
-        return authorId === userId;
-      }
-
-      const author = String(post.author || "").trim();
-
-      if (userName && author === userName) return true;
-
-      return !userId && !userName && author === "तपाईं";
-    });
-  }
-
-  function isPhotoPost(post) {
-    if (!post || typeof post !== "object") return false;
-
-    const mediaType = String(
-      post.mediaType || post.media?.type || ""
-    ).trim().toLowerCase();
-
-    if (["video", "audio", "voice", "music"].includes(mediaType)) {
-      return false;
+    if (objectURLs.has(id)) {
+      return objectURLs.get(id);
     }
-
-    if (post.video || post.videoUrl || post.audio || post.audioUrl) {
-      return false;
-    }
-
-    return Boolean(
-      post.mediaId ||
-      post.mediaData ||
-      post.image ||
-      post.imageUrl ||
-      post.mediaUrl ||
-      post.photo ||
-      post.media
-    );
-  }
-
-  function renderPostList(posts, options = {}) {
-    if (!posts.length) {
-      return `<div class="empty-state">${t(
-        "तपाईंले अहिलेसम्म पोस्ट गर्नुभएको छैन।",
-        "You have not published any posts."
-      )}</div>`;
-    }
-
-    if (typeof options.renderPost === "function") {
-      return posts.map(post => options.renderPost(post)).join("");
-    }
-
-    return posts.map(post => `
-      <article class="card post-card">
-        <div class="post-header">
-          <strong>${escapeHTML(post.author || "")}</strong>
-        </div>
-
-        ${post.text
-          ? `<div class="post-content">${escapeHTML(post.text)}</div>`
-          : ""
-        }
-
-        <small class="post-time">
-          ${escapeHTML(
-            global.KSKUtils?.formatDateTime?.(
-              post.createdAt,
-              isEnglish() ? "en" : "ne"
-            ) || ""
-          )}
-        </small>
-      </article>
-    `).join("");
-  }
-
-  function safeCount(value) {
-    const count = Array.isArray(value) ? value.length : Number(value);
-
-    return Number.isFinite(count) && count > 0
-      ? Math.floor(count)
-      : 0;
-  }
-
-  function getSocialCounts(user) {
-    const social = global.KSKSocialData;
-    let localCounts = null;
 
     try {
-      const localUserId = social?.getLocalUserId?.();
 
-      if (localUserId && typeof social?.getCounts === "function") {
-        localCounts = social.getCounts(localUserId);
+      const url = await global.KSKMedia?.getImageURL?.(id);
+
+      if (url) {
+        objectURLs.set(id, url);
       }
+
+      return url || "";
+
     } catch (error) {
-      localCounts = null;
-    }
 
-    if (localCounts && typeof localCounts === "object") {
-      return {
-        followers: safeCount(localCounts.followers),
-        following: safeCount(localCounts.following),
-        friends: safeCount(localCounts.friends)
-      };
-    }
+      console.error("KSK Profile Media: Image loading failed.", error);
 
-    const followers = Array.isArray(user?.followers)
-      ? user.followers.length
-      : safeCount(user?.followersCount ?? user?.followers);
-
-    const following = Array.isArray(user?.following)
-      ? user.following.length
-      : safeCount(user?.followingCount ?? user?.following);
-
-    return {
-      followers,
-      following,
-      friends: getFriends().length
-    };
-  }
-
-  function renderStat(value, label) {
-    return `
-      <div class="profile-stat">
-        <strong>${escapeHTML(value)}</strong>
-        <span>${escapeHTML(label)}</span>
-      </div>
-    `;
-  }
-
-  /* =====================================================
-     PROFILE LINK
-  ===================================================== */
-
-  function getProfileLink() {
-    try {
-      const currentURL = new URL(global.location.href);
-      currentURL.hash = "profile";
-      return currentURL.toString();
-    } catch (error) {
       return "";
     }
   }
 
-  function showToast(message, type = "success") {
-    const toast = global.KSKToast;
 
-    if (typeof toast?.[type] === "function") {
-      toast[type](message);
-    } else if (typeof toast?.show === "function") {
-      toast.show(message, type);
-    }
+  /* =====================================================
+     STYLES
+  ===================================================== */
+
+  function injectStyles() {
+
+    if ($("#kskProfileMediaStyles")) return;
+
+    const style = document.createElement("style");
+
+    style.id = "kskProfileMediaStyles";
+
+    style.textContent = `
+
+      .ksk-profile-cover {
+        width:100%;
+        height:190px;
+        overflow:hidden;
+        position:relative;
+        border-radius:16px;
+        background:linear-gradient(135deg,#243b55,#141e30);
+        margin-bottom:-42px;
+        cursor:pointer;
+      }
+
+      .ksk-profile-cover img {
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        display:block;
+      }
+
+      .ksk-profile-cover-empty {
+        height:100%;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        color:#fff;
+        font-size:38px;
+        opacity:.75;
+      }
+
+      .profile-card .profile-avatar {
+        position:relative;
+        z-index:2;
+        width:max-content;
+        margin:0 auto 12px;
+        padding:5px;
+        border-radius:50%;
+        background:var(--card-bg,#fff);
+        cursor:pointer;
+      }
+
+      .profile-card .profile-avatar .avatar {
+        overflow:hidden;
+      }
+
+      .profile-card .profile-avatar img {
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        display:block;
+      }
+
+      .ksk-profile-cover,
+      .profile-card .profile-avatar {
+        transition:filter .2s ease, transform .2s ease;
+      }
+
+      .ksk-profile-cover:hover,
+      .profile-card .profile-avatar:hover {
+        filter:brightness(.92);
+      }
+
+      .ksk-profile-photo-hint {
+        position:absolute;
+        right:10px;
+        bottom:10px;
+        z-index:3;
+        width:34px;
+        height:34px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:50%;
+        color:#fff;
+        background:rgba(0,0,0,.65);
+        font-size:16px;
+        pointer-events:none;
+      }
+
+      .ksk-profile-avatar-hint {
+        position:absolute;
+        right:4px;
+        bottom:4px;
+        width:30px;
+        height:30px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:50%;
+        color:#fff;
+        background:#2563eb;
+        border:2px solid var(--card-bg,#fff);
+        font-size:13px;
+        pointer-events:none;
+      }
+
+      .ksk-profile-upload-input {
+        position:fixed !important;
+        width:1px !important;
+        height:1px !important;
+        opacity:0 !important;
+        pointer-events:none !important;
+        left:-9999px !important;
+      }
+
+      .ksk-nav-avatar {
+        width:27px;
+        height:27px;
+        border-radius:50%;
+        object-fit:cover;
+        display:block;
+      }
+
+      /* CROP EDITOR */
+
+      .ksk-crop-layout {
+        display:grid;
+        gap:16px;
+      }
+
+      .ksk-crop-stage {
+        width:100%;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        overflow:hidden;
+        border-radius:14px;
+        padding:12px;
+        background:#111827;
+      }
+
+      .ksk-crop-stage canvas {
+        display:block;
+        max-width:100%;
+        max-height:42vh;
+        object-fit:contain;
+        background:#111827;
+      }
+
+      .ksk-crop-controls {
+        display:grid;
+        gap:12px;
+      }
+
+      .ksk-crop-control {
+        display:grid;
+        gap:6px;
+      }
+
+      .ksk-crop-control label {
+        font-size:13px;
+        font-weight:600;
+        color:var(--color-text);
+      }
+
+      .ksk-crop-control input {
+        width:100%;
+        accent-color:var(--color-primary,#2563eb);
+      }
+
+      .ksk-crop-note {
+        font-size:12px;
+        color:var(--color-text-secondary);
+        line-height:1.6;
+      }
+
+      .ksk-profile-editor {
+        display:grid;
+        gap:14px;
+      }
+
+      .ksk-profile-editor .form-group {
+        display:grid;
+        gap:7px;
+      }
+
+      .ksk-profile-editor .form-label {
+        font-weight:600;
+      }
+
+      @media(max-width:480px) {
+        .ksk-profile-cover {
+          height:150px;
+        }
+
+        .ksk-crop-stage canvas {
+          max-height:36vh;
+        }
+      }
+
+    `;
+
+    document.head.appendChild(style);
   }
 
-  async function copyProfileLink(button) {
-    const link = getProfileLink();
 
-    if (!link) {
-      showToast(
-        t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."),
-        "error"
-      );
-      return false;
-    }
+  /* =====================================================
+     FOOTER AVATAR
+  ===================================================== */
 
-    let copied = false;
+  async function updateFooterAvatar() {
 
-    try {
-      if (
-        global.isSecureContext &&
-        global.navigator?.clipboard?.writeText
-      ) {
-        await global.navigator.clipboard.writeText(link);
-        copied = true;
-      }
-    } catch (error) {
-      copied = false;
-    }
-
-    if (!copied && document.body) {
-      const field = document.createElement("textarea");
-
-      field.value = link;
-      field.setAttribute("readonly", "");
-      field.style.position = "fixed";
-      field.style.opacity = "0";
-
-      document.body.appendChild(field);
-      field.select();
-
-      try {
-        copied = Boolean(document.execCommand("copy"));
-      } catch (error) {
-        copied = false;
-      }
-
-      field.remove();
-    }
-
-    showToast(
-      copied
-        ? t("प्रोफाइल लिंक कपी भयो।", "Profile link copied.")
-        : t("प्रोफाइल लिंक कपी गर्न सकिएन।", "Could not copy profile link."),
-      copied ? "success" : "error"
+    const button = $(
+      '.nav-item[data-page="profile"] .nav-icon'
     );
 
-    button?.blur();
+    if (!button) return;
 
-    return copied;
-  }
+    const user = profile();
 
-  /* =====================================================
-     ABOUT
-  ===================================================== */
+    const source = user.avatarMediaId || user.avatar || "";
 
-  function renderAbout(user) {
-    const joinedAt = user?.joinedAt
-      ? global.KSKUtils?.formatDateTime?.(
-          user.joinedAt,
-          isEnglish() ? "en" : "ne"
-        ) || user.joinedAt
-      : "";
+    const url = await getImageSource(source);
 
-    const rows = [
-      user?.bio
-        ? {
-            icon: "📝",
-            label: t("परिचय", "Bio"),
-            value: user.bio
-          }
-        : null,
+    if (!button.isConnected) return;
 
-      user?.location
-        ? {
-            icon: "📍",
-            label: t("स्थान", "Location"),
-            value: user.location
-          }
-        : null,
+    if (!url) {
 
-      joinedAt
-        ? {
-            icon: "📅",
-            label: t("सदस्य बनेको मिति", "Joined"),
-            value: joinedAt
-          }
-        : null
-    ].filter(Boolean);
+      if (button.querySelector("img")) {
+        button.textContent = "👤";
+      }
 
-    if (!rows.length) {
-      return `<div class="empty-state">${t(
-        "अहिलेसम्म About जानकारी थपिएको छैन। Edit Profile बाट जानकारी थप्न सक्नुहुन्छ।",
-        "No About information yet. Add details from Edit Profile."
-      )}</div>`;
+      return;
     }
 
-    return `
-      <div class="profile-about-list">
-        ${rows.map(row => `
-          <div class="profile-about-item">
-            <span class="profile-about-icon" aria-hidden="true">
-              ${row.icon}
-            </span>
+    const currentImage = $("img", button);
 
-            <div>
-              <small>${escapeHTML(row.label)}</small>
-              <p>${escapeHTML(row.value)}</p>
-            </div>
-          </div>
-        `).join("")}
-      </div>
-    `;
+    if (currentImage?.src === url) return;
+
+    button.innerHTML = "";
+
+    const img = document.createElement("img");
+
+    img.className = "ksk-nav-avatar";
+    img.src = url;
+    img.alt = "Profile";
+
+    button.appendChild(img);
   }
 
+
   /* =====================================================
-     MAIN RENDER
+     PROFILE DISPLAY
   ===================================================== */
 
-  function render(options = {}) {
-    options = options && typeof options === "object"
-      ? options
-      : {};
+  async function updateProfileDisplay() {
 
-    ensureStyles();
+    const card = $(".profile-section .profile-card");
 
-    // Start loading Supabase profile without blocking synchronous render.
-    loadSupabaseProfile();
+    if (!card) {
+      await updateFooterAvatar();
+      return;
+    }
 
-    const user = options.user && typeof options.user === "object"
-      ? options.user
-      : getProfile();
+    const user = profile();
 
-    const allPosts = Array.isArray(options.posts)
-      ? options.posts
-      : getPosts();
 
-    const posts = getProfilePosts(user, allPosts);
-    const photos = posts.filter(isPhotoPost);
-    const counts = getSocialCounts(user);
+    /* COVER CONTAINER */
 
-    const activeTab = VALID_TABS.has(options.activeTab)
-      ? options.activeTab
-      : "posts";
+    let cover = $(".ksk-profile-cover", card);
 
-    return `
-      <section class="profile-section" data-profile-section>
+    if (!cover) {
 
-        <section class="card profile-card" aria-label="${t(
-          "मेरो प्रोफाइल",
-          "My profile"
-        )}">
+      cover = document.createElement("div");
 
-          <div class="profile-avatar">
-            ${renderAvatar(user)}
+      cover.className = "ksk-profile-cover";
+      cover.setAttribute("role", "button");
+      cover.setAttribute("tabindex", "0");
+      cover.setAttribute(
+        "aria-label",
+        t("Cover फोटो परिवर्तन गर्नुहोस्", "Change cover photo")
+      );
+
+      const avatar = $(".profile-avatar", card);
+
+      if (avatar) {
+        card.insertBefore(cover, avatar);
+      } else {
+        card.prepend(cover);
+      }
+    }
+
+
+    /* COVER IMAGE */
+
+    const coverSource = user.coverMediaId || user.cover || "";
+    const coverURL = await getImageSource(coverSource);
+
+    if (!cover.isConnected) return;
+
+    if (coverURL) {
+
+      const currentImage = $("img", cover);
+
+      if (currentImage?.src !== coverURL) {
+
+        cover.innerHTML = "";
+
+        const img = document.createElement("img");
+
+        img.src = coverURL;
+        img.alt = "Cover Photo";
+
+        cover.appendChild(img);
+      }
+
+    } else if (!$(".ksk-profile-cover-empty", cover)) {
+
+      cover.innerHTML = `
+        <div class="ksk-profile-cover-empty">🌄</div>
+      `;
+    }
+
+    if (!$(".ksk-profile-photo-hint", cover)) {
+      const hint = document.createElement("span");
+
+      hint.className = "ksk-profile-photo-hint";
+      hint.textContent = "📷";
+
+      cover.appendChild(hint);
+    }
+
+
+    /* AVATAR */
+
+    const avatarBox = $(".profile-avatar", card);
+    const avatarInner = $(".profile-avatar .avatar", card);
+
+    const avatarSource = user.avatarMediaId || user.avatar || "";
+    const avatarURL = await getImageSource(avatarSource);
+
+    if (!card.isConnected) return;
+
+    if (avatarInner && avatarURL) {
+
+      const currentImage = $("img", avatarInner);
+
+      if (currentImage?.src !== avatarURL) {
+
+        avatarInner.innerHTML = "";
+
+        const img = document.createElement("img");
+
+        img.src = avatarURL;
+        img.alt = "Profile Avatar";
+
+        avatarInner.appendChild(img);
+      }
+    }
+
+    if (avatarBox) {
+
+      avatarBox.setAttribute("role", "button");
+      avatarBox.setAttribute("tabindex", "0");
+
+      avatarBox.setAttribute(
+        "aria-label",
+        t("प्रोफाइल फोटो परिवर्तन गर्नुहोस्", "Change profile photo")
+      );
+
+      if (!$(".ksk-profile-avatar-hint", avatarBox)) {
+
+        const hint = document.createElement("span");
+
+        hint.className = "ksk-profile-avatar-hint";
+        hint.textContent = "📷";
+
+        avatarBox.appendChild(hint);
+      }
+    }
+
+    await updateFooterAvatar();
+  }
+
+
+  /* =====================================================
+     HIDDEN GALLERY INPUT
+  ===================================================== */
+
+  function openGallery(type) {
+
+    if (busy) return;
+
+    const input = document.createElement("input");
+
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp";
+    input.className = "ksk-profile-upload-input";
+    input.setAttribute("aria-label", "Choose photo");
+
+    input.addEventListener("change", () => {
+
+      const file = input.files?.[0];
+
+      input.remove();
+
+      if (!file) return;
+
+      if (!String(file.type).startsWith("image/")) {
+
+        toast(
+          t("कृपया फोटो फाइल छान्नुहोस्।", "Please select an image."),
+          "warning"
+        );
+
+        return;
+      }
+
+      if (file.size > 12 * 1024 * 1024) {
+
+        toast(
+          t("फोटो १२ MB भन्दा सानो हुनुपर्छ।", "Image must be smaller than 12 MB."),
+          "warning"
+        );
+
+        return;
+      }
+
+      openCropEditor(file, type);
+    }, { once: true });
+
+    document.body.appendChild(input);
+
+    // Direct user interaction opens the device gallery.
+    input.click();
+  }
+
+
+  /* =====================================================
+     IMAGE CROP ENGINE
+  ===================================================== */
+
+  function loadImage(file) {
+
+    return new Promise((resolve, reject) => {
+
+      const url = URL.createObjectURL(file);
+
+      const image = new Image();
+
+      image.onload = () => resolve({ image, url });
+
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("फोटो खोल्न सकिएन।"));
+      };
+
+      image.src = url;
+    });
+  }
+
+
+  function openCropEditor(file, type) {
+
+    const isAvatar = type === "avatar";
+
+    const aspect = isAvatar ? 1 : 3;
+
+    const outputWidth = isAvatar ? 900 : 1500;
+    const outputHeight = Math.round(outputWidth / aspect);
+
+    const title = isAvatar
+      ? t("प्रोफाइल फोटो मिलाउनुहोस्", "Crop Profile Photo")
+      : t("Cover फोटो मिलाउनुहोस्", "Crop Cover Photo");
+
+    const modal = openModal({
+
+      title,
+
+      content: `
+
+        <div class="ksk-crop-layout">
+
+          <div class="ksk-crop-stage">
+            <canvas id="kskCropCanvas"></canvas>
           </div>
 
-          <h2>${escapeHTML(getDisplayName(user))}</h2>
+          <div class="ksk-crop-controls">
 
-          ${user.bio
-            ? `<p>${escapeHTML(user.bio)}</p>`
-            : ""
-          }
+            <div class="ksk-crop-control">
+              <label for="kskCropZoom">
+                ${t("Zoom", "Zoom")}
+              </label>
+              <input
+                id="kskCropZoom"
+                type="range"
+                min="1"
+                max="3"
+                step="0.01"
+                value="1">
+            </div>
 
-          ${user.location
-            ? `<p>📍 ${escapeHTML(user.location)}</p>`
-            : ""
-          }
+            <div class="ksk-crop-control">
+              <label for="kskCropX">
+                ${t("दायाँ / बायाँ", "Horizontal position")}
+              </label>
+              <input
+                id="kskCropX"
+                type="range"
+                min="-100"
+                max="100"
+                value="0">
+            </div>
 
-          <div class="profile-stats">
-            ${renderStat(counts.followers, t("फलोअर्स", "Followers"))}
-            ${renderStat(counts.following, t("फलोइङ", "Following"))}
-            ${renderStat(counts.friends, t("साथीहरू", "Friends"))}
-          </div>
-
-          <div class="profile-post-count">
-            ${posts.length} ${t("पोस्ट", "Posts")}
-          </div>
-
-          <div class="profile-main-actions">
-            <button
-              class="profile-action-btn primary"
-              type="button"
-              data-edit-profile>
-              <span>✏️</span>
-              <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
-            </button>
-
-            <button
-              class="profile-action-btn"
-              type="button"
-              data-open-settings>
-              <span>⚙️</span>
-              <span>${t("सेटिङ", "Settings")}</span>
-            </button>
-          </div>
-
-        </section>
-
-        <section class="card profile-tools-card">
-
-          <div class="profile-tools-heading">
-            <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
-            <p>${t(
-              "आफ्नो प्रोफाइल र सामग्री व्यवस्थापन गर्नुहोस्।",
-              "Manage your profile and saved content."
-            )}</p>
-          </div>
-
-          <div class="profile-tool-grid" data-profile-extras>
-
-            <button
-              type="button"
-              data-copy-profile-link>
-              🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
-            </button>
-
-            <button
-              type="button"
-              data-page="saved">
-              🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
-            </button>
+            <div class="ksk-crop-control">
+              <label for="kskCropY">
+                ${t("माथि / तल", "Vertical position")}
+              </label>
+              <input
+                id="kskCropY"
+                type="range"
+                min="-100"
+                max="100"
+                value="0">
+            </div>
 
           </div>
 
-          <p class="profile-tool-note">
+          <p class="ksk-crop-note">
             ${t(
-              "QR, उपलब्धि र Insights का विकल्पहरू यही सेक्सनमा देखिन्छन्।",
-              "QR, achievements and insights appear in this section."
+              "फोटोको सही भाग मिलाउन Zoom र Position स्लाइडर चलाउनुहोस्।",
+              "Adjust zoom and position to select the best part of your photo."
             )}
           </p>
 
-        </section>
-
-        <div class="profile-tabs" role="tablist">
-
-          <button
-            class="profile-tab${activeTab === "posts" ? " is-active" : ""}"
-            type="button"
-            role="tab"
-            aria-selected="${activeTab === "posts"}"
-            data-profile-tab="posts">
-            ${t("पोस्टहरू", "Posts")}
-          </button>
-
-          <button
-            class="profile-tab${activeTab === "photos" ? " is-active" : ""}"
-            type="button"
-            role="tab"
-            aria-selected="${activeTab === "photos"}"
-            data-profile-tab="photos">
-            ${t("फोटोहरू", "Photos")}
-          </button>
-
-          <button
-            class="profile-tab${activeTab === "about" ? " is-active" : ""}"
-            type="button"
-            role="tab"
-            aria-selected="${activeTab === "about"}"
-            data-profile-tab="about">
-            ${t("परिचय", "About")}
-          </button>
-
         </div>
 
-        <div
-          class="profile-tab-panel${activeTab === "posts" ? "" : " hidden"}"
-          data-profile-panel="posts"
-          role="tabpanel">
+      `,
 
-          <div class="profile-posts">
-            ${renderPostList(posts, options)}
-          </div>
+      footer: `
 
-        </div>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-modal-close>
+          ${t("रद्द", "Cancel")}
+        </button>
 
-        <div
-          class="profile-tab-panel${activeTab === "photos" ? "" : " hidden"}"
-          data-profile-panel="photos"
-          role="tabpanel">
+        <button
+          type="button"
+          class="btn btn-primary"
+          id="kskCropSave">
+          ${t("फोटो सुरक्षित गर्नुहोस्", "Save Photo")}
+        </button>
 
-          <div class="profile-posts">
-            ${photos.length
-              ? renderPostList(photos, options)
-              : `<div class="empty-state">${t(
-                  "अहिलेसम्म कुनै फोटो पोस्ट गरिएको छैन।",
-                  "No photos shared yet."
-                )}</div>`
-            }
-          </div>
+      `
+    });
 
-        </div>
+    if (!modal) return;
 
-        <div
-          class="profile-tab-panel${activeTab === "about" ? "" : " hidden"}"
-          data-profile-panel="about"
-          role="tabpanel">
+    const canvas = $("#kskCropCanvas", modal.element);
+    const context = canvas?.getContext("2d");
 
-          <div class="card profile-about-card">
-            ${renderAbout(user)}
-          </div>
+    const zoomInput = $("#kskCropZoom", modal.element);
+    const xInput = $("#kskCropX", modal.element);
+    const yInput = $("#kskCropY", modal.element);
+    const saveButton = $("#kskCropSave", modal.element);
 
-        </div>
-
-      </section>
-    `;
-  }
-
-  /* =====================================================
-     TABS AND CLICK HANDLERS
-  ===================================================== */
-
-  function switchTab(button) {
-    const section = button.closest("[data-profile-section]");
-    const selected = button.dataset.profileTab;
-
-    if (!section || !VALID_TABS.has(selected)) {
-      return false;
+    if (!canvas || !context) {
+      closeModal();
+      toast(t("फोटो तयार गर्न सकिएन।", "Could not prepare image."), "error");
+      return;
     }
 
-    section.querySelectorAll("[data-profile-tab]").forEach(tab => {
-      const active = tab === button;
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
 
-      tab.classList.toggle("is-active", active);
-      tab.setAttribute("aria-selected", active ? "true" : "false");
-    });
+    loadImage(file).then(({ image, url }) => {
 
-    section.querySelectorAll("[data-profile-panel]").forEach(panel => {
-      panel.classList.toggle(
-        "hidden",
-        panel.dataset.profilePanel !== selected
+      activeCropURL = url;
+
+      if (!modal.element.isConnected) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      function drawCrop() {
+
+        const imageWidth = image.naturalWidth;
+        const imageHeight = image.naturalHeight;
+
+        const baseWidth = Math.min(
+          imageWidth,
+          imageHeight * aspect
+        );
+
+        const baseHeight = baseWidth / aspect;
+
+        const zoom = Number(zoomInput.value) || 1;
+
+        const cropWidth = baseWidth / zoom;
+        const cropHeight = baseHeight / zoom;
+
+        const maxX = Math.max(0, imageWidth - cropWidth);
+        const maxY = Math.max(0, imageHeight - cropHeight);
+
+        const xPosition = Number(xInput.value) / 100;
+        const yPosition = Number(yInput.value) / 100;
+
+        const sourceX =
+          maxX / 2 + (maxX / 2) * xPosition;
+
+        const sourceY =
+          maxY / 2 + (maxY / 2) * yPosition;
+
+        context.clearRect(0, 0, outputWidth, outputHeight);
+
+        context.drawImage(
+          image,
+          sourceX,
+          sourceY,
+          cropWidth,
+          cropHeight,
+          0,
+          0,
+          outputWidth,
+          outputHeight
+        );
+      }
+
+      drawCrop();
+
+      [zoomInput, xInput, yInput].forEach(input => {
+        input.addEventListener("input", drawCrop);
+      });
+
+      saveButton?.addEventListener("click", async () => {
+
+        if (busy) return;
+
+        busy = true;
+
+        saveButton.disabled = true;
+
+        try {
+
+          const blob = await new Promise((resolve, reject) => {
+
+            canvas.toBlob(
+              result => {
+                if (result) resolve(result);
+                else reject(new Error("फोटो Crop गर्न सकिएन।"));
+              },
+              "image/jpeg",
+              0.9
+            );
+          });
+
+          const croppedFile = new File(
+            [blob],
+            isAvatar ? "profile-avatar.jpg" : "profile-cover.jpg",
+            { type: "image/jpeg" }
+          );
+
+          closeModal();
+
+          busy = false;
+          await saveProfilePhoto(croppedFile, type);
+
+        } catch (error) {
+
+          console.error("KSK Crop failed:", error);
+
+          toast(
+            error.message || t("फोटो तयार गर्न सकिएन।", "Could not prepare photo."),
+            "error"
+          );
+
+        } finally {
+
+          busy = false;
+
+          if (activeCropURL) {
+            URL.revokeObjectURL(activeCropURL);
+            activeCropURL = "";
+          }
+        }
+
+      });
+
+    }).catch(error => {
+
+      console.error("KSK Crop image loading failed:", error);
+
+      closeModal();
+
+      toast(
+        t("फोटो खोल्न सकिएन।", "Could not open photo."),
+        "error"
       );
     });
-
-    return true;
   }
 
+
+  /* =====================================================
+     SAVE AVATAR / COVER TO SUPABASE
+  ===================================================== */
+
+  async function saveProfilePhoto(file, type) {
+
+    if (busy) return;
+
+    if (!["avatar", "cover"].includes(type)) {
+      toast(t("फोटोको प्रकार मान्य छैन।", "Invalid photo type."), "error");
+      return;
+    }
+
+    if (!(file instanceof Blob) || !file.type.startsWith("image/")) {
+      toast(t("कृपया मान्य फोटो छान्नुहोस्।", "Please choose a valid image."), "error");
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      toast(t("फोटो ८ MB भन्दा सानो हुनुपर्छ।", "The image must be smaller than 8 MB."), "error");
+      return;
+    }
+
+    busy = true;
+
+    try {
+
+      const auth = global.KSKSupabaseAuth;
+      const profileAPI = global.KSKSupabaseProfile;
+
+      if (!auth || !profileAPI) {
+        throw new Error(t(
+          "Supabase Profile सेवा लोड भएको छैन।",
+          "Supabase Profile service is not loaded."
+        ));
+      }
+
+      await auth.initialize();
+
+      if (!auth.isAuthenticated()) {
+        throw new Error(t(
+          "फोटो परिवर्तन गर्न पहिले लगइन गर्नुहोस्।",
+          "Please sign in before changing your photo."
+        ));
+      }
+
+      const client = auth.getClient();
+      const user = auth.getUser();
+
+      if (!client || !user?.id) {
+        throw new Error(t(
+          "प्रयोगकर्ता विवरण प्राप्त भएन।",
+          "Could not get the signed-in user."
+        ));
+      }
+
+      const extension = file.type === "image/png" ? "png" :
+        file.type === "image/webp" ? "webp" : "jpg";
+
+      const path = user.id + "/" + type + "-" +
+        Date.now() + "-" +
+        Math.random().toString(36).slice(2, 8) +
+        "." + extension;
+
+      const { error: uploadError } = await client.storage
+        .from("profile-media")
+        .upload(path, file, {
+          cacheControl: "3600",
+          contentType: file.type || "image/jpeg",
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicData } = client.storage
+        .from("profile-media")
+        .getPublicUrl(path);
+
+      const publicURL = publicData?.publicUrl;
+
+      if (!publicURL) {
+        throw new Error(t(
+          "फोटोको URL प्राप्त भएन।",
+          "Could not create the photo URL."
+        ));
+      }
+
+      const updated = type === "avatar"
+        ? await profileAPI.updateMyProfile({ avatar: publicURL })
+        : await profileAPI.updateMyProfile({ cover: publicURL });
+
+      if (!updated) {
+        throw new Error(t(
+          "प्रोफाइलमा फोटोको URL सुरक्षित भएन।",
+          "The photo URL was not saved to your profile."
+        ));
+      }
+
+      global.KSKData?.saveProfile?.(
+        type === "avatar"
+          ? { avatar: publicURL, avatarMediaId: "" }
+          : { cover: publicURL, coverMediaId: "" }
+      );
+
+      objectURLs.clear();
+
+      await updateProfileDisplay();
+
+      global.KSKApp?.refreshCurrentPage?.();
+
+      await updateProfileDisplay();
+
+      toast(
+        type === "avatar"
+          ? t("प्रोफाइल फोटो परिवर्तन भयो।", "Profile photo updated.")
+          : t("Cover फोटो परिवर्तन भयो।", "Cover photo updated."),
+        "success"
+      );
+
+    } catch (error) {
+
+      console.error("KSK Profile Photo Save Failed:", error);
+
+      toast(
+        error?.message ||
+        t("फोटो सुरक्षित गर्न सकिएन।", "Could not save photo."),
+        "error"
+      );
+
+    } finally {
+      busy = false;
+    }
+  }
+
+
+  /* =====================================================
+     PROFILE INFORMATION EDITOR
+  ===================================================== */
+
+  function openEditor() {
+
+    if (busy) return;
+
+    const user = profile();
+
+    const modal = openModal({
+
+      title: t("प्रोफाइल सम्पादन", "Edit Profile"),
+
+      content: `
+
+        <form id="kskProfileMediaForm" class="ksk-profile-editor">
+
+          <div class="form-group">
+
+            <label class="form-label" for="kskPMName">
+              ${t("नाम", "Name")}
+            </label>
+
+            <input
+              id="kskPMName"
+              class="form-input"
+              maxlength="60"
+              value="${escapeHTML(user.name || "")}">
+
+          </div>
+
+          <div class="form-group">
+
+            <label class="form-label" for="kskPMBio">
+              ${t("मेरो परिचय", "About me")}
+            </label>
+
+            <textarea
+              id="kskPMBio"
+              class="form-textarea"
+              maxlength="240"
+              rows="3">${escapeHTML(user.bio || "")}</textarea>
+
+          </div>
+
+          <div class="form-group">
+
+            <label class="form-label" for="kskPMLocation">
+              ${t("ठेगाना", "Location")}
+            </label>
+
+            <input
+              id="kskPMLocation"
+              class="form-input"
+              maxlength="100"
+              value="${escapeHTML(user.location || "")}">
+
+          </div>
+
+          <p class="ksk-crop-note">
+            ${t(
+              "Avatar वा Cover परिवर्तन गर्न प्रोफाइल पेजमा फोटोमा सिधै ट्याप गर्नुहोस्।",
+              "Tap your Avatar or Cover Photo directly on your profile page to change it."
+            )}
+          </p>
+
+        </form>
+
+      `,
+
+      footer: `
+
+        <button
+          class="btn btn-secondary"
+          type="button"
+          data-modal-close>
+          ${t("रद्द", "Cancel")}
+        </button>
+
+        <button
+          class="btn btn-primary"
+          type="submit"
+          form="kskProfileMediaForm"
+          id="kskPMSave">
+          ${t("सुरक्षित गर्नुहोस्", "Save Profile")}
+        </button>
+
+      `
+    });
+
+    if (!modal) return;
+
+    const form = $("#kskProfileMediaForm", modal.element);
+
+    form?.addEventListener("submit", async event => {
+
+      event.preventDefault();
+
+      if (busy) return;
+
+      busy = true;
+
+      const saveButton = $("#kskPMSave", modal.element);
+
+      if (saveButton) saveButton.disabled = true;
+
+      try {
+
+        const auth = global.KSKSupabaseAuth;
+        const profileAPI = global.KSKSupabaseProfile;
+
+        if (!auth || !profileAPI) {
+          throw new Error(t(
+            "Supabase Profile सेवा लोड भएको छैन।",
+            "Supabase Profile service is not loaded."
+          ));
+        }
+
+        await auth.initialize();
+
+        if (!auth.isAuthenticated()) {
+          throw new Error(t(
+            "प्रोफाइल सम्पादन गर्न पहिले लगइन गर्नुहोस्।",
+            "Please sign in before editing your profile."
+          ));
+        }
+
+        const payload = {
+
+          name: $("#kskPMName", modal.element)?.value.trim() || "",
+
+          bio: $("#kskPMBio", modal.element)?.value.trim() || "",
+
+          location: $("#kskPMLocation", modal.element)?.value.trim() || ""
+
+        };
+
+        const updated = await profileAPI.updateMyProfile(payload);
+
+        if (!updated) {
+          throw new Error(t(
+            "प्रोफाइल सुरक्षित भएन।",
+            "Profile could not be saved."
+          ));
+        }
+
+        global.KSKData?.saveProfile?.(payload);
+
+        closeModal();
+
+        global.KSKApp?.refreshCurrentPage?.();
+
+        await updateProfileDisplay();
+
+        toast(
+          t(
+            "प्रोफाइल सफलतापूर्वक अपडेट भयो।",
+            "Profile updated successfully."
+          ),
+          "success"
+        );
+
+      } catch (error) {
+
+        console.error("KSK Profile Save Failed:", error);
+
+        toast(
+          error?.message ||
+          t(
+            "प्रोफाइल सुरक्षित भएन। फेरि प्रयास गर्नुहोस्।",
+            "Profile could not be saved."
+          ),
+          "error"
+        );
+
+      } finally {
+
+        busy = false;
+
+        if (saveButton) saveButton.disabled = false;
+      }
+    });
+  }
+
+
+  /* =====================================================
+     CLICK INTERCEPTION
+  ===================================================== */
+
   function handleClick(event) {
+
     const target = event.target;
 
     if (!target?.closest) return;
 
-    const tab = target.closest("[data-profile-tab]");
 
-    if (tab) {
-      switchTab(tab);
+    /* AVATAR GALLERY */
+
+    const avatar = target.closest(
+      ".profile-section .profile-card .profile-avatar"
+    );
+
+    if (avatar) {
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      openGallery("avatar");
+
       return;
     }
 
-    const copyButton = target.closest("[data-copy-profile-link]");
 
-    if (copyButton) {
+    /* COVER GALLERY */
+
+    const cover = target.closest(
+      ".profile-section .profile-card .ksk-profile-cover"
+    );
+
+    if (cover) {
+
       event.preventDefault();
-      copyProfileLink(copyButton);
+      event.stopImmediatePropagation();
+
+      openGallery("cover");
+
+      return;
+    }
+
+
+    /* EDIT PROFILE */
+
+    const editButton = target.closest("[data-edit-profile]");
+
+    if (editButton) {
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      openEditor();
     }
   }
 
-  document.addEventListener("click", handleClick);
+
+  /* =====================================================
+     KEYBOARD ACCESSIBILITY
+  ===================================================== */
+
+  function handleKeydown(event) {
+
+    if (
+      event.key !== "Enter" &&
+      event.key !== " "
+    ) {
+      return;
+    }
+
+    const target = event.target;
+
+    if (!target?.matches) return;
+
+    if (target.matches(".ksk-profile-cover")) {
+
+      event.preventDefault();
+
+      openGallery("cover");
+
+      return;
+    }
+
+    if (
+      target.matches(
+        ".profile-section .profile-card .profile-avatar"
+      )
+    ) {
+
+      event.preventDefault();
+
+      openGallery("avatar");
+    }
+  }
+
+
+  /* =====================================================
+     REFRESH
+  ===================================================== */
+
+  function refresh() {
+    updateProfileDisplay();
+  }
+
+
+  /* =====================================================
+     INITIALIZE
+  ===================================================== */
+
+  function initialize() {
+
+    if (initialized) return;
+
+    initialized = true;
+
+    injectStyles();
+
+    document.addEventListener(
+      "click",
+      handleClick,
+      true
+    );
+
+    document.addEventListener(
+      "keydown",
+      handleKeydown,
+      true
+    );
+
+    global.addEventListener(
+      "ksk:navigate",
+      updateProfileDisplay
+    );
+
+    global.addEventListener(
+      "ksk:data-change",
+      event => {
+
+        if (event.detail?.collection === "profile") {
+          updateProfileDisplay();
+        }
+      }
+    );
+
+    updateProfileDisplay();
+
+    console.info("KSK Profile Media UI initialized.");
+  }
+
 
   /* =====================================================
      PUBLIC API
   ===================================================== */
 
-  global.KSKProfilePage = Object.freeze({
-    render,
-    getProfile,
-    getProfilePosts,
-    getSocialCounts,
-    getProfileLink,
-    isPhotoPost,
+  global.KSKProfileMediaUI = Object.freeze({
 
-    refreshFromSupabase() {
-      remoteLoadPromise = null;
-      return loadSupabaseProfile();
-    }
+    initialize,
+
+    refresh,
+
+    openEditor,
+
+    openGallery
+
   });
+
+
+  /* =====================================================
+     AUTO START
+  ===================================================== */
+
+  if (document.readyState === "loading") {
+
+    document.addEventListener(
+      "DOMContentLoaded",
+      initialize,
+      { once: true }
+    );
+
+  } else {
+
+    initialize();
+  }
 
 })(window);
