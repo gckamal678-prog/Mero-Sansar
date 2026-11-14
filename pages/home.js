@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -52,7 +51,6 @@
   /* SUPABASE-ONLY POSTS */
 
   function getPosts() {
-    // Feed मा Supabase बाट आएका पोस्ट मात्र देखाउने।
     return Array.isArray(cloudFeedPosts)
       ? cloudFeedPosts
       : [];
@@ -141,6 +139,81 @@
     }
   }
 
+  /* LOAD LIVE SHARE COUNTS FROM SUPABASE */
+
+  async function hydratePostShareCounts(posts) {
+    if (!Array.isArray(posts) || posts.length === 0) {
+      return true;
+    }
+
+    const postIds = [
+      ...new Set(
+        posts
+          .map(post => String(post?.id || "").trim())
+          .filter(Boolean)
+      )
+    ];
+
+    posts.forEach(post => {
+      post.shareCount = 0;
+    });
+
+    if (!postIds.length) return true;
+
+    try {
+      const auth = global.KSKSupabaseAuth;
+
+      if (typeof auth?.initialize === "function") {
+        await auth.initialize();
+      }
+
+      const client = auth?.getClient?.();
+
+      if (!client) {
+        throw new Error("Supabase client उपलब्ध छैन।");
+      }
+
+      const counts = new Map();
+      const pageSize = 1000;
+      let offset = 0;
+
+      while (true) {
+        const { data, error } = await client
+          .from("post_shares")
+          .select("post_id")
+          .in("post_id", postIds)
+          .range(offset, offset + pageSize - 1);
+
+        if (error) throw error;
+
+        const rows = Array.isArray(data) ? data : [];
+
+        rows.forEach(row => {
+          const id = String(row?.post_id || "");
+          if (!id) return;
+
+          counts.set(id, (counts.get(id) || 0) + 1);
+        });
+
+        if (rows.length < pageSize) break;
+
+        offset += pageSize;
+      }
+
+      posts.forEach(post => {
+        post.shareCount = counts.get(String(post.id)) || 0;
+      });
+
+      return true;
+
+    } catch (error) {
+      console.error("Share count hydration failed:", error);
+      return false;
+    }
+  }
+
+  /* LOAD CLOUD FEED */
+
   async function loadCloudFeed() {
     const api = global.KSKSupabasePosts;
 
@@ -169,6 +242,9 @@
       // Feed देखाउनुअघि Database बाट पुराना Reactions ल्याउने।
       await hydratePostReactions(result.data);
 
+      // Feed देखाउनुअघि Database बाट Share Counts ल्याउने।
+      await hydratePostShareCounts(result.data);
+
       // Request पुरानो भइसकेको छ भने Cache परिवर्तन नगर्ने।
       if (requestId !== cloudFeedRequest) return false;
 
@@ -196,6 +272,24 @@
       }
     }
   }
+
+  /* LIVE SHARE COUNT CHANGE LISTENER */
+
+  global.addEventListener("ksk:post-share-change", function (event) {
+    const detail = event?.detail || {};
+    const postId = String(detail.postId || "");
+    const shareCount = Number(detail.shareCount);
+
+    if (!postId || !Number.isFinite(shareCount)) return;
+
+    const post = cloudFeedPosts.find(
+      item => String(item?.id) === postId
+    );
+
+    if (post) {
+      post.shareCount = shareCount;
+    }
+  });
 
   function getStories() {
     const stories = global.KSKData?.getStories?.();
@@ -1837,7 +1931,6 @@
   /* SUPABASE POSTS CHANGE LISTENER */
 
   function refreshCloudFeed() {
-    // पुरानो Request को परिणाम अस्वीकार गरी Cloud बाट फेरि पढ्ने।
     cloudFeedRequest += 1;
     cloudFeedLoading = false;
     cloudFeedPosts = null;
