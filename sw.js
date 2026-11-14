@@ -1,13 +1,18 @@
 
 "use strict";
 
-/* =========================================================
-   MERO SANSAR — SERVICE WORKER
-   Version: v68
-========================================================= */
+/*
+ * MERO SANSAR — AUTOMATIC PWA UPDATE
+ *
+ * No manual version numbers.
+ * Network-first for online updates.
+ * Cache fallback for offline use.
+ * Staging cache protects the previous app shell.
+ */
 
-const CACHE_NAME = "hamro-sansar-v68";
 const CACHE_PREFIX = "hamro-sansar-";
+const CACHE_NAME = "hamro-sansar-shell";
+const STAGING_CACHE = "hamro-sansar-staging";
 
 const APP_FILES = [
   "./index.html",
@@ -41,6 +46,8 @@ const APP_FILES = [
 
   "./core/settings-ui.js",
   "./core/media-ui.js",
+  "./core/supabase-auth.js",
+  "./core/supabase-profile.js",
   "./core/profile-media.js",
   "./core/avatar-ui.js",
 
@@ -68,11 +75,8 @@ const APP_FILES = [
   "./core/pwa-install.js",
   "./core/network-status.js",
   "./core/pwa-update.js",
-
-  /* Notification MP3 engine */
   "./core/tone.js",
 
-  /* Notification sounds */
   "./sounds/Eagle.mp3",
   "./sounds/Oh No.mp3",
   "./sounds/Water Drop.mp3",
@@ -82,9 +86,9 @@ const APP_FILES = [
   "./core/design-system.css"
 ];
 
-/* =========================================================
+/* =====================================================
    URL HELPERS
-========================================================= */
+===================================================== */
 
 function getAppURL(path) {
   return new URL(path, self.registration.scope);
@@ -99,9 +103,9 @@ function isAppURL(url) {
   );
 }
 
-/* =========================================================
+/* =====================================================
    ASSET DISCOVERY
-========================================================= */
+===================================================== */
 
 function discoverAssets(html) {
   const discovered = new Set();
@@ -122,10 +126,7 @@ function discoverAssets(html) {
     }
 
     try {
-      const url = new URL(
-        value,
-        self.registration.scope
-      );
+      const url = new URL(value, self.registration.scope);
 
       if (
         isAppURL(url) &&
@@ -133,29 +134,26 @@ function discoverAssets(html) {
       ) {
         discovered.add(url.href);
       }
-
     } catch (error) {
-      console.warn(
-        "Invalid asset reference:",
-        value,
-        error
-      );
+      console.warn("Invalid asset:", value, error);
     }
   }
 
   return Array.from(discovered);
 }
 
-/* =========================================================
+/* =====================================================
    FETCH AND CACHE
-========================================================= */
+===================================================== */
 
 async function fetchAndCache(cache, url) {
-  const response = await fetch(new Request(url, {
-    method: "GET",
-    cache: "reload",
-    credentials: "same-origin"
-  }));
+  const response = await fetch(
+    new Request(url, {
+      method: "GET",
+      cache: "reload",
+      credentials: "same-origin"
+    })
+  );
 
   if (
     !response.ok ||
@@ -163,11 +161,10 @@ async function fetchAndCache(cache, url) {
     response.status !== 200
   ) {
     throw new Error(
-      "Required asset could not be cached: " +
+      "Required asset failed: " +
       url +
-      " (HTTP " +
-      response.status +
-      ")"
+      " HTTP " +
+      response.status
     );
   }
 
@@ -176,31 +173,28 @@ async function fetchAndCache(cache, url) {
   return response;
 }
 
-/* =========================================================
+/* =====================================================
    INSTALL
-========================================================= */
+===================================================== */
 
 self.addEventListener("install", event => {
-
   event.waitUntil((async () => {
+    await caches.delete(STAGING_CACHE);
 
-    const cache = await caches.open(CACHE_NAME);
+    const staging = await caches.open(STAGING_CACHE);
 
     try {
-
       const indexURL = getAppURL("./index.html").href;
 
       const indexResponse = await fetchAndCache(
-        cache,
+        staging,
         indexURL
       );
 
       const html = await indexResponse.clone().text();
 
       const allFiles = new Set([
-        ...APP_FILES.map(path =>
-          getAppURL(path).href
-        ),
+        ...APP_FILES.map(path => getAppURL(path).href),
         ...discoverAssets(html)
       ]);
 
@@ -209,137 +203,120 @@ self.addEventListener("install", event => {
       const failures = (
         await Promise.all(
           Array.from(allFiles).map(async url => {
-
             try {
-
-              await fetchAndCache(cache, url);
-
+              await fetchAndCache(staging, url);
               return null;
-
             } catch (error) {
-
-              return {
-                url,
-                reason: error
-              };
-
+              return { url, reason: error };
             }
-
           })
         )
       ).filter(Boolean);
 
       if (failures.length) {
-
-        console.error(
-          "Incomplete app shell:",
-          failures
-        );
+        console.error("Incomplete app shell:", failures);
 
         throw new Error(
-          "PWA installation cancelled because " +
+          "Installation cancelled: " +
           failures.length +
-          " asset(s) could not be cached."
+          " required file(s) failed."
         );
-
       }
 
       console.info(
-        "Mero Sansar v68 cached:",
+        "Mero Sansar app shell prepared:",
         allFiles.size + 1,
         "files"
       );
 
     } catch (error) {
-
-      await caches.delete(CACHE_NAME);
-
+      await caches.delete(STAGING_CACHE);
       throw error;
-
     }
-
   })());
-
 });
 
-/* =========================================================
+/* =====================================================
    ACTIVATE
-========================================================= */
+===================================================== */
 
 self.addEventListener("activate", event => {
-
   event.waitUntil((async () => {
+    const staging = await caches.open(STAGING_CACHE);
+    const finalCache = await caches.open(CACHE_NAME);
+
+    const stagedRequests = await staging.keys();
+
+    if (!stagedRequests.length) {
+      throw new Error(
+        "Staging cache is empty. Previous cache preserved."
+      );
+    }
+
+    /*
+     * Promote successfully downloaded files.
+     * Old cache is not deleted until promotion finishes.
+     */
+
+    for (const request of stagedRequests) {
+      const response = await staging.match(request);
+
+      if (response) {
+        await finalCache.put(request, response);
+      }
+    }
+
+    await caches.delete(STAGING_CACHE);
 
     const cacheNames = await caches.keys();
 
     await Promise.all(
       cacheNames.map(async name => {
-
         if (
           name.startsWith(CACHE_PREFIX) &&
           name !== CACHE_NAME
         ) {
-
           await caches.delete(name);
 
-          console.info(
-            "Old cache removed:",
-            name
-          );
-
+          console.info("Old cache removed:", name);
         }
-
       })
     );
 
     await self.clients.claim();
 
-    console.info(
-      "Mero Sansar Service Worker v68 activated."
-    );
+    console.info("Mero Sansar Service Worker activated.");
 
   })());
-
 });
 
-/* =========================================================
-   NAVIGATION REQUEST
-========================================================= */
+/* =====================================================
+   NAVIGATION — NETWORK FIRST
+===================================================== */
 
 async function handleNavigationRequest(request, cache) {
-
   try {
-
-    const response = await fetch(request);
+    const response = await fetch(
+      new Request(request, {
+        cache: "no-cache"
+      })
+    );
 
     if (
       response.ok &&
       response.type === "basic" &&
       response.status === 200
     ) {
-
       try {
-
-        await cache.put(
-          request,
-          response.clone()
-        );
-
+        await cache.put(request, response.clone());
       } catch (error) {
-
-        console.warn(
-          "Navigation cache update failed:",
-          error
-        );
-
+        console.warn("Navigation cache update failed:", error);
       }
-
     }
 
     return response;
 
   } catch (error) {
-
     const exactMatch = await cache.match(request);
 
     if (exactMatch) return exactMatch;
@@ -351,65 +328,55 @@ async function handleNavigationRequest(request, cache) {
     if (indexMatch) return indexMatch;
 
     return offlineResponse();
-
   }
-
 }
 
-/* =========================================================
-   ASSET REQUEST
-========================================================= */
+/* =====================================================
+   ASSETS — NETWORK FIRST
+===================================================== */
 
 async function handleAssetRequest(request, cache) {
-
-  const cached = await cache.match(request);
-
-  if (cached) return cached;
-
   try {
+    /*
+     * Always check the network first.
+     * This allows updated JS and CSS files to load
+     * without manually changing a cache version.
+     */
 
-    const response = await fetch(request);
+    const response = await fetch(
+      new Request(request, {
+        cache: "no-cache"
+      })
+    );
 
     if (
       response.ok &&
       response.type === "basic" &&
       response.status === 200
     ) {
-
       try {
-
-        await cache.put(
-          request,
-          response.clone()
-        );
-
+        await cache.put(request, response.clone());
       } catch (error) {
-
-        console.warn(
-          "Asset cache update failed:",
-          error
-        );
-
+        console.warn("Asset cache update failed:", error);
       }
-
     }
 
     return response;
 
   } catch (error) {
+    const cached = await cache.match(request);
+
+    if (cached) return cached;
 
     return offlineResponse();
-
   }
-
 }
 
-/* =========================================================
+/* =====================================================
    OFFLINE RESPONSE
-========================================================= */
+===================================================== */
 
 function offlineResponse() {
-
   return new Response(
     "यो सामग्री अहिले उपलब्ध छैन। इन्टरनेट जडान जाँच गर्नुहोस्।",
     {
@@ -421,15 +388,13 @@ function offlineResponse() {
       }
     }
   );
-
 }
 
-/* =========================================================
+/* =====================================================
    FETCH
-========================================================= */
+===================================================== */
 
 self.addEventListener("fetch", event => {
-
   const request = event.request;
 
   if (request.method !== "GET") return;
@@ -439,43 +404,22 @@ self.addEventListener("fetch", event => {
   if (!isAppURL(url)) return;
 
   event.respondWith((async () => {
-
     const cache = await caches.open(CACHE_NAME);
 
     if (request.mode === "navigate") {
-
-      return handleNavigationRequest(
-        request,
-        cache
-      );
-
+      return handleNavigationRequest(request, cache);
     }
 
-    return handleAssetRequest(
-      request,
-      cache
-    );
-
+    return handleAssetRequest(request, cache);
   })());
-
 });
 
-/* =========================================================
+/* =====================================================
    UPDATE ACTIVATION
-========================================================= */
+===================================================== */
 
 self.addEventListener("message", event => {
-
   if (event.data?.type === "SKIP_WAITING") {
-
-    event.waitUntil(
-      self.skipWaiting()
-    );
-
+    event.waitUntil(self.skipWaiting());
   }
-
 });
-
-/* =========================================================
-   MERO SANSAR v67 — END
-========================================================= */
