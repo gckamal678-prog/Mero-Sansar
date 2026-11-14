@@ -7,15 +7,15 @@
  * Mero-Sansar
  *
  * - Open post options menu
- * - Edit and delete posts
- * - Custom delete confirmation modal
- * - Save and unsave posts
+ * - Edit posts through Supabase
+ * - Delete posts through Supabase
+ * - Save / Unsave: waiting for Supabase saved_posts table
  *
  * LIKE / REACTION:
  * Owned by core/reactions.js
  *
  * REFRESH:
- * Owned by core/data-refresh.js
+ * Owned by core/data-refresh.js and Supabase post events
  * =========================================================
  */
 
@@ -24,19 +24,27 @@
 
   if (global.KSKPostActions) return;
 
-  const DATA = () => global.KSKData || null;
   const MODAL = () => global.KSKModal || null;
   const UTILS = () => global.KSKUtils || null;
+  const POSTS = () => global.KSKSupabasePosts || null;
+  const AUTH = () => global.KSKSupabaseAuth || null;
 
   let initialized = false;
 
   let app = {
     isEnglish: () => false,
+
     translate: (key, fallback = "") =>
       fallback || key,
+
     toast: () => {},
+
     refreshCurrentPage: () => {}
   };
+
+  /* =======================================================
+     UTILITIES
+  ======================================================= */
 
   function escapeHTML(value = "") {
     if (typeof UTILS()?.escapeHTML === "function") {
@@ -87,11 +95,109 @@
   function isReady() {
     if (initialized) return true;
 
-    console.error("KSKPostActions is not initialized.");
+    console.error(
+      "KSKPostActions is not initialized."
+    );
+
     return false;
   }
 
-  /* INITIALIZATION */
+  function getCurrentUserId() {
+    return String(
+      AUTH()?.getUser?.()?.id || ""
+    );
+  }
+
+  function getErrorMessage(result, fallback) {
+    return String(
+      result?.message ||
+      result?.code ||
+      fallback
+    );
+  }
+
+  /* =======================================================
+     SUPABASE POST LOOKUP
+  ======================================================= */
+
+  async function getCloudPost(postId) {
+    const id = String(postId || "").trim();
+
+    if (!id) {
+      throw new Error(
+        isEnglish()
+          ? "Post ID is missing."
+          : "पोस्ट ID उपलब्ध छैन।"
+      );
+    }
+
+    const api = POSTS();
+
+    if (typeof api?.getFeed !== "function") {
+      throw new Error(
+        isEnglish()
+          ? "Supabase Posts service is unavailable."
+          : "Supabase Posts सेवा उपलब्ध छैन।"
+      );
+    }
+
+    const result = await api.getFeed({
+      limit: 100
+    });
+
+    if (!result?.ok || !Array.isArray(result.data)) {
+      throw new Error(
+        getErrorMessage(
+          result,
+          isEnglish()
+            ? "Could not load the post."
+            : "पोस्ट लोड गर्न सकिएन।"
+        )
+      );
+    }
+
+    const post = result.data.find(
+      item => String(item?.id) === id
+    );
+
+    if (!post) {
+      throw new Error(
+        isEnglish()
+          ? "Post could not be found in the live feed."
+          : "लाइभ Feed मा पोस्ट भेटिएन।"
+      );
+    }
+
+    return post;
+  }
+
+  function canManagePost(post) {
+    const userId = getCurrentUserId();
+
+    return Boolean(
+      userId &&
+      post?.authorId &&
+      String(post.authorId) === userId
+    );
+  }
+
+  async function getOwnedCloudPost(postId) {
+    const post = await getCloudPost(postId);
+
+    if (!canManagePost(post)) {
+      throw new Error(
+        isEnglish()
+          ? "You can only edit or delete your own posts."
+          : "तपाईंले आफ्नै पोस्ट मात्र सम्पादन वा मेटाउन सक्नुहुन्छ।"
+      );
+    }
+
+    return post;
+  }
+
+  /* =======================================================
+     INITIALIZATION
+  ======================================================= */
 
   function initialize(options = {}) {
     if (options && typeof options === "object") {
@@ -131,85 +237,50 @@
     return true;
   }
 
-  /* SAVE / UNSAVE */
+  /* =======================================================
+     SAVE / UNSAVE
+     
+     Not connected yet:
+     Supabase saved_posts table and RLS are not available.
+     Do not report fake success.
+  ======================================================= */
 
-  function isPostSaved(id) {
-    const saved = DATA()?.getSavedPosts?.() || [];
-
-    return (
-      Array.isArray(saved) &&
-      saved.some(item => String(item) === String(id))
-    );
+  function isPostSaved() {
+    return false;
   }
 
-  function toggleSave(id) {
+  function toggleSave() {
     if (!isReady()) return false;
-
-    const post = DATA()?.getPost?.(id);
-
-    if (!post) {
-      toast(
-        isEnglish()
-          ? "Post could not be found."
-          : "पोस्ट भेटिएन।",
-        "warning"
-      );
-
-      return false;
-    }
-
-    const wasSaved = isPostSaved(id);
-
-    const success = wasSaved
-      ? DATA()?.unsavePost?.(id)
-      : DATA()?.savePost?.(id);
-
-    if (!success) {
-      toast(
-        isEnglish()
-          ? "Could not update saved post."
-          : "पोस्टको Save अवस्था परिवर्तन गर्न सकिएन।",
-        "error"
-      );
-
-      return false;
-    }
 
     toast(
-      wasSaved
-        ? (
-            isEnglish()
-              ? "Post removed from saved."
-              : "सेभबाट हटाइयो।"
-          )
-        : (
-            isEnglish()
-              ? "Post saved."
-              : "पोस्ट सेभ भयो।"
-          ),
-      "success"
+      isEnglish()
+        ? "Cloud saving is not available yet."
+        : "Cloud Save सुविधा अझै तयार भएको छैन।",
+      "info"
     );
 
-    /*
-     * KSKData emits ksk:data-change.
-     * KSKDataRefresh handles the affected page.
-     */
-
-    return true;
+    return false;
   }
 
-  /* EDIT POST */
+  /* =======================================================
+     EDIT POST
+  ======================================================= */
 
-  function editPost(id) {
+  async function editPost(postId) {
     if (!isReady()) return false;
 
-    const post = DATA()?.getPost?.(id);
+    let post;
 
-    if (!post) {
+    try {
+      post = await getOwnedCloudPost(postId);
+    } catch (error) {
       toast(
-        isEnglish()
-          ? "Post could not be found."
-          : "पोस्ट भेटिएन।",
+        error?.message ||
+          (
+            isEnglish()
+              ? "Could not open this post."
+              : "यो पोस्ट खोल्न सकिएन।"
+          ),
         "warning"
       );
 
@@ -243,7 +314,8 @@
         <button
           type="submit"
           form="kskEditPostForm"
-          class="btn btn-primary">
+          class="btn btn-primary"
+          id="kskEditPostSubmit">
           ${isEnglish()
             ? "Save Changes"
             : "परिवर्तन सुरक्षित गर्नुहोस्"}
@@ -261,12 +333,20 @@
       "#kskEditPostText"
     );
 
+    const submitButton = modal.element.querySelector(
+      "#kskEditPostSubmit"
+    );
+
     textarea?.focus();
 
-    form?.addEventListener("submit", event => {
+    form?.addEventListener("submit", async event => {
       event.preventDefault();
 
-      const text = textarea?.value.trim();
+      if (submitButton?.disabled) return;
+
+      const text = String(
+        textarea?.value || ""
+      ).trim();
 
       if (!text) {
         toast(
@@ -280,42 +360,106 @@
         return;
       }
 
-      const success = DATA()?.updatePost?.(id, {
-        text
-      });
-
-      if (!success) {
+      if (text.length > 10000) {
         toast(
           isEnglish()
-            ? "Could not update post."
-            : "पोस्ट परिवर्तन गर्न सकिएन।",
+            ? "Post is too long."
+            : "पोस्ट धेरै लामो भयो।",
+          "warning"
+        );
+
+        return;
+      }
+
+      const api = POSTS();
+
+      if (typeof api?.updatePost !== "function") {
+        toast(
+          isEnglish()
+            ? "Supabase update service is unavailable."
+            : "Supabase Update सेवा उपलब्ध छैन।",
           "error"
         );
 
         return;
       }
 
-      closeModal();
+      if (submitButton) {
+        submitButton.disabled = true;
+      }
 
-      toast(
-        isEnglish()
-          ? "Post updated."
-          : "पोस्ट परिवर्तन भयो।",
-        "success"
-      );
+      try {
+        const result = await api.updatePost(
+          post.id,
+          { text }
+        );
+
+        if (!result?.ok) {
+          throw new Error(
+            getErrorMessage(
+              result,
+              isEnglish()
+                ? "Could not update post."
+                : "पोस्ट परिवर्तन गर्न सकिएन।"
+            )
+          );
+        }
+
+        closeModal();
+
+        toast(
+          isEnglish()
+            ? "Post updated successfully."
+            : "पोस्ट सफलतापूर्वक अपडेट भयो।",
+          "success"
+        );
+
+        app.refreshCurrentPage();
+
+      } catch (error) {
+        if (submitButton) {
+          submitButton.disabled = false;
+        }
+
+        toast(
+          error?.message ||
+            (
+              isEnglish()
+                ? "Could not update post."
+                : "पोस्ट परिवर्तन गर्न सकिएन।"
+            ),
+          "error"
+        );
+      }
     });
 
     return true;
   }
 
-  /* POST OPTIONS MENU */
+  /* =======================================================
+     POST OPTIONS MENU
+  ======================================================= */
 
-  function openPostMenu(id) {
+  async function openPostMenu(postId) {
     if (!isReady()) return false;
 
-    const post = DATA()?.getPost?.(id);
+    let post;
 
-    if (!post) return false;
+    try {
+      post = await getOwnedCloudPost(postId);
+    } catch (error) {
+      toast(
+        error?.message ||
+          (
+            isEnglish()
+              ? "Post options are unavailable."
+              : "पोस्ट विकल्प उपलब्ध छैन।"
+          ),
+        "warning"
+      );
+
+      return false;
+    }
 
     openModal({
       title: isEnglish()
@@ -328,7 +472,7 @@
           <button
             class="dropdown-item"
             type="button"
-            data-edit-post="${escapeHTML(id)}">
+            data-edit-post="${escapeHTML(post.id)}">
             ✏️
             ${isEnglish()
               ? "Edit post"
@@ -338,7 +482,7 @@
           <button
             class="dropdown-item"
             type="button"
-            data-delete-post="${escapeHTML(id)}">
+            data-delete-post="${escapeHTML(post.id)}">
             🗑️
             ${isEnglish()
               ? "Delete post"
@@ -361,18 +505,25 @@
     return true;
   }
 
-  /* DELETE CONFIRMATION */
+  /* =======================================================
+     DELETE CONFIRMATION
+  ======================================================= */
 
-  function confirmDeletePost(id) {
+  async function confirmDeletePost(postId) {
     if (!isReady()) return false;
 
-    const post = DATA()?.getPost?.(id);
+    let post;
 
-    if (!post) {
+    try {
+      post = await getOwnedCloudPost(postId);
+    } catch (error) {
       toast(
-        isEnglish()
-          ? "Post could not be found."
-          : "पोस्ट भेटिएन।",
+        error?.message ||
+          (
+            isEnglish()
+              ? "Could not find this post."
+              : "पोस्ट भेटिएन।"
+          ),
         "warning"
       );
 
@@ -401,8 +552,8 @@
 
           <p>
             ${isEnglish()
-              ? "This post will be removed from this app's local data. This action cannot be undone."
-              : "यो पोस्ट एपको स्थानीय डाटाबाट हटाइनेछ। यो कार्य फिर्ता गर्न मिल्दैन।"}
+              ? "This post will be permanently deleted from the cloud."
+              : "यो पोस्ट Cloud बाट स्थायी रूपमा मेटिनेछ।"}
           </p>
 
         </div>
@@ -448,48 +599,84 @@
       return false;
     }
 
-    confirmButton.addEventListener("click", () => {
+    confirmButton.addEventListener("click", async () => {
       if (confirmButton.disabled) return;
 
       confirmButton.disabled = true;
 
-      const success = DATA()?.deletePost?.(id);
+      const api = POSTS();
 
-      if (!success) {
+      if (typeof api?.deletePost !== "function") {
         closeModal();
 
         toast(
           isEnglish()
-            ? "Could not delete post."
-            : "पोस्ट मेटाउन सकिएन।",
+            ? "Supabase delete service is unavailable."
+            : "Supabase Delete सेवा उपलब्ध छैन।",
           "error"
         );
 
         return;
       }
 
-      closeModal();
+      try {
+        const result = await api.deletePost(post.id);
 
-      toast(
-        isEnglish()
-          ? "Post deleted successfully."
-          : "पोस्ट सफलतापूर्वक मेटाइयो।",
-        "success"
-      );
+        if (!result?.ok) {
+          throw new Error(
+            getErrorMessage(
+              result,
+              isEnglish()
+                ? "Could not delete post."
+                : "पोस्ट मेटाउन सकिएन।"
+            )
+          );
+        }
+
+        closeModal();
+
+        toast(
+          isEnglish()
+            ? "Post deleted successfully."
+            : "पोस्ट सफलतापूर्वक मेटाइयो।",
+          "success"
+        );
+
+        app.refreshCurrentPage();
+
+      } catch (error) {
+        confirmButton.disabled = false;
+
+        toast(
+          error?.message ||
+            (
+              isEnglish()
+                ? "Could not delete post."
+                : "पोस्ट मेटाउन सकिएन।"
+            ),
+          "error"
+        );
+      }
     });
 
     return true;
   }
 
-  /* DELETE POST */
+  /* =======================================================
+     DELETE POST
+  ======================================================= */
 
-  function deletePost(id) {
+  function deletePost(postId) {
     if (!isReady()) return false;
 
-    return confirmDeletePost(id);
+    confirmDeletePost(postId);
+
+    return true;
   }
 
-  /* SAVE BUTTON CAPTURE HANDLER */
+  /* =======================================================
+     SAVE BUTTON CAPTURE HANDLER
+  ======================================================= */
 
   function onDocumentClick(event) {
     const target = event.target;
@@ -500,15 +687,17 @@
       '[data-post-action="save"]'
     );
 
-    if (saveButton) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
+    if (!saveButton) return;
 
-      toggleSave(saveButton.dataset.postId);
-    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    toggleSave(saveButton.dataset.postId);
   }
 
-  /* DELEGATED POST MENU ACTIONS */
+  /* =======================================================
+     DELEGATED POST MENU ACTIONS
+  ======================================================= */
 
   function handleClick(target) {
     if (!isReady()) return false;
@@ -554,7 +743,9 @@
     return false;
   }
 
-  /* CLEANUP */
+  /* =======================================================
+     CLEANUP
+  ======================================================= */
 
   function destroy() {
     document.removeEventListener(
@@ -568,17 +759,26 @@
     return true;
   }
 
-  /* PUBLIC API */
+  /* =======================================================
+     PUBLIC API
+  ======================================================= */
 
   global.KSKPostActions = Object.freeze({
     initialize,
     destroy,
+
     handleClick,
+
     editPost,
     openPostMenu,
     deletePost,
+
     toggleSave,
     isPostSaved
   });
+
+  console.info(
+    "KSK Supabase Post Actions module loaded."
+  );
 
 })(window);
