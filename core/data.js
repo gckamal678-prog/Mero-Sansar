@@ -91,12 +91,58 @@
     }
   }
 
-  function makeId(prefix = "item") {
-    const random = global.crypto?.randomUUID
-      ? global.crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  /*
+   * SECURE UUID GENERATOR
+   *
+   * Priority:
+   * 1. crypto.randomUUID()
+   * 2. crypto.getRandomValues()
+   *
+   * No Math.random() fallback.
+   */
 
-    return `${prefix}_${random}`;
+  function makeId() {
+    try {
+      if (
+        global.crypto &&
+        typeof global.crypto.randomUUID === "function"
+      ) {
+        return global.crypto.randomUUID();
+      }
+
+      if (
+        global.crypto &&
+        typeof global.crypto.getRandomValues === "function"
+      ) {
+        const bytes = new Uint8Array(16);
+
+        global.crypto.getRandomValues(bytes);
+
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+        const hex = Array.from(bytes, byte =>
+          byte.toString(16).padStart(2, "0")
+        ).join("");
+
+        return [
+          hex.slice(0, 8),
+          hex.slice(8, 12),
+          hex.slice(12, 16),
+          hex.slice(16, 20),
+          hex.slice(20)
+        ].join("-");
+      }
+    } catch (error) {
+      console.error(
+        "Secure UUID generation failed:",
+        error
+      );
+    }
+
+    throw new Error(
+      "Secure UUID generation is unavailable."
+    );
   }
 
   function cleanText(value, maxLength = 5000) {
@@ -219,7 +265,7 @@
 
     const item = {
       ...clone(post),
-      id: post.id || makeId("post"),
+      id: post.id || makeId(),
       text: cleanText(post.text, 10000),
       comments: isArray(post.comments),
       createdAt: post.createdAt || new Date().toISOString()
@@ -315,6 +361,7 @@
     if (!id) return false;
 
     const posts = getPosts();
+
     const existing = posts.find(
       post => String(post.id) === id
     );
@@ -406,7 +453,7 @@
     })).filter(mention => mention.name);
 
     const item = {
-      id: comment.id || makeId("comment"),
+      id: comment.id || makeId(),
       postId: id,
       parentId: parentId || null,
       replyTo: cleanText(
@@ -663,7 +710,6 @@
       "🤓"
     ];
 
-    // खाली वा अनुमति नभएको emoji अस्वीकार गर्ने।
     if (!allowedReactions.includes(emoji)) {
       return false;
     }
@@ -822,7 +868,7 @@
 
     const item = {
       ...clone(story),
-      id: story.id || makeId("story"),
+      id: story.id || makeId(),
       createdAt: story.createdAt ||
         new Date(now).toISOString(),
       expiresAt: story.expiresAt ||
@@ -859,6 +905,7 @@
     if (!id) return false;
 
     const stories = getStories(true);
+
     const existing = stories.find(
       story => String(story.id) === id
     );
@@ -912,7 +959,7 @@
 
     const newFriend = {
       ...item,
-      id: item.id || makeId("friend"),
+      id: item.id || makeId(),
       name,
       avatar: item.avatar ||
         item.initial ||
@@ -1167,7 +1214,7 @@
     if (existing) return existing.id;
 
     const chat = {
-      id: makeId("chat"),
+      id: makeId(),
       userId: friend.id || "",
       name: cleanText(
         friend.name || "साथी",
@@ -1212,7 +1259,7 @@
     if (!id || !text) return false;
 
     const item = {
-      id: makeId("message"),
+      id: makeId(),
       chatId: id,
       sender: options.sender || "",
       text,
@@ -1259,8 +1306,7 @@
 
     const item = {
       ...clone(notification),
-      id: notification.id ||
-        makeId("notification"),
+      id: notification.id || makeId(),
       text: cleanText(
         notification.text,
         500
@@ -1423,19 +1469,15 @@
 
   function handleStorageChange(event) {
     if (!event || !event.key) {
-      // localStorage.clear() जस्ता key-विहीन event बेवास्ता गर्ने।
       return false;
     }
 
-    // एपले व्यवस्थापन गर्ने storage keys मात्र स्वीकार गर्ने।
     const managedKeys = Object.values(STORAGE);
 
     if (!managedKeys.includes(event.key)) {
       return false;
     }
 
-    // अर्को tab मा परिवर्तन भएको data लाई
-    // हालको tab को refresh system मा पठाउने।
     emit(
       event.key,
       "sync",
@@ -1454,7 +1496,6 @@
 
     initialized = true;
 
-    // अर्को tab मा localStorage परिवर्तन हुँदा सुन्ने।
     global.addEventListener(
       "storage",
       handleStorageChange
