@@ -2,9 +2,9 @@
 "use strict";
 
 /*
- * MERO SANSAR — PROFILE PAGE
- * Clean profile layout + grouped profile tools.
- * Data remains owned by KSKData.
+ * MERO SANSAR — SUPABASE CONNECTED PROFILE PAGE
+ * Profile data: Supabase
+ * Posts and social counts: Existing KSKData modules
  */
 
 (function (global) {
@@ -15,426 +15,19 @@
   const VALID_TABS = new Set(["posts", "photos", "about"]);
   const STYLE_ID = "ksk-profile-upgrade-styles";
 
-  function ensureStyles() {
-    if (document.getElementById(STYLE_ID)) return;
+  let remoteProfile = null;
+  let remoteLoadPromise = null;
 
-    const style = document.createElement("style");
-    style.id = STYLE_ID;
+  /* =====================================================
+     LANGUAGE
+  ===================================================== */
 
-    style.textContent = `
-      .profile-section {
-        width: 100%;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
+  function isEnglish() {
+    return global.KSKLanguage?.getLanguage?.() === "en";
+  }
 
-      .profile-section .profile-card {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 11px;
-        min-width: 0;
-        padding: 22px 16px 18px;
-        text-align: center;
-        overflow: hidden;
-      }
-
-      .profile-section .profile-avatar {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .profile-section .profile-avatar .avatar {
-        width: 104px;
-        height: 104px;
-        flex-basis: 104px;
-        font-size: 34px;
-        border: 4px solid var(--color-surface);
-        box-shadow: 0 0 0 2px var(--color-primary-soft);
-      }
-
-      .profile-section .profile-avatar img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: inherit;
-      }
-
-      .profile-section .profile-card h2 {
-        max-width: 100%;
-        margin: 2px 0 0;
-        color: var(--color-text);
-        font-size: 22px;
-        font-weight: 850;
-        line-height: 1.3;
-        overflow-wrap: anywhere;
-      }
-
-      .profile-section .profile-card > p {
-        max-width: 560px;
-        margin: 0;
-        color: var(--color-text-secondary);
-        font-size: 13px;
-        line-height: 1.55;
-        overflow-wrap: anywhere;
-      }
-
-      .profile-section .profile-stats {
-        width: min(100%, 460px);
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-        margin-top: 5px;
-      }
-
-      .profile-section .profile-stat {
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 3px;
-        padding: 11px 5px;
-        border: 1px solid var(--color-border);
-        border-radius: 13px;
-        background: var(--color-surface-secondary);
-      }
-
-      .profile-section .profile-stat strong {
-        color: var(--color-text);
-        font-size: 19px;
-        font-weight: 850;
-        line-height: 1.3;
-      }
-
-      .profile-section .profile-stat span {
-        color: var(--color-muted);
-        font-size: 11px;
-        font-weight: 700;
-        overflow-wrap: anywhere;
-      }
-
-      .profile-section .profile-post-count {
-        color: var(--color-muted);
-        font-size: 12px;
-        font-weight: 750;
-      }
-
-      .profile-section .profile-main-actions {
-        width: min(100%, 460px);
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 9px;
-        margin-top: 3px;
-      }
-
-      .profile-section .profile-action-btn {
-        min-width: 0;
-        min-height: 46px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 7px;
-        padding: 10px 9px;
-        border: 1px solid var(--color-border);
-        border-radius: 12px;
-        background: var(--color-surface-secondary);
-        color: var(--color-text);
-        font: inherit;
-        font-size: 12px;
-        font-weight: 800;
-        line-height: 1.3;
-        cursor: pointer;
-        transition:
-          transform .16s ease,
-          border-color .16s ease,
-          background .16s ease;
-      }
-
-      .profile-section .profile-action-btn.primary {
-        border-color: var(--color-primary);
-        background: var(--color-primary);
-        color: #fff;
-      }
-
-      .profile-section .profile-action-btn:hover {
-        border-color: var(--color-primary);
-        transform: translateY(-1px);
-      }
-
-      .profile-section .profile-action-btn:active {
-        transform: scale(.98);
-      }
-
-      .profile-section .profile-action-btn:focus-visible,
-      .profile-section .profile-tool-grid > button:focus-visible {
-        outline: 3px solid var(--color-primary);
-        outline-offset: 3px;
-      }
-
-      .profile-section .profile-tools-card {
-        min-width: 0;
-        padding: 15px;
-      }
-
-      .profile-section .profile-tools-heading {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin: 0 0 12px;
-      }
-
-      .profile-section .profile-tools-heading h3 {
-        margin: 0;
-        color: var(--color-text);
-        font-size: 15px;
-        font-weight: 850;
-      }
-
-      .profile-section .profile-tools-heading p {
-        margin: 3px 0 0;
-        color: var(--color-muted);
-        font-size: 11px;
-        line-height: 1.4;
-      }
-
-      .profile-section .profile-tool-grid {
-        width: 100%;
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 9px;
-      }
-
-      .profile-section .profile-tool-grid > button {
-        min-width: 0;
-        min-height: 54px;
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 9px;
-        padding: 10px 11px;
-        border: 1px solid var(--color-border);
-        border-radius: 12px;
-        background: var(--color-surface-secondary);
-        color: var(--color-text);
-        font: inherit;
-        font-size: 12px;
-        font-weight: 750;
-        line-height: 1.35;
-        text-align: left;
-        overflow-wrap: anywhere;
-        cursor: pointer;
-        transition:
-          border-color .16s ease,
-          background .16s ease,
-          transform .16s ease;
-      }
-
-      .profile-section .profile-tool-grid > button:hover {
-        border-color: var(--color-primary);
-        background: var(--color-surface-hover);
-        transform: translateY(-1px);
-      }
-
-      .profile-section .profile-tool-grid > button:active {
-        transform: scale(.98);
-      }
-
-      .profile-section .profile-tool-note {
-        margin: 11px 2px 0;
-        color: var(--color-muted);
-        font-size: 10px;
-        line-height: 1.5;
-      }
-
-      .profile-section .profile-tabs {
-        width: 100%;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 5px;
-        padding: 5px;
-        border: 1px solid var(--color-border);
-        border-radius: 13px;
-        background: var(--color-surface);
-      }
-
-      .profile-section .profile-tab {
-        min-width: 0;
-        min-height: 42px;
-        padding: 8px 5px;
-        border: 1px solid transparent;
-        border-radius: 10px;
-        background: transparent;
-        color: var(--color-muted);
-        font-size: 12px;
-        font-weight: 750;
-        cursor: pointer;
-        transition:
-          background .16s ease,
-          color .16s ease,
-          border-color .16s ease;
-      }
-
-      .profile-section .profile-tab:hover {
-        background: var(--color-surface-hover);
-        color: var(--color-text);
-      }
-
-      .profile-section .profile-tab.is-active {
-        border-color: var(--color-primary);
-        background: var(--color-primary-soft);
-        color: var(--color-primary);
-      }
-
-      .profile-section .profile-tab-panel {
-        width: 100%;
-        min-width: 0;
-      }
-
-      .profile-section .profile-posts {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .profile-section .profile-about-card {
-        min-width: 0;
-      }
-
-      .profile-section .profile-about-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-      }
-
-      .profile-section .profile-about-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        min-width: 0;
-        padding: 13px 2px;
-        border-bottom: 1px solid var(--color-border);
-      }
-
-      .profile-section .profile-about-item:first-child {
-        padding-top: 2px;
-      }
-
-      .profile-section .profile-about-item:last-child {
-        padding-bottom: 2px;
-        border-bottom: 0;
-      }
-
-      .profile-section .profile-about-icon {
-        width: 36px;
-        height: 36px;
-        flex: 0 0 36px;
-        display: grid;
-        place-items: center;
-        border-radius: 11px;
-        background: var(--color-surface-secondary);
-        font-size: 17px;
-      }
-
-      .profile-section .profile-about-item > div {
-        min-width: 0;
-        flex: 1;
-      }
-
-      .profile-section .profile-about-item small {
-        display: block;
-        margin-bottom: 3px;
-        color: var(--color-muted);
-        font-size: 11px;
-        font-weight: 750;
-      }
-
-      .profile-section .profile-about-item p {
-        margin: 0;
-        color: var(--color-text);
-        font-size: 14px;
-        overflow-wrap: anywhere;
-        white-space: pre-wrap;
-      }
-
-      @media (max-width: 480px) {
-        .profile-section {
-          gap: 11px;
-        }
-
-        .profile-section .profile-card {
-          padding: 18px 12px 15px;
-          gap: 9px;
-        }
-
-        .profile-section .profile-avatar .avatar {
-          width: 88px;
-          height: 88px;
-          flex-basis: 88px;
-        }
-
-        .profile-section .profile-card h2 {
-          font-size: 19px;
-        }
-
-        .profile-section .profile-stat {
-          padding: 9px 3px;
-        }
-
-        .profile-section .profile-stat strong {
-          font-size: 17px;
-        }
-
-        .profile-section .profile-stat span {
-          font-size: 10px;
-        }
-
-        .profile-section .profile-tools-card {
-          padding: 12px;
-        }
-
-        .profile-section .profile-tool-grid {
-          gap: 7px;
-        }
-
-        .profile-section .profile-tool-grid > button {
-          min-height: 52px;
-          padding: 9px 8px;
-          font-size: 11px;
-        }
-
-        .profile-section .profile-action-btn {
-          min-height: 44px;
-          padding: 9px 6px;
-          font-size: 11px;
-        }
-
-        .profile-section .profile-tab {
-          min-height: 40px;
-          font-size: 11px;
-        }
-      }
-
-      @media (max-width: 340px) {
-        .profile-section .profile-tool-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .profile-section .profile-action-btn,
-        .profile-section .profile-tool-grid > button,
-        .profile-section .profile-tab {
-          transition: none;
-        }
-      }
-    `;
-
-    (document.head || document.documentElement).appendChild(style);
+  function t(nepali, english) {
+    return isEnglish() ? english : nepali;
   }
 
   function escapeHTML(value) {
@@ -451,17 +44,468 @@
     })[char]);
   }
 
-  function isEnglish() {
-    return global.KSKLanguage?.getLanguage?.() === "en";
+  /* =====================================================
+     STYLES
+  ===================================================== */
+
+  function ensureStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+
+    style.textContent = `
+      .profile-section {
+        width:100%;
+        min-width:0;
+        display:flex;
+        flex-direction:column;
+        gap:14px;
+      }
+
+      .profile-section .profile-card {
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        gap:11px;
+        min-width:0;
+        padding:22px 16px 18px;
+        text-align:center;
+        overflow:hidden;
+      }
+
+      .profile-section .ksk-profile-cover {
+        width:100%;
+        height:150px;
+        position:relative;
+        overflow:hidden;
+        border-radius:14px;
+        background:var(--color-surface-secondary);
+        cursor:pointer;
+      }
+
+      .profile-section .ksk-profile-cover img {
+        width:100%;
+        height:100%;
+        object-fit:cover;
+      }
+
+      .profile-section .ksk-profile-cover-empty {
+        width:100%;
+        height:100%;
+        display:grid;
+        place-items:center;
+        font-size:30px;
+      }
+
+      .profile-section .ksk-profile-photo-hint {
+        position:absolute;
+        right:10px;
+        bottom:10px;
+        padding:6px;
+        border-radius:50%;
+        background:var(--color-surface);
+      }
+
+      .profile-section .profile-avatar {
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        cursor:pointer;
+      }
+
+      .profile-section .profile-avatar .avatar {
+        width:104px;
+        height:104px;
+        flex-basis:104px;
+        font-size:34px;
+        border:4px solid var(--color-surface);
+        box-shadow:0 0 0 2px var(--color-primary-soft);
+      }
+
+      .profile-section .profile-avatar img {
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        border-radius:inherit;
+      }
+
+      .profile-section .profile-card h2 {
+        max-width:100%;
+        margin:2px 0 0;
+        color:var(--color-text);
+        font-size:22px;
+        font-weight:850;
+        line-height:1.3;
+        overflow-wrap:anywhere;
+      }
+
+      .profile-section .profile-card > p {
+        max-width:560px;
+        margin:0;
+        color:var(--color-text-secondary);
+        font-size:13px;
+        line-height:1.55;
+        overflow-wrap:anywhere;
+      }
+
+      .profile-section .profile-stats {
+        width:min(100%,460px);
+        display:grid;
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        gap:8px;
+        margin-top:5px;
+      }
+
+      .profile-section .profile-stat {
+        min-width:0;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        gap:3px;
+        padding:11px 5px;
+        border:1px solid var(--color-border);
+        border-radius:13px;
+        background:var(--color-surface-secondary);
+      }
+
+      .profile-section .profile-stat strong {
+        color:var(--color-text);
+        font-size:19px;
+        font-weight:850;
+      }
+
+      .profile-section .profile-stat span {
+        color:var(--color-muted);
+        font-size:11px;
+        font-weight:700;
+      }
+
+      .profile-section .profile-post-count {
+        color:var(--color-muted);
+        font-size:12px;
+        font-weight:750;
+      }
+
+      .profile-section .profile-main-actions {
+        width:min(100%,460px);
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:9px;
+        margin-top:3px;
+      }
+
+      .profile-section .profile-action-btn {
+        min-width:0;
+        min-height:46px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:7px;
+        padding:10px 9px;
+        border:1px solid var(--color-border);
+        border-radius:12px;
+        background:var(--color-surface-secondary);
+        color:var(--color-text);
+        font:inherit;
+        font-size:12px;
+        font-weight:800;
+        cursor:pointer;
+      }
+
+      .profile-section .profile-action-btn.primary {
+        border-color:var(--color-primary);
+        background:var(--color-primary);
+        color:#fff;
+      }
+
+      .profile-section .profile-tools-card {
+        min-width:0;
+        padding:15px;
+      }
+
+      .profile-section .profile-tools-heading {
+        margin:0 0 12px;
+      }
+
+      .profile-section .profile-tools-heading h3 {
+        margin:0;
+        color:var(--color-text);
+        font-size:15px;
+        font-weight:850;
+      }
+
+      .profile-section .profile-tools-heading p {
+        margin:3px 0 0;
+        color:var(--color-muted);
+        font-size:11px;
+      }
+
+      .profile-section .profile-tool-grid {
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:9px;
+      }
+
+      .profile-section .profile-tool-grid button {
+        min-width:0;
+        min-height:54px;
+        padding:10px;
+        border:1px solid var(--color-border);
+        border-radius:12px;
+        background:var(--color-surface-secondary);
+        color:var(--color-text);
+        font:inherit;
+        font-size:12px;
+        font-weight:750;
+        text-align:left;
+        cursor:pointer;
+      }
+
+      .profile-section .profile-tool-note {
+        margin:11px 2px 0;
+        color:var(--color-muted);
+        font-size:10px;
+      }
+
+      .profile-section .profile-tabs {
+        width:100%;
+        display:grid;
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        gap:5px;
+        padding:5px;
+        border:1px solid var(--color-border);
+        border-radius:13px;
+        background:var(--color-surface);
+      }
+
+      .profile-section .profile-tab {
+        min-width:0;
+        min-height:42px;
+        padding:8px 5px;
+        border:1px solid transparent;
+        border-radius:10px;
+        background:transparent;
+        color:var(--color-muted);
+        font-size:12px;
+        font-weight:750;
+        cursor:pointer;
+      }
+
+      .profile-section .profile-tab.is-active {
+        border-color:var(--color-primary);
+        background:var(--color-primary-soft);
+        color:var(--color-primary);
+      }
+
+      .profile-section .profile-tab-panel {
+        width:100%;
+        min-width:0;
+      }
+
+      .profile-section .profile-posts {
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+      }
+
+      .profile-section .profile-about-card {
+        min-width:0;
+        padding:15px;
+      }
+
+      .profile-section .profile-about-list {
+        display:flex;
+        flex-direction:column;
+      }
+
+      .profile-section .profile-about-item {
+        display:flex;
+        align-items:flex-start;
+        gap:12px;
+        padding:13px 2px;
+        border-bottom:1px solid var(--color-border);
+      }
+
+      .profile-section .profile-about-item:last-child {
+        border-bottom:0;
+      }
+
+      .profile-section .profile-about-icon {
+        width:36px;
+        height:36px;
+        flex:0 0 36px;
+        display:grid;
+        place-items:center;
+        border-radius:11px;
+        background:var(--color-surface-secondary);
+      }
+
+      .profile-section .profile-about-item > div {
+        min-width:0;
+        flex:1;
+      }
+
+      .profile-section .profile-about-item small {
+        display:block;
+        margin-bottom:3px;
+        color:var(--color-muted);
+        font-size:11px;
+        font-weight:750;
+      }
+
+      .profile-section .profile-about-item p {
+        margin:0;
+        color:var(--color-text);
+        font-size:14px;
+        overflow-wrap:anywhere;
+        white-space:pre-wrap;
+      }
+
+      @media(max-width:480px) {
+        .profile-section {
+          gap:11px;
+        }
+
+        .profile-section .profile-card {
+          padding:18px 12px 15px;
+        }
+
+        .profile-section .profile-avatar .avatar {
+          width:88px;
+          height:88px;
+          flex-basis:88px;
+        }
+
+        .profile-section .profile-card h2 {
+          font-size:19px;
+        }
+
+        .profile-section .profile-tools-card {
+          padding:12px;
+        }
+      }
+
+      @media(max-width:340px) {
+        .profile-section .profile-tool-grid {
+          grid-template-columns:1fr;
+        }
+      }
+    `;
+
+    (document.head || document.documentElement).appendChild(style);
   }
 
-  function t(nepali, english) {
-    return isEnglish() ? english : nepali;
+  /* =====================================================
+     PROFILE DATA
+  ===================================================== */
+
+  function getLocalProfile() {
+    return global.KSKData?.getProfile?.() || {};
   }
 
   function getProfile() {
-    return global.KSKData?.getProfile?.() || {};
+    return remoteProfile || getLocalProfile();
   }
+
+  function normalizeRemoteProfile(profile) {
+    if (!profile) return null;
+
+    const firstName = String(profile.firstName || "").trim();
+    const lastName = String(profile.lastName || "").trim();
+
+    const fullName = [firstName, lastName]
+      .filter(Boolean)
+      .join(" ");
+
+    return {
+      ...profile,
+      name: String(profile.name || fullName || "").trim(),
+      bio: profile.bio || "",
+      location: profile.location || "",
+      avatar: profile.avatar || "",
+      cover: profile.cover || "",
+      joinedAt: profile.createdAt || ""
+    };
+  }
+
+  function saveRemoteProfileToCache(profile) {
+    const current = getLocalProfile();
+
+    const values = {
+      name: profile.name || "",
+      bio: profile.bio || "",
+      location: profile.location || "",
+      avatar: profile.avatar || "",
+      cover: profile.cover || ""
+    };
+
+    const changed = Object.keys(values).some(
+      key => String(current[key] || "") !== String(values[key] || "")
+    );
+
+    if (!changed) return false;
+
+    global.KSKData?.saveProfile?.(values);
+
+    return true;
+  }
+
+  function refreshProfilePage() {
+    if (
+      global.KSKNavigation?.getCurrentPage?.() === "profile"
+    ) {
+      global.KSKNavigation?.refreshCurrentPage?.();
+    }
+
+    global.KSKProfileMediaUI?.refresh?.();
+  }
+
+  /*
+   * The page renderer is synchronous.
+   * This background request updates the local UI cache
+   * after Supabase returns the authenticated user's profile.
+   */
+
+  function loadSupabaseProfile() {
+    if (remoteLoadPromise) return remoteLoadPromise;
+
+    const api = global.KSKSupabaseProfile;
+
+    if (!api?.getMyProfile) return Promise.resolve(null);
+
+    remoteLoadPromise = api.getMyProfile()
+      .then(result => {
+        if (!result) return null;
+
+        remoteProfile = normalizeRemoteProfile(result);
+
+        saveRemoteProfileToCache(remoteProfile);
+
+        refreshProfilePage();
+
+        console.info("KSK Profile: Supabase profile loaded.");
+
+        return remoteProfile;
+      })
+      .catch(error => {
+        console.warn(
+          "KSK Profile: Supabase profile could not be loaded.",
+          error
+        );
+
+        remoteLoadPromise = null;
+
+        return null;
+      });
+
+    return remoteLoadPromise;
+  }
+
+  /* =====================================================
+     POSTS AND FRIENDS
+  ===================================================== */
 
   function getPosts() {
     const posts = global.KSKData?.getPosts?.();
@@ -474,7 +518,9 @@
   }
 
   function getDisplayName(user) {
-    return String(user?.name || t("तपाईंको प्रोफाइल", "Your Profile"));
+    return String(
+      user?.name || t("तपाईंको प्रोफाइल", "Your Profile")
+    );
   }
 
   function renderAvatar(user) {
@@ -500,14 +546,17 @@
       `;
     }
 
-    return `<div class="avatar avatar-xl">${escapeHTML(name.charAt(0) || "स")}</div>`;
+    return `
+      <div class="avatar avatar-xl">
+        ${escapeHTML(name.charAt(0) || "स")}
+      </div>
+    `;
   }
 
   function getProfilePosts(user, posts) {
     const safePosts = Array.isArray(posts) ? posts : [];
     const userId = String(user?.id || "");
     const userName = String(user?.name || "").trim();
-    const displayName = getDisplayName(user);
 
     return safePosts.filter(post => {
       if (!post || typeof post !== "object") return false;
@@ -521,7 +570,6 @@
       const author = String(post.author || "").trim();
 
       if (userName && author === userName) return true;
-      if (author === displayName) return true;
 
       return !userId && !userName && author === "तपाईं";
     });
@@ -570,15 +618,20 @@
         <div class="post-header">
           <strong>${escapeHTML(post.author || "")}</strong>
         </div>
+
         ${post.text
           ? `<div class="post-content">${escapeHTML(post.text)}</div>`
-          : ""}
-        <small class="post-time">${escapeHTML(
-          global.KSKUtils?.formatDateTime?.(
-            post.createdAt,
-            isEnglish() ? "en" : "ne"
-          ) || ""
-        )}</small>
+          : ""
+        }
+
+        <small class="post-time">
+          ${escapeHTML(
+            global.KSKUtils?.formatDateTime?.(
+              post.createdAt,
+              isEnglish() ? "en" : "ne"
+            ) || ""
+          )}
+        </small>
       </article>
     `).join("");
   }
@@ -592,16 +645,12 @@
   }
 
   function getSocialCounts(user) {
-    /*
-     * The Friends page owns the local social graph.
-     * Use the same source here so Profile and Friends
-     * always display matching counts.
-     */
     const social = global.KSKSocialData;
     let localCounts = null;
 
     try {
       const localUserId = social?.getLocalUserId?.();
+
       if (localUserId && typeof social?.getCounts === "function") {
         localCounts = social.getCounts(localUserId);
       }
@@ -609,10 +658,7 @@
       localCounts = null;
     }
 
-    if (
-      localCounts &&
-      typeof localCounts === "object"
-    ) {
+    if (localCounts && typeof localCounts === "object") {
       return {
         followers: safeCount(localCounts.followers),
         following: safeCount(localCounts.following),
@@ -620,8 +666,6 @@
       };
     }
 
-    // Backward-compatible fallback for installations
-    // where the social module is not available.
     const followers = Array.isArray(user?.followers)
       ? user.followers.length
       : safeCount(user?.followersCount ?? user?.followers);
@@ -646,20 +690,90 @@
     `;
   }
 
+  /* =====================================================
+     PROFILE LINK
+  ===================================================== */
+
   function getProfileLink() {
     try {
       const currentURL = new URL(global.location.href);
       currentURL.hash = "profile";
       return currentURL.toString();
     } catch (error) {
-      console.error(
-        "KSKProfilePage: profile URL could not be created.",
-        error
-      );
-
       return "";
     }
   }
+
+  function showToast(message, type = "success") {
+    const toast = global.KSKToast;
+
+    if (typeof toast?.[type] === "function") {
+      toast[type](message);
+    } else if (typeof toast?.show === "function") {
+      toast.show(message, type);
+    }
+  }
+
+  async function copyProfileLink(button) {
+    const link = getProfileLink();
+
+    if (!link) {
+      showToast(
+        t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."),
+        "error"
+      );
+      return false;
+    }
+
+    let copied = false;
+
+    try {
+      if (
+        global.isSecureContext &&
+        global.navigator?.clipboard?.writeText
+      ) {
+        await global.navigator.clipboard.writeText(link);
+        copied = true;
+      }
+    } catch (error) {
+      copied = false;
+    }
+
+    if (!copied && document.body) {
+      const field = document.createElement("textarea");
+
+      field.value = link;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+
+      document.body.appendChild(field);
+      field.select();
+
+      try {
+        copied = Boolean(document.execCommand("copy"));
+      } catch (error) {
+        copied = false;
+      }
+
+      field.remove();
+    }
+
+    showToast(
+      copied
+        ? t("प्रोफाइल लिंक कपी भयो।", "Profile link copied.")
+        : t("प्रोफाइल लिंक कपी गर्न सकिएन।", "Could not copy profile link."),
+      copied ? "success" : "error"
+    );
+
+    button?.blur();
+
+    return copied;
+  }
+
+  /* =====================================================
+     ABOUT
+  ===================================================== */
 
   function renderAbout(user) {
     const joinedAt = user?.joinedAt
@@ -686,14 +800,6 @@
           }
         : null,
 
-      user?.website
-        ? {
-            icon: "🔗",
-            label: t("वेबसाइट", "Website"),
-            value: user.website
-          }
-        : null,
-
       joinedAt
         ? {
             icon: "📅",
@@ -705,8 +811,8 @@
 
     if (!rows.length) {
       return `<div class="empty-state">${t(
-        "अहिलेसम्म About जानकारी थपिएको छैन। Edit Profile बाट उपलब्ध जानकारी थप्न सक्नुहुन्छ।",
-        "No About information yet. Add available details from Edit Profile."
+        "अहिलेसम्म About जानकारी थपिएको छैन। Edit Profile बाट जानकारी थप्न सक्नुहुन्छ।",
+        "No About information yet. Add details from Edit Profile."
       )}</div>`;
     }
 
@@ -714,7 +820,10 @@
       <div class="profile-about-list">
         ${rows.map(row => `
           <div class="profile-about-item">
-            <span class="profile-about-icon" aria-hidden="true">${row.icon}</span>
+            <span class="profile-about-icon" aria-hidden="true">
+              ${row.icon}
+            </span>
+
             <div>
               <small>${escapeHTML(row.label)}</small>
               <p>${escapeHTML(row.value)}</p>
@@ -725,12 +834,19 @@
     `;
   }
 
+  /* =====================================================
+     MAIN RENDER
+  ===================================================== */
+
   function render(options = {}) {
     options = options && typeof options === "object"
       ? options
       : {};
 
     ensureStyles();
+
+    // Start loading Supabase profile without blocking synchronous render.
+    loadSupabaseProfile();
 
     const user = options.user && typeof options.user === "object"
       ? options.user
@@ -772,24 +888,10 @@
             : ""
           }
 
-          <div
-            class="profile-stats"
-            aria-label="${t("प्रोफाइल तथ्याङ्क", "Profile statistics")}"
-          >
-            ${renderStat(
-              counts.followers,
-              t("फलोअर्स", "Followers")
-            )}
-
-            ${renderStat(
-              counts.following,
-              t("फलोइङ", "Following")
-            )}
-
-            ${renderStat(
-              counts.friends,
-              t("साथीहरू", "Friends")
-            )}
+          <div class="profile-stats">
+            ${renderStat(counts.followers, t("फलोअर्स", "Followers"))}
+            ${renderStat(counts.following, t("फलोइङ", "Following"))}
+            ${renderStat(counts.friends, t("साथीहरू", "Friends"))}
           </div>
 
           <div class="profile-post-count">
@@ -800,54 +902,46 @@
             <button
               class="profile-action-btn primary"
               type="button"
-              data-edit-profile
-            >
-              <span aria-hidden="true">✏️</span>
+              data-edit-profile>
+              <span>✏️</span>
               <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
             </button>
 
             <button
               class="profile-action-btn"
               type="button"
-              data-open-settings
-            >
-              <span aria-hidden="true">⚙️</span>
+              data-open-settings>
+              <span>⚙️</span>
               <span>${t("सेटिङ", "Settings")}</span>
             </button>
           </div>
+
         </section>
 
         <section class="card profile-tools-card">
+
           <div class="profile-tools-heading">
-            <div>
-              <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
-              <p>${t(
-                "आफ्नो प्रोफाइल र सामग्री व्यवस्थापन गर्नुहोस्।",
-                "Manage your profile and saved content."
-              )}</p>
-            </div>
+            <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
+            <p>${t(
+              "आफ्नो प्रोफाइल र सामग्री व्यवस्थापन गर्नुहोस्।",
+              "Manage your profile and saved content."
+            )}</p>
           </div>
 
-          <div
-            class="profile-tool-grid"
-            data-profile-extras
-            aria-label="${t("प्रोफाइलका विकल्पहरू", "Profile options")}"
-          >
+          <div class="profile-tool-grid" data-profile-extras>
+
             <button
               type="button"
-              class="profile-tool-button"
-              data-copy-profile-link
-            >
+              data-copy-profile-link>
               🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
             </button>
 
             <button
               type="button"
-              class="profile-tool-button"
-              data-page="saved"
-            >
+              data-page="saved">
               🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
             </button>
+
           </div>
 
           <p class="profile-tool-note">
@@ -856,21 +950,17 @@
               "QR, achievements and insights appear in this section."
             )}
           </p>
+
         </section>
 
-        <div
-          class="profile-tabs"
-          role="tablist"
-          aria-label="${t("प्रोफाइल सामग्री", "Profile content")}"
-        >
+        <div class="profile-tabs" role="tablist">
+
           <button
             class="profile-tab${activeTab === "posts" ? " is-active" : ""}"
             type="button"
             role="tab"
             aria-selected="${activeTab === "posts"}"
-            aria-controls="profile-posts-panel"
-            data-profile-tab="posts"
-          >
+            data-profile-tab="posts">
             ${t("पोस्टहरू", "Posts")}
           </button>
 
@@ -879,9 +969,7 @@
             type="button"
             role="tab"
             aria-selected="${activeTab === "photos"}"
-            aria-controls="profile-photos-panel"
-            data-profile-tab="photos"
-          >
+            data-profile-tab="photos">
             ${t("फोटोहरू", "Photos")}
           </button>
 
@@ -890,30 +978,28 @@
             type="button"
             role="tab"
             aria-selected="${activeTab === "about"}"
-            aria-controls="profile-about-panel"
-            data-profile-tab="about"
-          >
+            data-profile-tab="about">
             ${t("परिचय", "About")}
           </button>
+
         </div>
 
         <div
           class="profile-tab-panel${activeTab === "posts" ? "" : " hidden"}"
-          id="profile-posts-panel"
           data-profile-panel="posts"
-          role="tabpanel"
-        >
+          role="tabpanel">
+
           <div class="profile-posts">
             ${renderPostList(posts, options)}
           </div>
+
         </div>
 
         <div
           class="profile-tab-panel${activeTab === "photos" ? "" : " hidden"}"
-          id="profile-photos-panel"
           data-profile-panel="photos"
-          role="tabpanel"
-        >
+          role="tabpanel">
+
           <div class="profile-posts">
             ${photos.length
               ? renderPostList(photos, options)
@@ -923,32 +1009,27 @@
                 )}</div>`
             }
           </div>
+
         </div>
 
         <div
           class="profile-tab-panel${activeTab === "about" ? "" : " hidden"}"
-          id="profile-about-panel"
           data-profile-panel="about"
-          role="tabpanel"
-        >
+          role="tabpanel">
+
           <div class="card profile-about-card">
             ${renderAbout(user)}
           </div>
+
         </div>
 
       </section>
     `;
   }
 
-  function showToast(message, type = "success") {
-    const toast = global.KSKToast;
-
-    if (typeof toast?.[type] === "function") {
-      toast[type](message);
-    } else if (typeof toast?.show === "function") {
-      toast.show(message, type);
-    }
-  }
+  /* =====================================================
+     TABS AND CLICK HANDLERS
+  ===================================================== */
 
   function switchTab(button) {
     const section = button.closest("[data-profile-section]");
@@ -962,88 +1043,17 @@
       const active = tab === button;
 
       tab.classList.toggle("is-active", active);
-      tab.setAttribute(
-        "aria-selected",
-        active ? "true" : "false"
-      );
+      tab.setAttribute("aria-selected", active ? "true" : "false");
     });
 
     section.querySelectorAll("[data-profile-panel]").forEach(panel => {
-      const active = panel.dataset.profilePanel === selected;
-      panel.classList.toggle("hidden", !active);
+      panel.classList.toggle(
+        "hidden",
+        panel.dataset.profilePanel !== selected
+      );
     });
 
     return true;
-  }
-
-  async function copyProfileLink(button) {
-    const link = getProfileLink();
-
-    if (!link) {
-      showToast(
-        t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."),
-        "error"
-      );
-      return false;
-    }
-
-    let copied = false;
-
-    try {
-      if (
-        global.isSecureContext &&
-        global.navigator?.clipboard?.writeText
-      ) {
-        await global.navigator.clipboard.writeText(link);
-        copied = true;
-      }
-    } catch (error) {
-      console.warn(
-        "KSKProfilePage: Clipboard API unavailable.",
-        error
-      );
-    }
-
-    if (!copied && global.document?.body) {
-      const field = global.document.createElement("textarea");
-
-      field.value = link;
-      field.setAttribute("readonly", "");
-      field.setAttribute("aria-hidden", "true");
-
-      field.style.position = "fixed";
-      field.style.opacity = "0";
-      field.style.pointerEvents = "none";
-
-      global.document.body.appendChild(field);
-      field.select();
-
-      try {
-        copied = Boolean(global.document.execCommand("copy"));
-      } catch (error) {
-        copied = false;
-      }
-
-      field.remove();
-    }
-
-    if (copied) {
-      showToast(
-        t("प्रोफाइल लिंक कपी भयो।", "Profile link copied.")
-      );
-    } else {
-      showToast(
-        t(
-          "प्रोफाइल लिंक कपी गर्न सकिएन।",
-          "Could not copy the profile link."
-        ),
-        "error"
-      );
-    }
-
-    if (button) button.blur();
-
-    return copied;
   }
 
   function handleClick(event) {
@@ -1066,9 +1076,11 @@
     }
   }
 
-  if (global.document) {
-    global.document.addEventListener("click", handleClick);
-  }
+  document.addEventListener("click", handleClick);
+
+  /* =====================================================
+     PUBLIC API
+  ===================================================== */
 
   global.KSKProfilePage = Object.freeze({
     render,
@@ -1076,7 +1088,12 @@
     getProfilePosts,
     getSocialCounts,
     getProfileLink,
-    isPhotoPost
+    isPhotoPost,
+
+    refreshFromSupabase() {
+      remoteLoadPromise = null;
+      return loadSupabaseProfile();
+    }
   });
 
 })(window);
