@@ -58,6 +58,89 @@
       : [];
   }
 
+  /* LOAD SAVED REACTIONS FOR FEED POSTS */
+
+  async function hydratePostReactions(posts) {
+    if (!Array.isArray(posts) || posts.length === 0) {
+      return true;
+    }
+
+    try {
+      const auth = global.KSKSupabaseAuth;
+      const client = auth?.getClient?.();
+      const user = auth?.getUser?.();
+
+      if (!client || !user?.id) {
+        console.warn("Reaction hydration: User unavailable.");
+        return false;
+      }
+
+      const postIds = [
+        ...new Set(
+          posts
+            .map(post => String(post?.id || "").trim())
+            .filter(Boolean)
+        )
+      ];
+
+      if (!postIds.length) return true;
+
+      const { data, error } = await client
+        .from("post_reactions")
+        .select("post_id,user_id,emoji")
+        .in("post_id", postIds);
+
+      if (error) throw error;
+
+      const grouped = new Map();
+
+      (data || []).forEach(row => {
+        const postId = String(row.post_id || "");
+
+        if (!grouped.has(postId)) {
+          grouped.set(postId, []);
+        }
+
+        grouped.get(postId).push(row);
+      });
+
+      posts.forEach(post => {
+        const rows = grouped.get(String(post.id)) || {};
+        const counts = {};
+        let myReaction = "";
+
+        (Array.isArray(rows) ? rows : []).forEach(row => {
+          const emoji = String(row.emoji || "");
+
+          counts[emoji] = (counts[emoji] || 0) + 1;
+
+          if (String(row.user_id) === String(user.id)) {
+            myReaction = emoji;
+          }
+        });
+
+        post.reactionCounts = counts;
+        post.myReaction = myReaction;
+        post.liked = Boolean(myReaction);
+
+        post.likes = Object.values(counts).reduce(
+          (total, count) => total + count,
+          0
+        );
+      });
+
+      return true;
+
+    } catch (error) {
+      console.error(
+        "Feed reaction hydration failed:",
+        error
+      );
+
+      return false;
+    }
+  }
+
   async function loadCloudFeed() {
     const api = global.KSKSupabasePosts;
 
@@ -82,6 +165,12 @@
           result?.message || result?.code || "Feed लोड गर्न सकिएन।"
         );
       }
+
+      // Feed देखाउनुअघि Database बाट पुराना Reactions ल्याउने।
+      await hydratePostReactions(result.data);
+
+      // Request पुरानो भइसकेको छ भने Cache परिवर्तन नगर्ने।
+      if (requestId !== cloudFeedRequest) return false;
 
       cloudFeedPosts = result.data;
       cloudFeedStatus = "ready";
