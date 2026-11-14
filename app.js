@@ -48,6 +48,8 @@
   let initialized = false;
   let authStarted = false;
   let authListenerRegistered = false;
+  let authenticationPromise = null;
+  let socialIdentityBridgeInstalled = false;
 
   const els = {};
 
@@ -426,18 +428,100 @@
     global.KSKAuthPage?.show?.(mode);
   }
 
-  function completeAuthentication() {
-    global.KSKAuthPage?.hide?.();
-    initialize();
+  /*
+   * The social module previously generated a browser-local ID.
+   * That ID cannot identify the same member on another device.
+   * Use the authenticated Supabase UUID as the single member ID.
+   */
+
+  function bindAuthenticatedIdentity(user) {
+    const userId = String(user?.id || "").trim();
+
+    if (!userId) {
+      throw new Error("AUTHENTICATED_USER_ID_MISSING");
+    }
+
+    global.KSKAuthenticatedUserId = userId;
+
+    const social = global.KSKSocialData;
+
+    if (
+      social &&
+      typeof social.getLocalUserId === "function" &&
+      !socialIdentityBridgeInstalled
+    ) {
+      global.KSKSocialData = Object.freeze({
+        ...social,
+
+        getLocalUserId() {
+          return String(global.KSKAuthenticatedUserId || "");
+        }
+      });
+
+      socialIdentityBridgeInstalled = true;
+    }
+
+    global.dispatchEvent(new CustomEvent("ksk:identity-ready", {
+      detail: { userId }
+    }));
+
+    return userId;
+  }
+
+  async function completeAuthentication(userFromSession = null) {
+    if (authenticationPromise) {
+      return authenticationPromise;
+    }
+
+    authenticationPromise = (async () => {
+      const user = userFromSession?.id
+        ? userFromSession
+        : await global.KSKSupabase.getUser();
+
+      if (!user?.id) {
+        throw new Error("AUTHENTICATED_USER_NOT_FOUND");
+      }
+
+      bindAuthenticatedIdentity(user);
+      global.KSKAuthPage?.hide?.();
+      initialize();
+
+      return true;
+    })();
+
+    try {
+      return await authenticationPromise;
+
+    } catch (error) {
+      global.KSKAuthenticatedUserId = "";
+
+      console.error(
+        "Could not initialize authenticated identity:",
+        error
+      );
+
+      toast(
+        "प्रयोगकर्ता पहिचान पुष्टि हुन सकेन। कृपया फेरि लगइन गर्नुहोस्।",
+        "error",
+        6000
+      );
+
+      showAuth("welcome");
+      return false;
+
+    } finally {
+      authenticationPromise = null;
+    }
   }
 
   function handleAuthStateChange(event, session) {
     if (session?.user) {
-      completeAuthentication();
+      completeAuthentication(session.user);
       return;
     }
 
     if (event === "SIGNED_OUT") {
+      global.KSKAuthenticatedUserId = "";
       global.KSKAuthPage?.show?.("welcome");
     }
   }
@@ -478,8 +562,9 @@
       const session = await global.KSKSupabase.getSession();
 
       if (session?.user) {
-        completeAuthentication();
+        await completeAuthentication(session.user);
       } else {
+        global.KSKAuthenticatedUserId = "";
         showAuth("welcome");
       }
 
