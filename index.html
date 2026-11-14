@@ -1,41 +1,738 @@
 
-<!-- WELCOME SPLASH CONTROLLER -->
-<script>
-(function () {
-  "use strict";
+<!DOCTYPE html>
+<html lang="ne" data-theme="light">
 
-  var splash = document.getElementById("welcomeSplash");
-  var start = document.getElementById("welcomeStartButton");
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  if (!splash || !start) return;
+  <meta name="theme-color" content="#2563eb">
+  <meta name="description" content="हाम्रो संसार — साथी जोडौँ, कुरा गरौँ।">
+  <meta name="color-scheme" content="light dark">
 
-  var seenKey = "mero_sansar_welcome_seen_v1";
-  var seen = false;
+  <!-- Theme initialization -->
+  <script>
+    (function () {
+      "use strict";
 
-  try {
-    seen = localStorage.getItem(seenKey) === "yes";
-  } catch (error) {}
+      try {
+        var saved =
+          localStorage.getItem("ksk_app_settings") ||
+          localStorage.getItem("ksk_app_settings_old");
 
-  if (!seen) {
-    splash.hidden = false;
-    document.body.classList.add("welcome-splash-active");
-  }
+        var settings = saved ? JSON.parse(saved) : {};
+        var theme = settings.theme === "dark" ? "dark" : "light";
+        var root = document.documentElement;
 
-  function enterApp() {
-    try {
-      localStorage.setItem(seenKey, "yes");
-    } catch (error) {}
+        root.dataset.theme = theme;
+        root.style.colorScheme = theme;
 
-    splash.classList.add("welcome-splash-leaving");
-    document.body.classList.remove("welcome-splash-active");
+        var themeColor = document.querySelector(
+          'meta[name="theme-color"]'
+        );
 
-    window.setTimeout(function () {
-      splash.hidden = true;
-      splash.classList.remove("welcome-splash-leaving");
-    }, 520);
-  }
+        if (themeColor) {
+          themeColor.setAttribute(
+            "content",
+            theme === "dark" ? "#0b1220" : "#2563eb"
+          );
+        }
+      } catch (error) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
 
-  start.addEventListener("click", enterApp);
+  <title>हाम्रो संसार</title>
 
-})();
-</script>
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <!-- Main Stylesheets -->
+  <link rel="stylesheet" href="core/design-system.css">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="core/comments.css">
+
+  <!-- App Icons -->
+  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icon-192.png" sizes="192x192">
+  <link rel="manifest" href="manifest.json">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="हाम्रो संसार">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <!-- WELCOME SPLASH STYLES -->
+  <style>
+    #welcomeSplash {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 24px;
+      background:
+        radial-gradient(
+          circle at 50% 35%,
+          rgba(37, 99, 235, 0.12),
+          transparent 42%
+        ),
+        var(--color-background, #f4f7fb);
+      color: var(--color-text, #172033);
+      font-family: var(--font-main, "Noto Sans Devanagari", sans-serif);
+      opacity: 1;
+      visibility: visible;
+      transition:
+        opacity 0.55s ease,
+        visibility 0.55s ease;
+    }
+
+    #welcomeSplash.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .welcome-content {
+      width: min(100%, 360px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      animation: welcome-enter 0.85s ease both;
+    }
+
+    .welcome-logo-wrap {
+      width: 116px;
+      height: 116px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 25px;
+      border-radius: 34px;
+      background: var(--color-surface, #ffffff);
+      border: 1px solid var(--color-border, #e2e8f0);
+      box-shadow:
+        0 15px 40px rgba(37, 99, 235, 0.14),
+        0 0 0 9px rgba(37, 99, 235, 0.045);
+      animation: welcome-float 2.6s ease-in-out infinite;
+    }
+
+    .welcome-logo {
+      width: 88px;
+      height: 88px;
+      object-fit: contain;
+      border-radius: 24px;
+    }
+
+    .welcome-logo-fallback {
+      display: none;
+      width: 88px;
+      height: 88px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 24px;
+      background: var(--color-primary, #2563eb);
+      color: #ffffff;
+      font-size: 43px;
+      font-weight: 800;
+    }
+
+    .welcome-title {
+      margin: 0;
+      color: var(--color-text, #172033);
+      font-size: clamp(27px, 7vw, 35px);
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      line-height: 1.5;
+    }
+
+    .welcome-tagline {
+      margin: 9px 0 0;
+      color: var(--color-text-secondary, #475569);
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.1px;
+    }
+
+    .welcome-divider {
+      width: 54px;
+      height: 4px;
+      margin: 25px 0 23px;
+      border-radius: 99px;
+      background: var(--color-primary, #2563eb);
+      opacity: 0.85;
+    }
+
+    .welcome-loading {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--color-muted, #64748b);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .welcome-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--color-primary, #2563eb);
+      animation: welcome-pulse 1s ease-in-out infinite;
+    }
+
+    .welcome-dot:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    .welcome-dot:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    .welcome-footer {
+      position: absolute;
+      bottom: 25px;
+      left: 0;
+      width: 100%;
+      padding: 0 15px;
+      color: var(--color-muted, #64748b);
+      font-size: 11px;
+      text-align: center;
+      opacity: 0.8;
+    }
+
+    @keyframes welcome-enter {
+      from {
+        opacity: 0;
+        transform: translateY(18px) scale(0.97);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes welcome-float {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-7px);
+      }
+    }
+
+    @keyframes welcome-pulse {
+      0%, 80%, 100% {
+        opacity: 0.35;
+        transform: scale(0.75);
+      }
+      40% {
+        opacity: 1;
+        transform: scale(1.15);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #welcomeSplash *,
+      #welcomeSplash *::before,
+      #welcomeSplash *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- WELCOME SPLASH -->
+  <div id="welcomeSplash" role="status" aria-label="हाम्रो संसार खुल्दैछ">
+
+    <div class="welcome-content">
+
+      <div class="welcome-logo-wrap">
+        <img
+          src="Nepal.jpg"
+          class="welcome-logo"
+          alt="हाम्रो संसार"
+          onerror="
+            this.style.display='none';
+            document.getElementById('welcomeLogoFallback').style.display='flex';
+          "
+        >
+
+        <div
+          id="welcomeLogoFallback"
+          class="welcome-logo-fallback"
+          aria-hidden="true"
+        >
+          ह
+        </div>
+      </div>
+
+      <h1 class="welcome-title">हाम्रो संसार</h1>
+
+      <p class="welcome-tagline">
+        साथी जोडौँ, कुरा गरौँ
+      </p>
+
+      <div class="welcome-divider"></div>
+
+      <div class="welcome-loading" aria-label="लोड हुँदैछ">
+        <span>तयार हुँदैछ</span>
+        <span class="welcome-dot"></span>
+        <span class="welcome-dot"></span>
+        <span class="welcome-dot"></span>
+      </div>
+
+    </div>
+
+    <div class="welcome-footer">
+      तपाईंहरूको आफ्नै डिजिटल संसार
+    </div>
+
+  </div>
+  <!-- END WELCOME SPLASH -->
+
+
+  <!-- APPLICATION HEADER -->
+  <header class="app-header">
+    <div class="header-inner">
+
+      <div class="brand">
+        <div class="brand-logo">
+          <img
+            src="Nepal.jpg"
+            class="brand-logo-image"
+            alt="हाम्रो संसार लोगो"
+            loading="eager"
+          >
+        </div>
+
+        <div class="brand-text">
+          <h1 class="brand-name" data-i18n="appName">
+            हाम्रो संसार
+          </h1>
+
+          <p class="brand-tagline" data-i18n="tagline">
+            साथी जोडौँ, कुरा गरौँ
+          </p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+
+        <button
+          class="icon-button"
+          id="searchToggle"
+          type="button"
+          aria-label="खोज्नुहोस्"
+          title="खोज्नुहोस्"
+        >⌕</button>
+
+        <button
+          class="icon-button"
+          id="notificationsToggle"
+          type="button"
+          aria-label="सूचनाहरू"
+          title="सूचनाहरू"
+        >🔔</button>
+
+        <button
+          class="icon-button"
+          id="installAppButton"
+          type="button"
+          aria-label="एप इन्स्टल गर्नुहोस्"
+          title="एप इन्स्टल गर्नुहोस्"
+          hidden
+        >⬇</button>
+
+      </div>
+    </div>
+  </header>
+
+
+  <div
+    id="networkStatus"
+    class="network-status"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+    hidden
+  ></div>
+
+
+  <div
+    id="pwaUpdateBanner"
+    class="pwa-update-banner"
+    role="region"
+    aria-labelledby="pwaUpdateTitle"
+    aria-live="polite"
+    hidden
+  >
+    <div class="pwa-update-content">
+      <strong id="pwaUpdateTitle">नयाँ संस्करण उपलब्ध छ</strong>
+      <p id="pwaUpdateMessage">
+        हाम्रो संसारको नयाँ संस्करण तयार छ।
+      </p>
+    </div>
+
+    <div class="pwa-update-actions">
+      <button
+        id="pwaUpdateLater"
+        class="pwa-update-button pwa-update-later"
+        type="button"
+      >Later</button>
+
+      <button
+        id="pwaUpdateNow"
+        class="pwa-update-button pwa-update-now"
+        type="button"
+      >Update Now</button>
+    </div>
+  </div>
+
+
+  <!-- MAIN APPLICATION -->
+  <main class="app-main">
+
+    <!-- SEARCH -->
+    <section id="searchPanel" class="search-panel hidden">
+
+      <input
+        id="searchInput"
+        class="form-input"
+        type="search"
+        placeholder="साथी वा पोस्ट खोज्नुहोस्..."
+        aria-label="खोज्नुहोस्"
+        data-i18n-placeholder="searchPlaceholder"
+      >
+
+      <div
+        id="searchResults"
+        class="search-results hidden"
+        aria-live="polite"
+        aria-label="Search results"
+      ></div>
+
+    </section>
+
+
+    <!-- HOME PAGE -->
+    <section id="homePage" class="page">
+
+      <section class="stories-section">
+        <h2 class="section-title" data-i18n="stories">
+          स्टोरीहरू
+        </h2>
+
+        <div id="storiesList" class="stories-row"></div>
+      </section>
+
+
+      <section class="composer-card card">
+
+        <div class="composer-top">
+
+          <div class="avatar" aria-hidden="true">+</div>
+
+          <button
+            id="openComposer"
+            class="composer-input composer-trigger"
+            type="button"
+            data-i18n="writePost"
+          >
+            के सोच्दै हुनुहुन्छ?
+          </button>
+
+        </div>
+
+        <div class="composer-actions">
+          <button
+            class="composer-tool"
+            id="quickText"
+            type="button"
+          >✍️ लेख्नुहोस्</button>
+        </div>
+
+      </section>
+
+
+      <section class="feed-section">
+
+        <h2 class="section-title" data-i18n="feed">
+          नयाँ पोस्टहरू
+        </h2>
+
+        <div id="feedList"></div>
+
+        <div id="emptyFeed" class="empty-state hidden">
+
+          <div class="empty-state-icon">📝</div>
+
+          <h3 class="empty-state-title" data-i18n="emptyFeed">
+            अहिलेसम्म पोस्ट छैन
+          </h3>
+
+          <p>
+            पहिलो पोस्ट गरेर साथीहरूसँग कुरा सुरु गर्नुहोस्।
+          </p>
+
+        </div>
+
+      </section>
+
+    </section>
+
+
+    <!-- OTHER PAGES -->
+    <section id="otherPage" class="page hidden">
+
+      <div class="card page-content-card">
+
+        <div class="other-page-heading">
+          <h2 id="otherPageTitle">पृष्ठ</h2>
+        </div>
+
+        <div id="otherPageText">
+          <p>यो सुविधा क्रमशः थपिँदैछ।</p>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <!-- BOTTOM NAVIGATION -->
+  <nav
+    class="bottom-nav"
+    id="bottomNav"
+    aria-label="मुख्य Navigation"
+  >
+
+    <div class="bottom-nav-inner">
+
+      <button
+        class="nav-item active"
+        type="button"
+        data-page="home"
+        aria-label="Home"
+        aria-current="page"
+      >
+        <span class="nav-icon">🏠</span>
+        <span data-i18n="home">होम</span>
+      </button>
+
+
+      <button
+        class="nav-item"
+        type="button"
+        data-page="friends"
+        aria-label="Friends"
+      >
+        <span class="nav-icon">👥</span>
+        <span data-i18n="friends">साथीहरू</span>
+      </button>
+
+
+      <button
+        class="nav-item nav-create"
+        type="button"
+        data-page="create"
+        aria-label="Create Post"
+      >
+        <span class="nav-icon">＋</span>
+        <span data-i18n="create">पोस्ट</span>
+      </button>
+
+
+      <button
+        class="nav-item"
+        type="button"
+        data-page="messages"
+        aria-label="Messages"
+      >
+        <span class="nav-icon">💬</span>
+        <span data-i18n="messages">सन्देश</span>
+      </button>
+
+
+      <button
+        class="nav-item"
+        type="button"
+        data-page="profile"
+        aria-label="Profile"
+      >
+        <span class="nav-icon">👤</span>
+        <span data-i18n="profile">प्रोफाइल</span>
+      </button>
+
+    </div>
+
+  </nav>
+
+
+  <!-- SETTINGS MODAL -->
+  <div
+    id="settingsModal"
+    class="modal-backdrop hidden"
+    aria-hidden="true"
+  >
+
+    <section
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settingsTitle"
+    >
+
+      <header class="modal-header">
+
+        <h2 id="settingsTitle" class="modal-title">
+          सेटिङ
+        </h2>
+
+        <button
+          id="closeSettings"
+          class="icon-button"
+          type="button"
+          aria-label="बन्द गर्नुहोस्"
+        >×</button>
+
+      </header>
+
+      <div class="modal-body" id="settingsBody">
+        <div class="empty-state">
+          <p>सेटिङ लोड हुँदैछ...</p>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+
+  <!-- TOAST -->
+  <div
+    id="toastContainer"
+    class="toast-container"
+    aria-live="polite"
+    aria-atomic="true"
+  ></div>
+
+
+  <!-- CORE MODULES -->
+  <script src="core/state.js"></script>
+  <script src="core/settings.js"></script>
+  <script src="core/theme.js"></script>
+  <script src="core/language.js"></script>
+  <script src="core/toast.js"></script>
+  <script src="core/utils.js"></script>
+  <script src="core/media.js"></script>
+  <script src="core/modal.js"></script>
+  <script src="core/data.js"></script>
+  <script src="core/content-safety.js"></script>
+  <script src="core/data-saver.js"></script>
+  <script src="core/post-actions.js"></script>
+  <script src="core/comments.js"></script>
+  <script src="core/reactions.js"></script>
+  <script src="core/share.js"></script>
+
+
+  <!-- UI MODULES -->
+  <script src="core/settings-ui.js"></script>
+  <script src="core/media-ui.js"></script>
+  <script src="core/profile-media.js"></script>
+  <script src="core/avatar-ui.js"></script>
+
+
+  <!-- COMPONENTS -->
+  <script src="components/user-card.js"></script>
+  <script src="components/message-item.js"></script>
+  <script src="components/post-card.js"></script>
+
+
+  <!-- HOME PAGE MODULE -->
+  <script src="pages/home.js"></script>
+  <script src="pages/story-ui-upgrade.js"></script>
+
+
+  <!-- PAGE MODULES -->
+  <script src="pages/friends.js"></script>
+  <script src="pages/messages.js"></script>
+  <script src="pages/profile.js"></script>
+  <script src="pages/profile-extras.js"></script>
+  <script src="core/accessibility.js"></script>
+  <script src="pages/drafts.js"></script>
+  <script src="pages/insights.js"></script>
+  <script src="core/tone.js"></script>
+  <script src="pages/notifications.js"></script>
+  <script src="pages/saved.js"></script>
+  <script src="pages/settings.js"></script>
+
+
+  <!-- NAVIGATION -->
+  <script src="core/navigation.js"></script>
+  <script src="core/search.js"></script>
+  <script src="core/app-events.js"></script>
+  <script src="core/ui-actions.js"></script>
+  <script src="core/data-refresh.js"></script>
+
+
+  <!-- MAIN APPLICATION -->
+  <script src="app.js"></script>
+
+
+  <!-- PWA -->
+  <script src="core/pwa-install.js"></script>
+  <script src="core/network-status.js"></script>
+  <script src="core/pwa-update.js"></script>
+
+
+  <!-- WELCOME SPLASH CONTROLLER -->
+  <script>
+    (function () {
+      "use strict";
+
+      var splash = document.getElementById("welcomeSplash");
+
+      if (!splash) return;
+
+      // Splash is shown briefly, then removed from the screen.
+      function hideWelcomeSplash() {
+        if (!splash || splash.classList.contains("is-hidden")) {
+          return;
+        }
+
+        splash.classList.add("is-hidden");
+
+        window.setTimeout(function () {
+          if (splash && splash.parentNode) {
+            splash.parentNode.removeChild(splash);
+          }
+        }, 650);
+      }
+
+      // Normal welcome duration.
+      window.setTimeout(hideWelcomeSplash, 2200);
+
+      // Fallback: do not leave the splash covering the app.
+      window.addEventListener("load", function () {
+        window.setTimeout(hideWelcomeSplash, 900);
+      });
+
+    })();
+  </script>
+
+</body>
+</html>
