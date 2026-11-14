@@ -1,8 +1,9 @@
+
 "use strict";
 
 /* =========================================================
    MERO SANSAR — SUPABASE AUTHENTICATION
-   Email + Password + Email Verification + Password Recovery
+   Email + Password + Verification + Recovery + Account
 ========================================================= */
 
 (function (global) {
@@ -355,6 +356,67 @@
   }
 
   /* =======================================================
+     CHANGE PASSWORD — REAUTHENTICATE CURRENT USER
+  ======================================================= */
+
+  async function changePassword(currentPassword, newPassword) {
+    const api = await initializeClient();
+
+    if (!isAuthenticated() || !session?.user?.email) {
+      throw new Error(t(
+        "पासवर्ड परिवर्तन गर्न पहिले लगइन गर्नुहोस्।",
+        "Please sign in before changing your password."
+      ));
+    }
+
+    if (!currentPassword) {
+      throw new Error(t(
+        "हालको पासवर्ड लेख्नुहोस्।",
+        "Enter your current password."
+      ));
+    }
+
+    if (String(newPassword).length < 8) {
+      throw new Error(t(
+        "नयाँ पासवर्ड कम्तीमा ८ अक्षरको हुनुपर्छ।",
+        "New password must be at least 8 characters."
+      ));
+    }
+
+    if (currentPassword === newPassword) {
+      throw new Error(t(
+        "नयाँ पासवर्ड हालको पासवर्डभन्दा फरक हुनुपर्छ।",
+        "Your new password must be different from the current password."
+      ));
+    }
+
+    const verification = await api.auth.signInWithPassword({
+      email: session.user.email,
+      password: currentPassword
+    });
+
+    if (verification.error) throw verification.error;
+
+    session = verification.data?.session || session;
+
+    const result = await api.auth.updateUser({
+      password: newPassword
+    });
+
+    if (result.error) throw result.error;
+
+    if (result.data?.user && session) {
+      session = {
+        ...session,
+        user: result.data.user
+      };
+    }
+
+    dispatchAuthChange();
+    return true;
+  }
+
+  /* =======================================================
      UPDATE PASSWORD — AFTER RESET LINK
   ======================================================= */
 
@@ -631,20 +693,86 @@
   }
 
   function renderSignedInPanel() {
+    const user = session?.user || {};
+    const createdAt = user.created_at
+      ? new Date(user.created_at).toLocaleDateString(
+          global.KSKLanguage?.getLanguage?.() === "en" ? "en" : "ne",
+          { year: "numeric", month: "long", day: "numeric" }
+        )
+      : t("उपलब्ध छैन", "Not available");
+
     return `
       <div id="${PANEL_ID}">
         <div class="ksk-auth-heading">
           <span class="ksk-auth-icon">✓</span>
           <span>
-            <strong>${t("खाता पुष्टि भयो", "Verified account")}</strong>
-            <small>${t("तपाईं लगइन हुनुहुन्छ।", "You are signed in.")}</small>
+            <strong>${t("तपाईंको खाता", "Your account")}</strong>
+            <small>${t("तपाईं सुरक्षित रूपमा लगइन हुनुहुन्छ।", "You are securely signed in.")}</small>
           </span>
         </div>
 
         <div class="ksk-auth-user">
-          <strong>${t("पुष्टि गरिएको इमेल", "Verified email")}</strong>
-          <small>${escapeHTML(session?.user?.email || "")}</small>
+          <div>
+            <strong>${t("पुष्टि गरिएको इमेल", "Verified email")}</strong>
+            <small>${escapeHTML(user.email || "")}</small>
+          </div>
+
+          <div style="margin-top:10px">
+            <strong>${t("खाता सिर्जना भएको मिति", "Account created")}</strong>
+            <small>${escapeHTML(createdAt)}</small>
+          </div>
+
+          <div style="margin-top:10px">
+            <strong>${t("इमेल स्थिति", "Email status")}</strong>
+            <small>${t("पुष्टि भएको", "Verified")}</small>
+          </div>
         </div>
+
+        <div class="ksk-auth-heading" style="margin-top:18px">
+          <span class="ksk-auth-icon">🔑</span>
+          <span>
+            <strong>${t("पासवर्ड परिवर्तन", "Change password")}</strong>
+            <small>${t("पहिचान पुष्टि गर्न हालको पासवर्ड आवश्यक छ।", "Your current password is required to verify your identity.")}</small>
+          </span>
+        </div>
+
+        <form data-password-change-form>
+          <label class="ksk-auth-field">
+            <span>${t("हालको पासवर्ड", "Current password")}</span>
+            <input
+              type="password"
+              name="currentPassword"
+              autocomplete="current-password"
+              maxlength="128"
+              required>
+          </label>
+
+          <label class="ksk-auth-field">
+            <span>${t("नयाँ पासवर्ड", "New password")}</span>
+            <input
+              type="password"
+              name="newPassword"
+              autocomplete="new-password"
+              minlength="8"
+              maxlength="128"
+              required>
+          </label>
+
+          <label class="ksk-auth-field">
+            <span>${t("नयाँ पासवर्ड फेरि लेख्नुहोस्", "Confirm new password")}</span>
+            <input
+              type="password"
+              name="confirmPassword"
+              autocomplete="new-password"
+              minlength="8"
+              maxlength="128"
+              required>
+          </label>
+
+          <button class="ksk-auth-primary" type="submit">
+            ${t("पासवर्ड सुरक्षित रूपमा परिवर्तन गर्नुहोस्", "Update password securely")}
+          </button>
+        </form>
 
         <button
           type="button"
@@ -698,6 +826,57 @@
   ======================================================= */
 
   async function handleSubmit(event) {
+    const passwordForm = event.target.closest("[data-password-change-form]");
+
+    if (passwordForm) {
+      event.preventDefault();
+
+      const formData = new FormData(passwordForm);
+      const currentPassword = String(formData.get("currentPassword") || "");
+      const newPassword = String(formData.get("newPassword") || "");
+      const confirmPassword = String(formData.get("confirmPassword") || "");
+
+      if (newPassword.length < 8) {
+        setStatus(t(
+          "नयाँ पासवर्ड कम्तीमा ८ अक्षरको हुनुपर्छ।",
+          "New password must be at least 8 characters."
+        ), "error");
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        setStatus(t(
+          "दुवै नयाँ पासवर्ड मिलेनन्।",
+          "The new passwords do not match."
+        ), "error");
+        return;
+      }
+
+      setBusy(true);
+      setStatus(t(
+        "पासवर्ड सुरक्षित रूपमा परिवर्तन हुँदैछ...",
+        "Updating your password securely..."
+      ));
+
+      try {
+        await changePassword(currentPassword, newPassword);
+        passwordForm.reset();
+
+        setStatus(t(
+          "पासवर्ड सफलतापूर्वक परिवर्तन भयो।",
+          "Your password was changed successfully."
+        ), "success");
+
+      } catch (error) {
+        setStatus(getErrorMessage(error), "error");
+
+      } finally {
+        setBusy(false);
+      }
+
+      return;
+    }
+
     const form = event.target.closest("[data-auth-form]");
     if (!form) return;
 
@@ -748,6 +927,7 @@
 
     } catch (error) {
       setStatus(getErrorMessage(error), "error");
+
     } finally {
       setBusy(false);
     }
@@ -773,7 +953,12 @@
 
       try {
         await signOut();
-        notify(t("लगआउट सफल भयो।", "Logged out successfully."), "success");
+
+        notify(
+          t("लगआउट सफल भयो।", "Logged out successfully."),
+          "success"
+        );
+
       } catch (error) {
         setStatus(getErrorMessage(error), "error");
         button.disabled = false;
@@ -811,6 +996,7 @@
 
       } catch (error) {
         setStatus(getErrorMessage(error), "error");
+
       } finally {
         button.disabled = false;
       }
@@ -875,7 +1061,10 @@
       return true;
 
     } catch (error) {
-      console.error("Authentication initialization failed:", error);
+      console.error(
+        "Authentication initialization failed:",
+        error
+      );
 
       global.dispatchEvent(new CustomEvent(
         "ksk:auth-ready",
@@ -920,6 +1109,7 @@
     signIn,
     signOut,
     resetPassword,
+    changePassword,
     updatePassword,
 
     render() {
