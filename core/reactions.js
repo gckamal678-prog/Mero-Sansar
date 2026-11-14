@@ -1,15 +1,20 @@
 
 "use strict";
 
-/* =========================================================
-   KSK REACTIONS
-   Responsibility:
-   - Post reaction picker
-   - Comment reaction picker
-   - Select, change and remove reactions
-   - Persist reactions through KSKData
-   - Shared emoji animation
-========================================================= */
+/*
+ * MERO SANSAR — SUPABASE REACTIONS
+ *
+ * POST REACTIONS:
+ * - Supabase database persistence
+ * - Add, change and remove reactions
+ * - Live reaction counts on the loaded feed
+ * - Current user's reaction state
+ *
+ * COMMENT REACTIONS:
+ * - Disabled until comment reaction database is ready
+ *
+ * DATA SOURCE: Supabase only
+ */
 
 (function (global) {
   "use strict";
@@ -24,10 +29,15 @@
     { emoji: "🤓", label: "Smart" }
   ];
 
+  const TABLE = "post_reactions";
+  const ANIMATION_STYLE_ID = "ksk-like-animation-style";
+
   let activePicker = null;
   let activeTriggerButton = null;
+  let activeRequest = 0;
 
-  const ANIMATION_STYLE_ID = "ksk-like-animation-style";
+  const $ = (selector, root = document) =>
+    root.querySelector(selector);
 
   function escapeHTML(value) {
     return String(value ?? "").replace(/[&<>"']/g, char => ({
@@ -39,15 +49,117 @@
     })[char]);
   }
 
-  function getPost(id) {
-    return global.KSKData?.getPost?.(id) || null;
+  function showMessage(message, type = "error") {
+    if (typeof global.KSKToast?.show === "function") {
+      global.KSKToast.show(message, type);
+      return;
+    }
+
+    console.warn(message);
   }
 
-  function getComment(postId, commentId) {
-    return global.KSKData?.getComment?.(
-      postId,
-      commentId
+  /* =========================================
+     SUPABASE CONTEXT
+  ========================================= */
+
+  async function getSupabaseContext() {
+    const auth = global.KSKSupabaseAuth;
+
+    if (!auth) {
+      throw new Error("Supabase Authentication उपलब्ध छैन।");
+    }
+
+    if (typeof auth.initialize === "function") {
+      const initialized = await auth.initialize();
+
+      if (!initialized) {
+        throw new Error("Supabase Authentication सुरु हुन सकेन।");
+      }
+    }
+
+    if (!auth.isAuthenticated?.()) {
+      throw new Error("Reaction गर्न Login गर्नुहोस्।");
+    }
+
+    const client = auth.getClient?.();
+    const user = auth.getUser?.();
+
+    if (!client || !user?.id) {
+      throw new Error("Supabase User उपलब्ध छैन।");
+    }
+
+    return { client, user };
+  }
+
+  /* =========================================
+     CLOUD POSTS
+  ========================================= */
+
+  function getPost(postId) {
+    const posts = global.KSKHomePage?.getPosts?.();
+
+    if (!Array.isArray(posts)) return null;
+
+    return posts.find(post =>
+      String(post?.id || "") === String(postId || "")
     ) || null;
+  }
+
+  function updatePostReactionState(postId, rows, userId) {
+    const post = getPost(postId);
+
+    if (!post) return false;
+
+    const counts = {};
+
+    let myReaction = "";
+
+    (Array.isArray(rows) ? rows : []).forEach(row => {
+      const emoji = String(row?.emoji || "");
+
+      if (!REACTIONS.some(item => item.emoji === emoji)) {
+        return;
+      }
+
+      counts[emoji] = (counts[emoji] || 0) + 1;
+
+      if (String(row?.user_id || "") === String(userId)) {
+        myReaction = emoji;
+      }
+    });
+
+    post.reactionCounts = counts;
+    post.myReaction = myReaction;
+    post.liked = Boolean(myReaction);
+    post.likes = Object.values(counts).reduce(
+      (total, count) => total + count,
+      0
+    );
+
+    return true;
+  }
+
+  async function loadPostReactions(postId) {
+    const { client, user } = await getSupabaseContext();
+
+    const { data, error } = await client
+      .from(TABLE)
+      .select("user_id, emoji")
+      .eq("post_id", postId);
+
+    if (error) throw error;
+
+    const rows = Array.isArray(data) ? data : [];
+
+    updatePostReactionState(postId, rows, user.id);
+
+    return {
+      rows,
+      myReaction: rows.find(row =>
+        String(row.user_id) === String(user.id)
+      )?.emoji || "",
+      likes: rows.length
+    };
   }
 
   /* =========================================
@@ -60,6 +172,7 @@
     }
 
     const style = document.createElement("style");
+
     style.id = ANIMATION_STYLE_ID;
 
     style.textContent = `
@@ -146,53 +259,44 @@
   ========================================= */
 
   function closePicker() {
+    activeRequest += 1;
+
     if (activePicker) {
       activePicker.remove();
     }
 
     activePicker = null;
     activeTriggerButton = null;
+
+    return true;
   }
 
-  function renderPicker(
-    contextType,
-    postId,
-    commentId = "",
-    currentReaction = ""
-  ) {
+  function renderPicker(postId, currentReaction = "") {
     closePicker();
 
     const picker = document.createElement("div");
 
     picker.className = "ksk-reaction-picker";
     picker.setAttribute("role", "group");
+    picker.setAttribute("aria-label", "पोस्ट Reaction छान्नुहोस्");
 
-    picker.setAttribute(
-      "aria-label",
-      contextType === "comment"
-        ? "टिप्पणी Reaction छान्नुहोस्"
-        : "पोस्ट Reaction छान्नुहोस्"
-    );
-
-    picker.dataset.contextType = contextType;
+    picker.dataset.contextType = "post";
     picker.dataset.postId = postId;
 
-    if (commentId) {
-      picker.dataset.commentId = commentId;
-    }
+    picker.innerHTML = REACTIONS.map(item => {
+      const selected = currentReaction === item.emoji;
 
-    picker.innerHTML = REACTIONS.map(item => `
-      <button
-        type="button"
-        class="ksk-reaction-option ${
-          currentReaction === item.emoji ? "is-selected" : ""
-        }"
-        data-ksk-reaction="${escapeHTML(item.emoji)}"
-        aria-label="${escapeHTML(item.label)}"
-        aria-pressed="${currentReaction === item.emoji}"
-        title="${escapeHTML(item.label)}"
-      >${item.emoji}</button>
-    `).join("");
+      return `
+        <button
+          type="button"
+          class="ksk-reaction-option ${selected ? "is-selected" : ""}"
+          data-ksk-reaction="${escapeHTML(item.emoji)}"
+          aria-label="${escapeHTML(item.label)}"
+          aria-pressed="${selected}"
+          title="${escapeHTML(item.label)}"
+        >${item.emoji}</button>
+      `;
+    }).join("");
 
     document.body.appendChild(picker);
 
@@ -209,7 +313,7 @@
       10,
       Math.min(
         rect.left + rect.width / 2 - width / 2,
-        window.innerWidth - width - 10
+        global.innerWidth - width - 10
       )
     );
 
@@ -222,52 +326,62 @@
     picker.style.top = `${top}px`;
   }
 
-  function openPicker(button, contextType) {
-    const postId = button.dataset.postId;
+  async function openPicker(button) {
+    const postId = button?.dataset?.postId;
 
-    if (!postId) return;
+    if (!postId) return false;
 
-    let commentId = "";
-    let currentReaction = "";
+    const post = getPost(postId);
 
-    if (contextType === "comment") {
-      commentId = button.dataset.commentId;
-
-      if (!commentId) return;
-
-      const comment = getComment(postId, commentId);
-
-      if (!comment) return;
-
-      currentReaction = comment.myReaction || "";
-    } else {
-      const post = getPost(postId);
-
-      if (!post) return;
-
-      currentReaction = post.myReaction || "";
+    if (!post) {
+      showMessage("पोस्ट उपलब्ध छैन।");
+      return false;
     }
 
-    const picker = renderPicker(
-      contextType,
-      postId,
-      commentId,
-      currentReaction
-    );
+    const requestId = ++activeRequest;
 
-    activeTriggerButton = button;
+    closePicker();
 
-    positionPicker(button, picker);
+    const currentRequest = activeRequest;
+
+    try {
+      await loadPostReactions(postId);
+
+      if (currentRequest !== activeRequest) return false;
+
+      const picker = renderPicker(
+        postId,
+        post.myReaction || ""
+      );
+
+      activeTriggerButton = button;
+
+      positionPicker(button, picker);
+
+      return true;
+
+    } catch (error) {
+      console.error("Reaction load failed:", error);
+
+      showMessage(
+        error?.message || "Reaction लोड गर्न सकिएन।"
+      );
+
+      return false;
+    }
   }
 
   /* =========================================
      SAVE POST REACTION
   ========================================= */
 
-  function selectReaction(postId, emoji) {
+  async function selectReaction(postId, emoji) {
     const post = getPost(postId);
 
-    if (!post) return false;
+    if (!post) {
+      showMessage("पोस्ट उपलब्ध छैन।");
+      return false;
+    }
 
     const valid = REACTIONS.some(
       item => item.emoji === emoji
@@ -275,84 +389,78 @@
 
     if (!valid) return false;
 
-    const current = post.myReaction || "";
+    try {
+      const { client, user } = await getSupabaseContext();
 
-    const counts = {
-      ...(post.reactionCounts || {})
-    };
+      // पहिले हालको Reaction पढ्ने।
+      const { data: existing, error: readError } = await client
+        .from(TABLE)
+        .select("id, emoji")
+        .eq("post_id", postId)
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-    let likes = Math.max(
-      0,
-      Number(post.likes || 0)
-    );
+      if (readError) throw readError;
 
-    if (current === emoji) {
-      counts[emoji] = Math.max(
-        0,
-        Number(counts[emoji] || 0) - 1
+      if (existing?.emoji === emoji) {
+        // एउटै Reaction फेरि छान्दा हटाउने।
+        const { error } = await client
+          .from(TABLE)
+          .delete()
+          .eq("post_id", postId)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+
+      } else {
+        // नयाँ Reaction वा पुरानो Reaction परिवर्तन गर्ने।
+        const { error } = await client
+          .from(TABLE)
+          .upsert(
+            {
+              post_id: postId,
+              user_id: user.id,
+              emoji,
+              updated_at: new Date().toISOString()
+            },
+            {
+              onConflict: "post_id,user_id"
+            }
+          );
+
+        if (error) throw error;
+      }
+
+      // Database बाट वास्तविक अवस्था फेरि पढ्ने।
+      await loadPostReactions(postId);
+
+      return true;
+
+    } catch (error) {
+      console.error("Reaction save failed:", error);
+
+      showMessage(
+        error?.message || "Reaction सुरक्षित गर्न सकिएन।"
       );
 
-      likes = Math.max(0, likes - 1);
-
-      return Boolean(
-        global.KSKData.updatePost(postId, {
-          myReaction: "",
-          reactionCounts: counts,
-          liked: false,
-          likes
-        })
-      );
+      return false;
     }
-
-    if (current) {
-      counts[current] = Math.max(
-        0,
-        Number(counts[current] || 0) - 1
-      );
-    } else if (!post.liked) {
-      likes += 1;
-    }
-
-    counts[emoji] = Number(
-      counts[emoji] || 0
-    ) + 1;
-
-    return Boolean(
-      global.KSKData.updatePost(postId, {
-        myReaction: emoji,
-        reactionCounts: counts,
-        liked: true,
-        likes
-      })
-    );
   }
 
   /* =========================================
-     SAVE COMMENT REACTION
+     COMMENT REACTION
   ========================================= */
 
-  function selectCommentReaction(
+  async function selectCommentReaction(
     postId,
     commentId,
     emoji
   ) {
-    const valid = REACTIONS.some(
-      item => item.emoji === emoji
+    showMessage(
+      "Comment Reaction सुविधा अझै तयार भएको छैन।"
     );
 
-    if (!valid) return false;
-
-    const comment = getComment(postId, commentId);
-
-    if (!comment) return false;
-
-    return Boolean(
-      global.KSKData?.setCommentReaction?.(
-        postId,
-        commentId,
-        emoji
-      )
-    );
+    return false;
   }
 
   /* =========================================
@@ -360,59 +468,46 @@
   ========================================= */
 
   function refreshFeed() {
-    global.KSKApp?.refreshCurrentPage?.();
-  }
+    if (typeof global.KSKHomePage?.renderFeed === "function") {
+      global.KSKHomePage.renderFeed();
+      return true;
+    }
 
-  function refreshComments() {
-    global.KSKComments?.refresh?.();
+    if (typeof global.KSKApp?.refreshCurrentPage === "function") {
+      global.KSKApp.refreshCurrentPage();
+      return true;
+    }
+
+    return false;
   }
 
   /* =========================================
      HANDLE REACTION SELECTION
   ========================================= */
 
-  function handleReactionSelection(option) {
+  async function handleReactionSelection(option) {
     if (!activePicker || !activePicker.contains(option)) {
       return false;
     }
 
-    const contextType =
-      activePicker.dataset.contextType;
-
-    const postId =
-      activePicker.dataset.postId;
-
-    const commentId =
-      activePicker.dataset.commentId || "";
-
+    const postId = activePicker.dataset.postId;
     const emoji = option.dataset.kskReaction;
-
     const triggerButton = activeTriggerButton;
 
     const animationRect =
       triggerButton?.getBoundingClientRect?.() || null;
 
-    let previousReaction = "";
+    const post = getPost(postId);
+    const previousReaction = post?.myReaction || "";
 
-    if (contextType === "comment") {
-      const comment = getComment(postId, commentId);
-      previousReaction = comment?.myReaction || "";
-    } else {
-      const post = getPost(postId);
-      previousReaction = post?.myReaction || "";
-    }
+    // Double click रोक्ने।
+    activePicker
+      .querySelectorAll("button")
+      .forEach(button => {
+        button.disabled = true;
+      });
 
-    let success = false;
-
-    if (contextType === "comment") {
-      success = selectCommentReaction(
-        postId,
-        commentId,
-        emoji
-      );
-    } else {
-      success = selectReaction(postId, emoji);
-    }
+    const success = await selectReaction(postId, emoji);
 
     closePicker();
 
@@ -426,11 +521,7 @@
       showLikeAnimationAt(animationRect, emoji);
     }
 
-    if (contextType === "comment") {
-      refreshComments();
-    } else {
-      refreshFeed();
-    }
+    refreshFeed();
 
     return true;
   }
@@ -444,10 +535,8 @@
 
     if (!target?.closest) return;
 
-    // पहिले Emoji Picker भित्रको विकल्प जाँच गर्ने।
-    const option = target.closest(
-      "[data-ksk-reaction]"
-    );
+    // Reaction विकल्प।
+    const option = target.closest("[data-ksk-reaction]");
 
     if (option && activePicker?.contains(option)) {
       event.preventDefault();
@@ -457,7 +546,7 @@
       return;
     }
 
-    // Comment Emoji Picker खोल्ने।
+    // Comment Reaction हाल उपलब्ध छैन।
     const commentReactionButton = target.closest(
       "[data-comment-reaction]"
     );
@@ -466,15 +555,14 @@
       event.preventDefault();
       event.stopImmediatePropagation();
 
-      openPicker(
-        commentReactionButton,
-        "comment"
+      showMessage(
+        "Comment Reaction सुविधा अझै तयार भएको छैन।"
       );
 
       return;
     }
 
-    // Post Emoji Picker खोल्ने।
+    // Post Reaction Picker।
     const postReactionButton = target.closest(
       '[data-post-action="like"]'
     );
@@ -483,11 +571,7 @@
       event.preventDefault();
       event.stopImmediatePropagation();
 
-      openPicker(
-        postReactionButton,
-        "post"
-      );
-
+      openPicker(postReactionButton);
       return;
     }
 
@@ -533,12 +617,13 @@
       onKeyDown
     );
 
-    window.addEventListener(
-      "resize",
-      closePicker
-    );
+    global.removeEventListener("resize", closePicker);
 
-    window.addEventListener(
+    global.addEventListener("resize", closePicker);
+
+    global.removeEventListener("scroll", closePicker, true);
+
+    global.addEventListener(
       "scroll",
       closePicker,
       true
@@ -559,12 +644,9 @@
       onKeyDown
     );
 
-    window.removeEventListener(
-      "resize",
-      closePicker
-    );
+    global.removeEventListener("resize", closePicker);
 
-    window.removeEventListener(
+    global.removeEventListener(
       "scroll",
       closePicker,
       true
@@ -583,9 +665,13 @@
     initialize,
     destroy,
     closePicker,
+
     selectReaction,
     selectCommentReaction,
+
     showLikeAnimation,
+
+    loadPostReactions,
 
     getReactions() {
       return REACTIONS.slice();
@@ -601,5 +687,9 @@
   } else {
     initialize();
   }
+
+  console.info(
+    "KSK Supabase Reactions loaded."
+  );
 
 })(window);
