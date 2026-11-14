@@ -260,13 +260,15 @@
      LOAD COMMENTS AND REACTIONS
   ========================================= */
 
+  
   async function loadComments() {
     if (!activePostId) return false;
 
     const { client } = await getContext();
 
-    const [commentResult, reactionResult] = await Promise.all([
-      client
+    // 1. सक्रिय पोस्टका कमेन्ट मात्र लोड गर्ने।
+    const { data: commentRows, error: commentError } =
+      await client
         .from(COMMENTS_TABLE)
         .select([
           "id",
@@ -281,18 +283,17 @@
           "updated_at"
         ].join(","))
         .eq("post_id", activePostId)
-        .order("created_at", { ascending: true }),
+        .order("created_at", { ascending: true });
 
-      client
-        .from(REACTIONS_TABLE)
-        .select("id,comment_id,user_id,emoji")
-    ]);
+    if (commentError) throw commentError;
 
-    if (commentResult.error) throw commentResult.error;
-    if (reactionResult.error) throw reactionResult.error;
+    const rows = Array.isArray(commentRows)
+      ? commentRows
+      : [];
 
-    comments = (commentResult.data || []).map(row => {
-      const parent = (commentResult.data || []).find(item =>
+    // 2. Database rows लाई UI format मा बदल्ने।
+    comments = rows.map(row => {
+      const parent = rows.find(item =>
         String(item.id) === String(row.parent_id || "")
       );
 
@@ -303,9 +304,13 @@
         parentId: row.parent_id || null,
         author: row.author_name || "सदस्य",
         avatar: row.author_avatar_url || "",
-        authorInitial: String(row.author_name || "स").charAt(0),
+        authorInitial: String(
+          row.author_name || "स"
+        ).charAt(0),
         text: row.content || "",
-        mentions: Array.isArray(row.mentions) ? row.mentions : [],
+        mentions: Array.isArray(row.mentions)
+          ? row.mentions
+          : [],
         replyTo: parent?.author_name || "",
         createdAt: row.created_at,
         editedAt:
@@ -315,17 +320,33 @@
       };
     });
 
-    // केवल सक्रिय पोस्टका कमेन्टका Reaction राख्ने।
-    const commentIds = new Set(
-      comments.map(item => String(item.id))
+    // 3. सक्रिय पोस्टका कमेन्ट ID मात्र लिने।
+    const commentIds = comments.map(item =>
+      String(item.id)
     );
 
-    reactions = (reactionResult.data || []).filter(item =>
-      commentIds.has(String(item.comment_id))
-    );
+    // कमेन्ट नभए Reaction query आवश्यक छैन।
+    if (!commentIds.length) {
+      reactions = [];
+      return true;
+    }
+
+    // 4. ती कमेन्टका Reaction मात्र लोड गर्ने।
+    const { data: reactionRows, error: reactionError } =
+      await client
+        .from(REACTIONS_TABLE)
+        .select("id,comment_id,user_id,emoji")
+        .in("comment_id", commentIds);
+
+    if (reactionError) throw reactionError;
+
+    reactions = Array.isArray(reactionRows)
+      ? reactionRows
+      : [];
 
     return true;
   }
+
 
   /* =========================================
      COMMENT TREE
