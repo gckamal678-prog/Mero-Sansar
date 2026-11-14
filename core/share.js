@@ -3,26 +3,30 @@
 
 /*
  * =========================================================
- * KSK — POST SHARE MODULE
+ * MERO SANSAR — LIVE SUPABASE POST SHARE
  *
  * FILE: core/share.js
  *
  * RESPONSIBILITY:
- * - Share post text and author
- * - Share application URL with every post
- * - Share original post photo when supported
- * - Open native mobile share sheet
- * - Copy complete share message as fallback
+ * - Fetch the requested post directly from Supabase.
+ * - Fetch private post media using signed Storage URLs.
+ * - Share text, application URL and photo when supported.
+ * - Copy text and URL when native sharing is unavailable.
  *
  * DEPENDENCIES:
- * - KSKData
- * - KSKMedia
+ * - core/supabase-auth.js
+ * - core/supabase-posts.js
  * - KSKLanguage
  * - KSKToast
  *
+ * DATA:
+ * - public.posts
+ * - posts-media (private Storage bucket)
+ *
  * IMPORTANT:
- * app.js only calls KSKShare.sharePost().
- * All sharing logic belongs to this file.
+ * - No KSKData post lookup.
+ * - No KSKMedia local image lookup.
+ * - No Local Storage fallback.
  * =========================================================
  */
 
@@ -31,12 +35,16 @@
 
   if (global.KSKShare) return;
 
+  const POSTS_TABLE = "posts";
+
   /* =====================================================
      LANGUAGE
   ===================================================== */
 
   function isEnglish() {
-    return global.KSKLanguage?.getLanguage?.() === "en";
+    return (
+      global.KSKLanguage?.getLanguage?.() === "en"
+    );
   }
 
   function message(nepali, english) {
@@ -64,45 +72,105 @@
   }
 
   /* =====================================================
-     POST DATA
+     SUPABASE CONTEXT
   ===================================================== */
 
-  function getPost(id) {
-    if (!id) return null;
+  async function getContext() {
+    const auth = global.KSKSupabaseAuth;
 
-    return global.KSKData?.getPost?.(id) || null;
-  }
+    if (!auth) {
+      throw new Error(
+        "Supabase Authentication उपलब्ध छैन।"
+      );
+    }
 
-  function getPostText(post) {
-    const author = String(
-      post.author ||
-      message("हाम्रो संसार सदस्य", "Hamro Sansar Member")
-    ).trim();
+    const initialized = await auth.initialize();
 
-    const content = String(post.text || "").trim();
+    if (!initialized || !auth.isAuthenticated()) {
+      throw new Error(
+        "पहिले आफ्नो खातामा लगइन गर्नुहोस्।"
+      );
+    }
 
-    return [author, content]
-      .filter(Boolean)
-      .join("\n\n");
+    const client = auth.getClient();
+    const user = auth.getUser();
+
+    if (!client || !user?.id) {
+      throw new Error(
+        "लगइन गरिएको प्रयोगकर्ता भेटिएन।"
+      );
+    }
+
+    return {
+      client,
+      user
+    };
   }
 
   /* =====================================================
-     APPLICATION SHARE URL
+     LIVE POST FETCH
+  ===================================================== */
+
+  async function getPost(postId) {
+    const id = String(postId || "").trim();
+
+    if (!id) {
+      throw new Error(
+        "पोस्ट ID उपलब्ध छैन।"
+      );
+    }
+
+    const { client } = await getContext();
+
+    const { data, error } = await client
+      .from(POSTS_TABLE)
+      .select([
+        "id",
+        "user_id",
+        "content",
+        "media_path",
+        "media_mime_type",
+        "author_name",
+        "author_avatar_url",
+        "created_at"
+      ].join(","))
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error(
+        "पोस्ट भेटिएन वा हेर्ने अनुमति छैन।"
+      );
+    }
+
+    return {
+      id: data.id,
+      authorId: data.user_id || "",
+      author: data.author_name || "सदस्य",
+      text: data.content || "",
+      mediaPath: data.media_path || "",
+      mediaType: data.media_mime_type || "",
+      authorAvatar: data.author_avatar_url || "",
+      createdAt: data.created_at || ""
+    };
+  }
+
+  /* =====================================================
+     APPLICATION URL
   ===================================================== */
 
   function getApplicationUrl() {
     try {
-      if (!global.location?.href || !global.URL) {
+      if (
+        !global.location?.href ||
+        typeof global.URL !== "function"
+      ) {
         return "";
       }
-
-      /*
-       * Current page, query and hash हटाएर
-       * एपको मुख्य URL तयार गर्ने।
-       *
-       * उदाहरण:
-       * https://example.com/Mero-Sansar/
-       */
 
       const appUrl = new global.URL(
         "./",
@@ -129,18 +197,44 @@
   }
 
   /* =====================================================
-     SHARE MESSAGE
+     SHARE TEXT
   ===================================================== */
 
   function getShareTitle(post) {
     return String(
-      post.author ||
-      message("हाम्रो संसार पोस्ट", "Hamro Sansar Post")
+      post?.author ||
+      message(
+        "हाम्रो संसार पोस्ट",
+        "Hamro Sansar Post"
+      )
     ).trim();
   }
 
+  function getPostText(post) {
+    const author = String(
+      post?.author ||
+      message(
+        "हाम्रो संसार सदस्य",
+        "Hamro Sansar Member"
+      )
+    ).trim();
+
+    const content = String(
+      post?.text || ""
+    ).trim();
+
+    return [
+      author,
+      content
+    ].filter(Boolean).join("\n\n");
+  }
+
   function getCompleteShareMessage(text, url) {
-    const parts = [text];
+    const parts = [];
+
+    if (text) {
+      parts.push(text);
+    }
 
     if (url) {
       parts.push(
@@ -151,38 +245,79 @@
       );
     }
 
-    return parts
-      .filter(Boolean)
-      .join("\n\n");
+    return parts.join("\n\n");
   }
 
   /* =====================================================
-     IMAGE FILE
+     SIGNED MEDIA URL
+  ===================================================== */
+
+  async function getPostMediaUrl(post) {
+    if (!post?.mediaPath) {
+      return "";
+    }
+
+    const postsApi = global.KSKSupabasePosts;
+
+    if (
+      typeof postsApi?.getSignedMediaUrl !== "function"
+    ) {
+      throw new Error(
+        "Supabase Media सेवा उपलब्ध छैन।"
+      );
+    }
+
+    const url = await postsApi.getSignedMediaUrl(
+      post.mediaPath
+    );
+
+    if (!url) {
+      throw new Error(
+        "पोस्टको फोटो URL प्राप्त भएन।"
+      );
+    }
+
+    return url;
+  }
+
+  /* =====================================================
+     SIGNED URL TO FILE
   ===================================================== */
 
   async function getPostImageFile(post) {
-    if (!post?.mediaId) {
+    if (!post?.mediaPath) {
       return null;
     }
 
-    const media = global.KSKMedia;
-
-    if (typeof media?.getImage !== "function") {
-      throw new Error("Photo storage is unavailable.");
+    if (typeof global.fetch !== "function") {
+      throw new Error(
+        "यो ब्राउजरमा फोटो प्राप्त गर्न सकिएन।"
+      );
     }
 
-    const record = await media.getImage(post.mediaId);
+    const mediaUrl = await getPostMediaUrl(post);
 
-    if (!record?.blob) {
-      throw new Error("Post photo could not be found.");
+    const response = await global.fetch(mediaUrl);
+
+    if (!response.ok) {
+      throw new Error(
+        "पोस्टको फोटो डाउनलोड गर्न सकिएन।"
+      );
     }
 
-    const blob = record.blob;
+    const blob = await response.blob();
 
-    const mimeType =
+    if (!blob || !blob.size) {
+      throw new Error(
+        "पोस्टको फोटो खाली छ।"
+      );
+    }
+
+    const mimeType = String(
       blob.type ||
-      record.type ||
-      "image/jpeg";
+      post.mediaType ||
+      "image/jpeg"
+    ).toLowerCase();
 
     const extension = mimeType.includes("png")
       ? "png"
@@ -192,10 +327,12 @@
           ? "gif"
           : "jpg";
 
-    const safeId = String(post.id || "post")
-      .replace(/[^a-zA-Z0-9_-]/g, "");
+    const safeId = String(
+      post.id || "post"
+    ).replace(/[^a-zA-Z0-9_-]/g, "");
 
-    const fileName = `hamro-sansar-post-${safeId}.${extension}`;
+    const fileName =
+      `mero-sansar-post-${safeId}.${extension}`;
 
     if (typeof global.File !== "function") {
       return null;
@@ -216,11 +353,9 @@
   ===================================================== */
 
   async function copyText(text) {
-    if (!text) return false;
-
-    /*
-     * Modern Clipboard API
-     */
+    if (!text) {
+      return false;
+    }
 
     if (
       global.navigator?.clipboard?.writeText &&
@@ -229,22 +364,21 @@
       try {
         await global.navigator.clipboard.writeText(text);
         return true;
+
       } catch (error) {
         console.warn(
-          "KSKShare: Modern clipboard failed:",
+          "KSKShare: Clipboard API failed:",
           error
         );
       }
     }
 
-    /*
-     * Older browser fallback
-     */
-
     let textarea = null;
 
     try {
-      textarea = document.createElement("textarea");
+      textarea = global.document.createElement(
+        "textarea"
+      );
 
       textarea.value = text;
       textarea.setAttribute("readonly", "");
@@ -254,13 +388,13 @@
       textarea.style.top = "0";
       textarea.style.opacity = "0";
 
-      document.body.appendChild(textarea);
+      global.document.body.appendChild(textarea);
 
       textarea.focus();
       textarea.select();
 
       return Boolean(
-        document.execCommand("copy")
+        global.document.execCommand("copy")
       );
 
     } catch (error) {
@@ -277,22 +411,22 @@
   }
 
   /* =====================================================
-     COPY FALLBACK
+     COPY SHARE MESSAGE
   ===================================================== */
 
   async function copyShareMessage(text, url) {
-    const completeMessage = getCompleteShareMessage(
-      text,
-      url
-    );
+    const completeMessage =
+      getCompleteShareMessage(text, url);
 
-    const copied = await copyText(completeMessage);
+    const copied = await copyText(
+      completeMessage
+    );
 
     if (copied) {
       toast(
         message(
-          "पोस्टको Text र Link Copy भयो। अब जहाँ चाहनुहुन्छ Paste गरेर पठाउनुहोस्।",
-          "Post text and link copied. Paste them wherever you want to share."
+          "पोस्टको Text र Link Copy भयो।",
+          "Post text and link copied."
         ),
         "success"
       );
@@ -302,7 +436,7 @@
 
     toast(
       message(
-        "पोस्ट Copy गर्न सकिएन। कृपया फेरि प्रयास गर्नुहोस्।",
+        "पोस्ट Copy गर्न सकिएन। फेरि प्रयास गर्नुहोस्।",
         "Could not copy the post. Please try again."
       ),
       "error"
@@ -316,11 +450,13 @@
   ===================================================== */
 
   async function shareText(post, text, url) {
-    const title = getShareTitle(post);
+    const navigator = global.navigator;
 
-    if (typeof global.navigator?.share === "function") {
-      await global.navigator.share({
-        title,
+    if (
+      typeof navigator?.share === "function"
+    ) {
+      await navigator.share({
+        title: getShareTitle(post),
         text,
         ...(url ? { url } : {})
       });
@@ -335,14 +471,26 @@
      SHARE POST
   ===================================================== */
 
-  async function sharePost(id) {
-    const post = getPost(id);
+  async function sharePost(postId) {
+    let post = null;
 
-    if (!post) {
+    try {
+      /*
+       * पोस्ट सधैँ Supabase बाट प्राप्त गर्ने।
+       */
+      post = await getPost(postId);
+
+    } catch (error) {
+      console.error(
+        "KSKShare: Post loading failed:",
+        error
+      );
+
       toast(
+        error?.message ||
         message(
-          "पोस्ट भेटिएन।",
-          "Post could not be found."
+          "पोस्ट लोड गर्न सकिएन।",
+          "Could not load the post."
         ),
         "error"
       );
@@ -354,19 +502,19 @@
     const title = getShareTitle(post);
     const url = getApplicationUrl();
 
+    const hasPhoto = Boolean(post.mediaPath);
+
     /*
-     * Link नभए पनि Text Share रोकिँदैन।
+     * TEXT-ONLY POST
      */
-
-    const hasPhoto = Boolean(post.mediaId);
-
-    /* -----------------------------------------------
-       TEXT-ONLY POST
-    ----------------------------------------------- */
 
     if (!hasPhoto) {
       try {
-        return await shareText(post, text, url);
+        return await shareText(
+          post,
+          text,
+          url
+        );
 
       } catch (error) {
         if (error?.name === "AbortError") {
@@ -390,68 +538,83 @@
       }
     }
 
-    /* -----------------------------------------------
-       PHOTO POST
-    ----------------------------------------------- */
+    /*
+     * PHOTO POST
+     */
 
     try {
       const file = await getPostImageFile(post);
 
       /*
-       * फोटो File बनाउन नसके Text + Link पठाउने।
+       * File API उपलब्ध नभए Text Share।
        */
 
       if (!file) {
         toast(
           message(
             "फोटो जोड्न मिलेन। Text र Link Share गरिँदैछ।",
-            "Photo attachment is unavailable. Sharing text and link instead."
+            "Photo attachment unavailable. Sharing text and link."
           ),
           "warning"
         );
 
-        return await shareText(post, text, url);
-      }
-
-      /*
-       * Native Share उपलब्ध नभए फोटो पठाउन सकिँदैन।
-       */
-
-      if (typeof global.navigator?.share !== "function") {
-        toast(
-          message(
-            "यो ब्राउजरमा फोटो Share गर्न मिल्दैन। Text र Link Copy गरिँदैछ।",
-            "Photo sharing is not supported here. Copying text and link instead."
-          ),
-          "warning"
+        return await shareText(
+          post,
+          text,
+          url
         );
-
-        return await copyShareMessage(text, url);
       }
 
+      const navigator = global.navigator;
+
       /*
-       * Check file sharing support.
+       * Native Share उपलब्ध छैन।
        */
 
       if (
-        typeof global.navigator.canShare === "function" &&
-        !global.navigator.canShare({
+        typeof navigator?.share !== "function"
+      ) {
+        toast(
+          message(
+            "यो ब्राउजरमा फोटो Share गर्न मिल्दैन। Text Copy गरिँदैछ।",
+            "Photo sharing is not supported. Copying text instead."
+          ),
+          "warning"
+        );
+
+        return await copyShareMessage(
+          text,
+          url
+        );
+      }
+
+      /*
+       * Browser ले File Share समर्थन गर्छ कि जाँच।
+       */
+
+      if (
+        typeof navigator.canShare === "function" &&
+        !navigator.canShare({
           files: [file]
         })
       ) {
         toast(
           message(
             "यो ब्राउजरले फोटो Share समर्थन गर्दैन। Text र Link पठाइँदैछ।",
-            "This browser does not support photo sharing. Sharing text and link instead."
+            "This browser does not support photo sharing."
           ),
           "warning"
         );
 
-        return await shareText(post, text, url);
+        return await shareText(
+          post,
+          text,
+          url
+        );
       }
 
       /*
-       * Photo + Text + Application URL
+       * PHOTO + TEXT + APPLICATION URL
        */
 
       const shareData = {
@@ -461,13 +624,14 @@
         ...(url ? { url } : {})
       };
 
-      await global.navigator.share(shareData);
+      await navigator.share(shareData);
 
       return true;
 
     } catch (error) {
       /*
-       * User cancelled the share sheet.
+       * प्रयोगकर्ताले Share बन्द गरेको अवस्थामा
+       * कुनै error toast नदेखाउने।
        */
 
       if (error?.name === "AbortError") {
@@ -480,20 +644,23 @@
       );
 
       /*
-       * Photo sharing failed.
-       * Try Text + Link instead.
+       * फोटो Share असफल भए Text + Link प्रयास।
        */
 
       try {
         toast(
           message(
-            "फोटो Share गर्न सकिएन। Text र Link पठाउने प्रयास गरिँदैछ।",
-            "Photo sharing failed. Trying text and link sharing instead."
+            "फोटो Share हुन सकेन। Text र Link पठाउने प्रयास गरिँदैछ।",
+            "Photo sharing failed. Trying text and link instead."
           ),
           "warning"
         );
 
-        return await shareText(post, text, url);
+        return await shareText(
+          post,
+          text,
+          url
+        );
 
       } catch (fallbackError) {
         if (fallbackError?.name === "AbortError") {
@@ -501,15 +668,14 @@
         }
 
         console.error(
-          "KSKShare: Final sharing fallback failed:",
+          "KSKShare: Text fallback failed:",
           fallbackError
         );
 
-        /*
-         * Last fallback: Clipboard
-         */
-
-        return await copyShareMessage(text, url);
+        return await copyShareMessage(
+          text,
+          url
+        );
       }
     }
   }
@@ -522,6 +688,8 @@
     sharePost
   });
 
-  console.info("KSK Share initialized.");
+  console.info(
+    "KSK Supabase Share initialized."
+  );
 
 })(window);
