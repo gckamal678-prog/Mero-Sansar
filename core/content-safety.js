@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -36,7 +35,6 @@
 
   let observer = null;
   let queued = false;
-  const photoConfirmedForms = new WeakSet();
 
   const english = () => global.KSKLanguage?.getLanguage?.() === "en";
   const t = (ne, en) => english() ? en : ne;
@@ -421,101 +419,7 @@
     }, 0);
   }
 
-  function openPhotoSafetyConfirmation(form, submitter) {
-    const modalAPI = global.KSKModal;
-
-    if (typeof modalAPI?.openModal !== "function") {
-      notify(
-        t(
-          "फोटो सुरक्षा पुष्टि विन्डो उपलब्ध छैन। फोटो प्रकाशित गर्नुअघि कृपया फेरि प्रयास गर्नुहोस्।",
-          "Photo safety confirmation is unavailable. Please try again before publishing."
-        ),
-        "error"
-      );
-      return false;
-    }
-
-    const modal = modalAPI.openModal({
-      title: t("फोटो सुरक्षा पुष्टि", "Confirm photo safety"),
-      content: `
-        <div class="ksk-photo-safety-confirm">
-          <p style="line-height:1.65;margin:0">
-            ${t(
-              "फोटोको स्वचालित जाँच हुँदैन। फोटो सुरक्षित, गैर-अश्लील र अरूको गोपनीयता उल्लङ्घन नगर्ने भएको पुष्टि गर्नुहोस्।",
-              "Photos are not automatically scanned. Confirm that this image is safe, non-explicit, and does not violate anyone's privacy."
-            )}
-          </p>
-        </div>
-      `,
-      footer: `
-        <button type="button" class="btn btn-secondary" data-modal-close>
-          ${t("रद्द गर्नुहोस्", "Cancel")}
-        </button>
-        <button type="button" class="btn btn-primary" data-confirm-photo-safety>
-          ${t("पुष्टि गरी प्रकाशित गर्नुहोस्", "Confirm and publish")}
-        </button>
-      `
-    });
-
-    const confirmButton = modal?.element?.querySelector?.(
-      "[data-confirm-photo-safety]"
-    );
-
-    if (!confirmButton) {
-      modalAPI.closeModal?.();
-      notify(
-        t("पुष्टि विन्डो खोल्न सकिएन।", "Could not open the confirmation window."),
-        "error"
-      );
-      return false;
-    }
-
-    confirmButton.addEventListener("click", () => {
-      if (confirmButton.disabled) return;
-
-      if (!form?.isConnected) {
-        modalAPI.closeModal?.();
-        return;
-      }
-
-      confirmButton.disabled = true;
-      modalAPI.closeModal?.();
-
-      photoConfirmedForms.add(form);
-
-      try {
-        if (typeof form.requestSubmit === "function") {
-          if (submitter && submitter.form === form) {
-            form.requestSubmit(submitter);
-          } else {
-            form.requestSubmit();
-          }
-        } else {
-          photoConfirmedForms.delete(form);
-          notify(
-            t(
-              "यो ब्राउजरले सुरक्षित रूपमा फारम पुनः पठाउन सकेन।",
-              "This browser could not safely resubmit the form."
-            ),
-            "error"
-          );
-        }
-      } catch (error) {
-        photoConfirmedForms.delete(form);
-        notify(
-          t(
-            "पोस्ट प्रकाशित गर्न सकिएन। कृपया फेरि प्रयास गर्नुहोस्।",
-            "The post could not be submitted. Please try again."
-          ),
-          "error"
-        );
-      }
-    });
-
-    return true;
-  }
-
-    function handleSubmit(event) {
+  function handleSubmit(event) {
     const form = event.target;
 
     if (!(form instanceof global.HTMLFormElement)) return;
