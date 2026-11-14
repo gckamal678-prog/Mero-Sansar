@@ -1,12 +1,13 @@
+
 "use strict";
 
 /* =========================================================
-   KSK SETTINGS UI
-   Responsibility:
-   - Settings interface
+   MERO SANSAR — SETTINGS UI
    - Settings navigation
-   - Settings actions
-   - Import / Export / Reset
+   - Account authentication mount point
+   - Privacy and notification preferences
+   - Appearance, profile and chat preferences
+   - Data import, export and reset
 
    Data owner: KSKSettings
    Theme owner: KSKTheme
@@ -14,6 +15,7 @@
 ========================================================= */
 
 (function (global) {
+  "use strict";
 
   if (global.KSKSettingsUI) return;
 
@@ -64,19 +66,21 @@
   }
 
   function getSettings() {
-    const settings = SETTINGS()?.getSettings?.();
+    const value = SETTINGS()?.getSettings?.();
 
-    return settings && typeof settings === "object"
-      ? settings
+    return value && typeof value === "object"
+      ? value
       : {};
   }
 
   function saveSetting(path, value) {
-    if (!SETTINGS()?.updateSetting) {
+    const manager = SETTINGS();
+
+    if (typeof manager?.updateSetting !== "function") {
       return false;
     }
 
-    return SETTINGS().updateSetting(path, value);
+    return manager.updateSetting(path, value);
   }
 
   function notify(type, message) {
@@ -118,7 +122,6 @@
         <span class="ksk-setting-chevron" aria-hidden="true">
           ›
         </span>
-
       </button>
     `;
   }
@@ -189,13 +192,8 @@
   function sectionHeader(title, description = "") {
     return `
       <div class="ksk-settings-section-heading">
-
         <h3>${title}</h3>
-
-        ${description
-          ? `<p>${description}</p>`
-          : ""}
-
+        ${description ? `<p>${description}</p>` : ""}
       </div>
     `;
   }
@@ -224,7 +222,6 @@
       : "नेपाली";
 
     return `
-
       <div class="ksk-settings-profile-shortcut">
 
         <div class="ksk-settings-avatar">
@@ -328,32 +325,26 @@
 
   /* =======================================================
      ACCOUNT
+     Supabase Auth panel यस section मा mount हुन्छ।
+     .ksk-settings-info लाई mount anchor का रूपमा राखिएको छ।
   ======================================================= */
 
   function renderAccount() {
-    const s = getSettings();
-
     return `
       ${backButton()}
 
       ${sectionHeader(
         t("खाता", "Account"),
-        t("तपाईंको खाता सम्बन्धी विकल्पहरू", "Manage account-related preferences")
-      )}
-
-      ${card(
-        toggleRow(
-          t("साथी अनुरोध स्वीकार गर्ने", "Allow friend requests"),
-          t("अन्य सदस्यले साथी अनुरोध पठाउन सक्नेछन्", "Allow other members to send friend requests"),
-          "privacy.allowFriendRequests",
-          s.privacy?.allowFriendRequests
+        t(
+          "तपाईंको Login, Password र Account व्यवस्थापन",
+          "Manage your login, password and account"
         )
       )}
 
       <div class="ksk-settings-info">
         ${t(
-          "लगइन, पासवर्ड परिवर्तन र खाता व्यवस्थापन सुरक्षित Authentication प्रणाली जोडिएपछि उपलब्ध हुनेछ।",
-          "Login, password changes and account management require secure authentication."
+          "तपाईंको खाता सुरक्षित रूपमा व्यवस्थापन गर्नुहोस्।",
+          "Manage your account securely."
         )}
       </div>
     `;
@@ -377,7 +368,10 @@
 
       ${sectionHeader(
         t("गोपनीयता", "Privacy"),
-        t("तपाईंको जानकारी कसले हेर्न सक्छ छान्नुहोस्", "Choose who can see your information")
+        t(
+          "तपाईंको जानकारी कसले हेर्न सक्छ छान्नुहोस्",
+          "Choose who can see your information"
+        )
       )}
 
       ${card(`
@@ -440,8 +434,8 @@
 
       <div class="ksk-settings-info">
         ${t(
-          "यी विकल्पहरू यस डिभाइसमा सुरक्षित हुन्छन्। सबै सदस्यमा लागू गर्न Server-side access control आवश्यक हुन्छ।",
-          "These preferences are stored on this device. Server-side access control is required to enforce them for all members."
+          "यी विकल्पहरू हाल यस डिभाइसमा सुरक्षित हुन्छन्। सबै सदस्यमा लागू गर्न Server-side access control आवश्यक हुन्छ।",
+          "These preferences are currently stored on this device. Server-side access control is required to enforce them for all members."
         )}
       </div>
     `;
@@ -460,7 +454,10 @@
 
       ${sectionHeader(
         t("सूचनाहरू", "Notifications"),
-        t("कुन प्रकारका सूचना प्राप्त गर्ने छान्नुहोस्", "Choose which notifications you receive")
+        t(
+          "कुन प्रकारका सूचना प्राप्त गर्ने छान्नुहोस्",
+          "Choose which notifications you receive"
+        )
       )}
 
       ${card(`
@@ -587,7 +584,10 @@
 
       ${sectionHeader(
         t("प्रोफाइल", "Profile"),
-        t("प्रोफाइलमा देखिने विवरण छान्नुहोस्", "Choose what appears on your profile")
+        t(
+          "प्रोफाइलमा देखिने विवरण छान्नुहोस्",
+          "Choose what appears on your profile"
+        )
       )}
 
       ${card(`
@@ -636,7 +636,10 @@
 
       ${sectionHeader(
         t("च्याट", "Chats"),
-        t("सन्देश लेख्ने र च्याटको शैली व्यवस्थापन गर्नुहोस्", "Manage chat appearance and typing preferences")
+        t(
+          "सन्देश लेख्ने र च्याटको शैली व्यवस्थापन गर्नुहोस्",
+          "Manage chat appearance and typing preferences"
+        )
       )}
 
       ${card(`
@@ -695,7 +698,10 @@
 
       ${sectionHeader(
         t("डेटा र स्टोरेज", "Data and Storage"),
-        t("मिडिया र डेटा प्रयोगको प्राथमिकता", "Manage media and data preferences")
+        t(
+          "मिडिया र डेटा प्रयोगको प्राथमिकता",
+          "Manage media and data preferences"
+        )
       )}
 
       ${card(`
@@ -751,7 +757,7 @@
 
       <div class="ksk-settings-info">
         ${t(
-          "Auto Download र Device मा Save हाल प्राथमिकता मात्र हुन्। वास्तविक Media Download व्यवहार प्रदान गर्नुपर्नेछ।",
+          "Auto Download र Device मा Save हाल प्राथमिकता मात्र हुन्। वास्तविक Media Download व्यवहार Media प्रणालीसँग जोड्नुपर्नेछ।",
           "Auto-download and save-to-device are preferences only until connected to the media system."
         )}
       </div>
@@ -835,7 +841,7 @@
 
         <p>
           ${t(
-            "साथी जोडौँ, कुरा गरौँ。",
+            "साथी जोडौँ, कुरा गरौँ।",
             "Connect with friends and talk."
           )}
         </p>
@@ -878,7 +884,8 @@
 
     if (!modal) return false;
 
-    const body = $("#settingsBody", modal) ||
+    const body =
+      $("#settingsBody", modal) ||
       $(".modal-body", modal);
 
     if (!body) return false;
@@ -1047,7 +1054,7 @@
   }
 
   /* =======================================================
-     CHANGE HANDLERS
+     CLICK HANDLER
   ======================================================= */
 
   function handleClick(event) {
@@ -1081,16 +1088,22 @@
 
     if (type === "export") {
       exportSettings();
+      return;
     }
 
     if (type === "import") {
       $("#kskSettingsImportFile")?.click();
+      return;
     }
 
     if (type === "reset") {
       resetSettings();
     }
   }
+
+  /* =======================================================
+     CHANGE HANDLER
+  ======================================================= */
 
   function handleChange(event) {
     const toggle = event.target.closest(
@@ -1114,20 +1127,21 @@
     const path = select.dataset.settingsSelect;
     const value = select.value;
 
-    /* Language module owns language changes and persistence. */
     if (path === "language") {
       LANG()?.setLanguage?.(value);
       return;
     }
 
-    /* Theme module applies the visual theme.
-       KSKSettings remains the saved data owner. */
     if (path === "theme") {
       THEME()?.setTheme?.(value);
     }
 
     saveSetting(path, value);
   }
+
+  /* =======================================================
+     FILE HANDLER
+  ======================================================= */
 
   function handleFileChange(event) {
     if (event.target.id !== "kskSettingsImportFile") {
@@ -1146,7 +1160,10 @@
   function handleSettingsChange() {
     const modal = $("#settingsModal");
 
-    if (modal && !modal.classList.contains("hidden")) {
+    if (
+      modal &&
+      !modal.classList.contains("hidden")
+    ) {
       render();
     }
   }
@@ -1154,14 +1171,16 @@
   function handleLanguageChange() {
     const modal = $("#settingsModal");
 
-    if (modal && !modal.classList.contains("hidden")) {
+    if (
+      modal &&
+      !modal.classList.contains("hidden")
+    ) {
       render();
     }
   }
 
   /* =======================================================
      PROFILE MANAGE BUTTON
-     Independent click handling
   ======================================================= */
 
   function handleManageButtonClick(event) {
@@ -1195,8 +1214,6 @@
 
     initialized = true;
 
-    /* Profile Manage button:
-       Capture phase मा स्वतन्त्र रूपमा क्लिक समात्ने। */
     document.addEventListener(
       "click",
       handleManageButtonClick,
