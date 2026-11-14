@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -79,22 +80,40 @@
         position:relative;
         overflow:hidden;
         border-radius:14px;
-        background:var(--color-surface-secondary);
+        background:linear-gradient(135deg,#243b55,#141e30);
         cursor:pointer;
+        margin-bottom:2px;
+        display:block;
+        outline-offset:3px;
+      }
+
+      .profile-section .ksk-profile-cover:focus-visible,
+      .profile-section .profile-avatar:focus-visible {
+        outline:3px solid var(--color-primary);
+      }
+
+      .profile-section .ksk-profile-cover-empty {
+        width:100%;
+        height:100%;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        gap:7px;
+        color:#fff;
+        font-size:30px;
+      }
+
+      .profile-section .ksk-profile-cover-label {
+        font-size:12px;
+        font-weight:750;
+        letter-spacing:.2px;
       }
 
       .profile-section .ksk-profile-cover img {
         width:100%;
         height:100%;
         object-fit:cover;
-      }
-
-      .profile-section .ksk-profile-cover-empty {
-        width:100%;
-        height:100%;
-        display:grid;
-        place-items:center;
-        font-size:30px;
       }
 
       .profile-section .ksk-profile-photo-hint {
@@ -108,9 +127,42 @@
 
       .profile-section .profile-avatar {
         display:flex;
+        flex-direction:column;
         align-items:center;
         justify-content:center;
+        gap:7px;
         cursor:pointer;
+        position:relative;
+        width:max-content;
+        max-width:100%;
+        margin:0 auto 4px;
+        outline-offset:4px;
+      }
+
+      .profile-section .profile-avatar-label {
+        display:block;
+        color:var(--color-muted);
+        font-size:11px;
+        font-weight:650;
+        line-height:1.4;
+      }
+
+      .profile-section .ksk-profile-avatar-hint {
+        position:absolute;
+        top:76px;
+        right:2px;
+        z-index:3;
+        width:28px;
+        height:28px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:50%;
+        color:#fff;
+        background:var(--color-primary);
+        border:2px solid var(--color-surface);
+        font-size:12px;
+        pointer-events:none;
       }
 
       .profile-section .profile-avatar .avatar {
@@ -871,8 +923,34 @@
           "My profile"
         )}">
 
-          <div class="profile-avatar">
+          <div
+            class="ksk-profile-cover"
+            role="button"
+            tabindex="0"
+            aria-label="${t("Cover फोटो परिवर्तन गर्नुहोस्", "Change cover photo")}"
+            title="${t("Cover फोटो राख्न ट्याप गर्नुहोस्", "Tap to add a cover photo")}"
+          >
+            <div class="ksk-profile-cover-empty">
+              <span class="ksk-profile-cover-icon">🌄</span>
+              <span class="ksk-profile-cover-label">
+                ${t("Cover फोटो राख्नुहोस्", "Add cover photo")}
+              </span>
+            </div>
+            <span class="ksk-profile-photo-hint" aria-hidden="true">📷</span>
+          </div>
+
+          <div
+            class="profile-avatar"
+            role="button"
+            tabindex="0"
+            aria-label="${t("प्रोफाइल फोटो परिवर्तन गर्नुहोस्", "Change profile photo")}"
+            title="${t("प्रोफाइल फोटो राख्न ट्याप गर्नुहोस्", "Tap to add a profile photo")}"
+          >
             ${renderAvatar(user)}
+            <span class="profile-avatar-label">
+              ${t("प्रोफाइल फोटो परिवर्तन गर्न ट्याप गर्नुहोस्", "Tap to change profile photo")}
+            </span>
+            <span class="ksk-profile-avatar-hint" aria-hidden="true">📷</span>
           </div>
 
           <h2>${escapeHTML(getDisplayName(user))}</h2>
