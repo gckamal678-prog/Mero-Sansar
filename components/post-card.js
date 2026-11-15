@@ -9,7 +9,7 @@
  * - Render reusable post card
  * - Display author, avatar, date and post text
  * - Display reaction, comment, save and share actions
- * - Display live Supabase Share count
+ * - Display live Supabase comment and share counts
  * =========================================================
  */
 
@@ -162,6 +162,22 @@
       .join("");
   }
 
+  /* COMMENT COUNT */
+
+  function getCommentCount(post) {
+    const cloudCount = Number(post?.commentCount || 0);
+
+    const localCount = Array.isArray(post?.comments)
+      ? post.comments.length
+      : 0;
+
+    return Math.max(
+      0,
+      Number.isFinite(cloudCount) ? cloudCount : 0,
+      localCount
+    );
+  }
+
   /* SHARE COUNT */
 
   function getShareCount(post) {
@@ -175,9 +191,6 @@
   /*
    * Share सफल भएपछि core/share.js ले
    * ksk:post-share-change event पठाउँछ।
-   *
-   * यहाँ सम्बन्धित पोस्टको संख्या मात्र
-   * तुरुन्त अपडेट हुन्छ।
    */
 
   function handleShareCountChange(event) {
@@ -206,6 +219,26 @@
   global.addEventListener(
     "ksk:post-share-change",
     handleShareCountChange
+  );
+
+  /* LIVE COMMENT COUNT UPDATE */
+
+  function handleCommentCountChange(event) {
+    const detail = event.detail || {};
+
+    const postId = String(detail.postId || "").trim();
+
+    if (!postId) return;
+
+    /*
+     * Feed refresh हुँदा Supabase बाट
+     * नयाँ commentCount पुनः प्राप्त हुन्छ।
+     */
+  }
+
+  global.addEventListener(
+    "ksk:posts-cloud-change",
+    handleCommentCountChange
   );
 
   /* RENDER POST CARD */
@@ -258,16 +291,14 @@
 
     const saved = isPostSaved(post.id);
 
-    const commentCount = Array.isArray(post.comments)
-      ? post.comments.length
-      : Number(post.commentCount || 0);
+    /*
+     * अब Supabase commentCount लाई
+     * comments array भन्दा प्राथमिकता दिइन्छ।
+     */
+
+    const commentCount = getCommentCount(post);
 
     const shareCount = getShareCount(post);
-
-    /*
-     * Supabase private Storage signed URL.
-     * Media UI will use this URL to display the photo.
-     */
 
     const mediaUrl = isImageSource(post.mediaUrl)
       ? escapeHTML(post.mediaUrl.trim())
@@ -345,11 +376,16 @@
             class="post-action"
             type="button"
             data-post-action="comment"
-            data-post-id="${id}">
+            data-post-id="${id}"
+            aria-label="${english
+              ? `Comments, ${commentCount}`
+              : `टिप्पणीहरू, ${commentCount}`}">
 
             💬
             ${english ? "Comment" : "टिप्पणी"}
-            ${commentCount ? `(${commentCount})` : ""}
+            <span
+              class="post-comment-count"
+              data-comment-count-post-id="${id}">${commentCount}</span>
 
           </button>
 
@@ -391,7 +427,8 @@
 
   global.KSKPostCard = Object.freeze({
     render,
-    renderAvatar
+    renderAvatar,
+    getCommentCount
   });
 
 })(window);
