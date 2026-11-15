@@ -19,6 +19,7 @@
   let profilePosts = [];
   let profilePostsPromise = null;
   let profileRequestToken = 0;
+  let profileLoadState = "idle";
 
   function isEnglish() {
     return global.KSKLanguage?.getLanguage?.() === "en";
@@ -135,10 +136,6 @@
         border-radius:50%;
         background:var(--color-surface);
       }
-
-      /*
-       * AVATAR FIX
-       */
 
       .profile-section .profile-card .profile-avatar {
         display:flex;
@@ -572,6 +569,7 @@
 
     const requestedId = String(viewingUserId || "").trim();
     const currentId = getCurrentUserId();
+
     const requestToken = ++profileRequestToken;
 
     const isOtherUser = Boolean(
@@ -586,6 +584,8 @@
       return Promise.resolve(null);
     }
 
+    profileLoadState = "loading";
+
     remoteLoadPromise = Promise.resolve(
       isOtherUser
         ? loader.call(api, requestedId)
@@ -597,11 +597,14 @@
         if (!result) {
           remoteProfile = null;
           profilePosts = [];
+          profileLoadState = "not-found";
+          remoteLoadPromise = null;
           refreshProfilePage();
           return null;
         }
 
         remoteProfile = normalizeRemoteProfile(result);
+        profileLoadState = "loaded";
 
         if (isOtherUser) {
           await loadProfilePosts(requestedId, requestToken);
@@ -620,6 +623,8 @@
       .catch(error => {
         if (requestToken === profileRequestToken) {
           remoteLoadPromise = null;
+          profileLoadState = "error";
+          refreshProfilePage();
         }
 
         console.warn(
@@ -701,6 +706,7 @@
     remoteLoadPromise = null;
     profilePosts = [];
     profilePostsPromise = null;
+    profileLoadState = "idle";
     profileRequestToken += 1;
   }
 
@@ -721,10 +727,6 @@
       user?.name || t("तपाईंको प्रोफाइल", "Your Profile")
     );
   }
-
-  /*
-   * Direct avatar markup.
-   */
 
   function renderAvatar(user) {
     const name = String(user?.name || "").trim();
@@ -1047,10 +1049,37 @@
       remoteLoadPromise = null;
       profilePosts = [];
       profilePostsPromise = null;
+      profileLoadState = "idle";
       profileRequestToken += 1;
     }
 
     loadSupabaseProfile();
+
+    const currentUserId = getCurrentUserId();
+    const viewingAnotherUser = Boolean(
+      viewingUserId && viewingUserId !== currentUserId
+    );
+
+    if (viewingAnotherUser && !remoteProfile) {
+      const message = profileLoadState === "loading" || profileLoadState === "idle"
+        ? t("प्रोफाइल लोड हुँदैछ…", "Loading profile…")
+        : profileLoadState === "not-found"
+          ? t("यो प्रोफाइल उपलब्ध छैन वा हेर्ने अनुमति छैन।", "This profile is unavailable or you do not have permission to view it.")
+          : t("प्रोफाइल लोड हुन सकेन। कृपया फेरि प्रयास गर्नुहोस्।", "Could not load this profile. Please try again.");
+
+      return `
+        <section class="profile-section is-public-profile" data-profile-section>
+          <div class="card empty-state" role="status" aria-live="polite">
+            ${escapeHTML(message)}
+            ${profileLoadState === "error" ? `
+              <button type="button" data-retry-public-profile>
+                ${t("फेरि प्रयास गर्नुहोस्", "Try again")}
+              </button>
+            ` : ""}
+          </div>
+        </section>
+      `;
+    }
 
     const user = options.user && typeof options.user === "object"
       ? options.user
@@ -1287,6 +1316,17 @@
   function handleClick(event) {
     const target = event.target;
     if (!target?.closest) return;
+
+    const retryButton = target.closest("[data-retry-public-profile]");
+
+    if (retryButton) {
+      event.preventDefault();
+      remoteLoadPromise = null;
+      profileLoadState = "idle";
+      loadSupabaseProfile();
+      refreshProfilePage();
+      return;
+    }
 
     const tab = target.closest("[data-profile-tab]");
 
