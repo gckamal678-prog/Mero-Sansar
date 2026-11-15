@@ -11,6 +11,7 @@
  * - Supabase friends based @mentions
  * - Realtime updates
  * - Automatic feed notification after comment create/delete
+ * - Open comment author's profile by clicking name/avatar
  *
  * DATA SOURCE: SUPABASE ONLY
  */
@@ -41,6 +42,65 @@
 
   const boundBodies = new WeakSet();
 
+  const PROFILE_LINK_STYLE_ID = "ksk-comment-profile-link-styles";
+
+  function ensureProfileLinkStyles() {
+    if (document.getElementById(PROFILE_LINK_STYLE_ID)) return;
+
+    const style = document.createElement("style");
+    style.id = PROFILE_LINK_STYLE_ID;
+    style.textContent = `
+      .ksk-comment-profile-link {
+        appearance:none;
+        -webkit-appearance:none;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        padding:0;
+        margin:0;
+        border:0;
+        background:transparent;
+        color:inherit;
+        font:inherit;
+        cursor:pointer;
+        text-align:inherit;
+      }
+
+      .ksk-comment-avatar-button {
+        flex:0 0 auto;
+        width:38px;
+        height:38px;
+        overflow:hidden;
+        border-radius:50%;
+      }
+
+      .ksk-comment-avatar-button .ksk-comment-avatar {
+        display:block;
+        width:38px;
+        height:38px;
+        object-fit:cover;
+        border-radius:50%;
+      }
+
+      .ksk-comment-author-button {
+        max-width:100%;
+        justify-content:flex-start;
+      }
+
+      .ksk-comment-profile-link:focus-visible {
+        outline:2px solid var(--color-primary, #3978dc);
+        outline-offset:3px;
+        border-radius:5px;
+      }
+
+      .ksk-comment-author-button .ksk-comment-author {
+        cursor:pointer;
+      }
+    `;
+
+    (document.head || document.documentElement).appendChild(style);
+  }
+
   /* =========================================
      HELPERS
   ========================================= */
@@ -69,11 +129,6 @@
     global.KSKToast?.show?.(message, type);
   }
 
-  /*
-   * Notify the home feed after a comment count changes.
-   * pages/home.js listens for this event and refreshes
-   * the cloud feed without requiring a manual page refresh.
-   */
   function notifyFeedCommentChange(action = "comment-change") {
     const postId = String(activePostId || "").trim();
 
@@ -158,6 +213,26 @@
       <span class="ksk-comment-avatar ksk-comment-avatar-fallback">
         ${escapeHTML(initial || name?.charAt(0) || "स")}
       </span>
+    `;
+  }
+
+  /*
+   * Comment author profile link.
+   * User ID comes from post_comments.user_id.
+   */
+
+  function renderCommentProfileLink(comment, content, extraClass = "") {
+    const userId = String(comment?.authorId || "").trim();
+
+    if (!userId) return content;
+
+    return `
+      <button
+        type="button"
+        class="ksk-comment-profile-link ${escapeHTML(extraClass)}"
+        data-comment-profile="${escapeHTML(userId)}"
+        aria-label="${t("प्रोफाइल खोल्नुहोस्", "Open profile")}: ${escapeHTML(comment.author || "")}"
+      >${content}</button>
     `;
   }
 
@@ -459,19 +534,25 @@
 
         <div class="ksk-comment-main">
 
-          ${getAvatarHTML(
-            comment.author,
-            comment.avatar,
-            comment.authorInitial
+          ${renderCommentProfileLink(
+            comment,
+            getAvatarHTML(
+              comment.author,
+              comment.avatar,
+              comment.authorInitial
+            ),
+            "ksk-comment-avatar-button"
           )}
 
           <div class="ksk-comment-body">
 
             <div class="ksk-comment-bubble">
 
-              <strong class="ksk-comment-author">
-                ${getAuthor(comment)}
-              </strong>
+              ${renderCommentProfileLink(
+                comment,
+                `<strong class="ksk-comment-author">${getAuthor(comment)}</strong>`,
+                "ksk-comment-author-button"
+              )}
 
               ${comment.replyTo ? `
                 <span class="ksk-comment-reply-to">
@@ -1023,11 +1104,6 @@
 
         replyTarget = null;
 
-        /*
-         * Immediately notify the home feed after the
-         * Supabase insert succeeds. The feed listener
-         * can now reload the updated comment count.
-         */
         notifyFeedCommentChange("comment-created");
 
         toast(
@@ -1163,10 +1239,6 @@
         editTarget = null;
       }
 
-      /*
-       * Notify the feed immediately after successful
-       * deletion so its displayed count can be refreshed.
-       */
       notifyFeedCommentChange("comment-deleted");
 
       toast(
@@ -1222,6 +1294,30 @@
       const target = event.target.closest("button");
 
       if (!target || !body.contains(target)) return;
+
+      /*
+       * OPEN COMMENT AUTHOR PROFILE
+       */
+
+      if (target.hasAttribute("data-comment-profile")) {
+        const userId = target.getAttribute("data-comment-profile");
+        const profilePage = global.KSKProfilePage;
+
+        if (!profilePage?.openUserProfile) {
+          toast(
+            t(
+              "प्रोफाइल सेवा उपलब्ध छैन।",
+              "Profile service is unavailable."
+            ),
+            "error"
+          );
+          return;
+        }
+
+        event.preventDefault();
+        profilePage.openUserProfile(userId);
+        return;
+      }
 
       if (target.hasAttribute("data-mention-id")) {
         insertMention(
@@ -1322,8 +1418,6 @@
 
       await stopRealtime();
 
-      // Cloud friends load for @mentions.
-      // Mention loading failure must not block comments.
       mentionFriends = [];
       await loadMentionFriends();
 
@@ -1399,6 +1493,8 @@
     busy = false;
     loading = false;
   }
+
+  ensureProfileLinkStyles();
 
   global.KSKComments = Object.freeze({
     open,
