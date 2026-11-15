@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -781,6 +780,7 @@
           type="button"
           class="icon-button"
           data-ksk-menu-trigger
+          data-post-menu="${escapeHTML(id)}"
           aria-controls="${menuId}"
           aria-expanded="false"
           aria-label="${isEnglish()
@@ -1130,6 +1130,21 @@
       typeof target.closest !== "function"
     ) {
       return false;
+    }
+
+    /*
+     * Shared KSKActionMenu ले data-ksk-menu-trigger
+     * क्लिक आफैँ toggle गर्छ। यहाँ पुनः openPostMenu
+     * चलाउँदा menu हरेक पटक फेरि rebuild भएर बन्द/खुल्ने
+     * व्यवहार बिग्रन्छ। त्यसैले existing shared trigger
+     * लाई यहीँबाट पुनः process गर्दैनौँ।
+     */
+    const sharedMenuTrigger = target.closest(
+      "[data-ksk-menu-trigger]"
+    );
+
+    if (sharedMenuTrigger) {
+      return true;
     }
 
     const postMenu = target.closest(
