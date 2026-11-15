@@ -6,6 +6,7 @@
  *
  * Responsibilities:
  * - Authenticated feed and own posts
+ * - Saved posts from Supabase
  * - Create, update and delete posts
  * - Private Storage image upload
  * - Signed media URLs with expiry cache
@@ -19,6 +20,7 @@
  * - public.posts
  * - public.profiles
  * - public.post_comments
+ * - public.saved_posts
  * - posts-media
  */
 
@@ -390,8 +392,6 @@
   /*
    * LOAD COMMENT COUNTS IN BATCH
    *
-   * IMPORTANT:
-   * Do not silently return zero when Supabase fails.
    * A failed count query must be visible to the caller.
    */
 
@@ -673,6 +673,70 @@
       return makeResult(
         false,
         "FEED_LOAD_FAILED",
+        null,
+        getErrorMessage(error)
+      );
+    }
+  }
+
+  /* READ SAVED POSTS */
+
+  async function getSavedPosts(options = {}) {
+    try {
+      const { client, user } = await getContext();
+
+      const { data: savedRows, error: savedError } = await client
+        .from("saved_posts")
+        .select("post_id,created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (savedError) throw savedError;
+
+      const savedIds = (Array.isArray(savedRows) ? savedRows : [])
+        .map(row => String(row?.post_id || "").trim())
+        .filter(Boolean);
+
+      if (!savedIds.length) {
+        return makeResult(true, "SAVED_POSTS_LOADED", []);
+      }
+
+      const uniqueIds = [...new Set(savedIds)];
+      const posts = [];
+      const batchSize = 100;
+
+      for (let offset = 0; offset < uniqueIds.length; offset += batchSize) {
+        const batch = uniqueIds.slice(offset, offset + batchSize);
+
+        const { data, error } = await client
+          .from(TABLE)
+          .select(SELECT_COLUMNS)
+          .in("id", batch);
+
+        if (error) throw error;
+
+        if (Array.isArray(data)) posts.push(...data);
+      }
+
+      const normalized = await normalizeRows(posts, client);
+
+      const orderMap = new Map(
+        uniqueIds.map((id, index) => [id, index])
+      );
+
+      normalized.sort((a, b) =>
+        (orderMap.get(String(a?.id || "")) ?? Number.MAX_SAFE_INTEGER) -
+        (orderMap.get(String(b?.id || "")) ?? Number.MAX_SAFE_INTEGER)
+      );
+
+      return makeResult(true, "SAVED_POSTS_LOADED", normalized);
+
+    } catch (error) {
+      console.error("Supabase Saved Posts Load Failed:", error);
+
+      return makeResult(
+        false,
+        "SAVED_POSTS_LOAD_FAILED",
         null,
         getErrorMessage(error)
       );
@@ -1002,6 +1066,7 @@
     initialize,
 
     getFeed,
+    getSavedPosts,
     getMyPosts,
 
     createPost,
