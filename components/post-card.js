@@ -10,6 +10,7 @@
  * - Display author, avatar, date and post text
  * - Display reaction, comment, save and share actions
  * - Display live Supabase comment and share counts
+ * - Use the shared KSKActionMenu from initial render
  * - Saved status owned by KSKPostActions / Supabase
  * =========================================================
  */
@@ -136,10 +137,8 @@
     return false;
   }
 
-  function updateSaveButton(button, saved) {
+  function updateSaveButton(button, saved, english) {
     if (!button) return;
-
-    const english = LANG()?.getLanguage?.() === "en";
 
     button.textContent = saved
       ? `🔖 ${english ? "Saved" : "सेभ भयो"}`
@@ -150,9 +149,46 @@
     button.dataset.postSaved = String(Boolean(saved));
   }
 
+  /*
+   * Shared Menu को Save item पनि
+   * saved state अनुसार तत्काल परिवर्तन हुन्छ।
+   */
+
+  function updatePostMenuSaveState(postId, saved, english) {
+    const id = String(postId || "");
+
+    if (!id) return;
+
+    document
+      .querySelectorAll(".ksk-action-menu [data-menu-action='post-save']")
+      .forEach(item => {
+        if (String(item.dataset.menuValue || "") !== id) {
+          return;
+        }
+
+        item.innerHTML = `
+          <span aria-hidden="true">
+            ${saved ? "🔖" : "☆"}
+          </span>
+          ${saved
+            ? (
+                english
+                  ? "Remove from saved"
+                  : "सेभ सूचीबाट हटाउनुहोस्"
+              )
+            : (
+                english
+                  ? "Save post"
+                  : "पोस्ट सेभ गर्नुहोस्"
+              )}
+        `;
+      });
+  }
+
   function handleSavedPostsChange(event) {
     const detail = event?.detail || {};
     const action = String(detail.action || "");
+    const english = LANG()?.getLanguage?.() === "en";
 
     if (action === "loaded") {
       const postIds = new Set(
@@ -162,12 +198,15 @@
       );
 
       document
-        .querySelectorAll('[data-post-action="save"][data-post-id]')
+        .querySelectorAll(
+          '[data-post-action="save"][data-post-id]'
+        )
         .forEach(button => {
-          updateSaveButton(
-            button,
-            postIds.has(String(button.dataset.postId || ""))
-          );
+          const postId = String(button.dataset.postId || "");
+          const saved = postIds.has(postId);
+
+          updateSaveButton(button, saved, english);
+          updatePostMenuSaveState(postId, saved, english);
         });
 
       return;
@@ -183,11 +222,17 @@
 
     document
       .querySelectorAll(
-        `[data-post-action="save"][data-post-id="${postId}"]`
+        '[data-post-action="save"][data-post-id]'
       )
       .forEach(button => {
-        updateSaveButton(button, saved);
+        if (String(button.dataset.postId || "") !== postId) {
+          return;
+        }
+
+        updateSaveButton(button, saved, english);
       });
+
+    updatePostMenuSaveState(postId, saved, english);
   }
 
   global.addEventListener(
@@ -270,11 +315,13 @@
     }
 
     document
-      .querySelectorAll(
-        `[data-share-count-post-id="${postId}"]`
-      )
+      .querySelectorAll("[data-share-count-post-id]")
       .forEach(node => {
-        node.textContent = String(count);
+        if (
+          String(node.dataset.shareCountPostId || "") === postId
+        ) {
+          node.textContent = String(count);
+        }
       });
   }
 
@@ -287,7 +334,6 @@
 
   function handleCommentCountChange(event) {
     const detail = event.detail || {};
-
     const postId = String(detail.postId || "").trim();
 
     if (!postId) return;
@@ -302,6 +348,133 @@
     "ksk:posts-cloud-change",
     handleCommentCountChange
   );
+
+  /* SHARED POST ACTION MENU */
+
+  function getPostMenuId(postId) {
+    const safeId = String(postId || "").replace(
+      /[^a-zA-Z0-9_-]/g,
+      ""
+    );
+
+    return `ksk-post-menu-${safeId}`;
+  }
+
+  function renderPostMenu(post, options = {}) {
+    const english = isEnglish(options);
+    const postId = String(post.id || "");
+    const menuId = getPostMenuId(postId);
+
+    const currentUser = getProfile();
+
+    /*
+     * Owner menu देखाउन authorId र current profile ID
+     * दुवै उपलब्ध हुनुपर्छ र मिल्नुपर्छ।
+     *
+     * Edit/Delete मा core/post-actions.js ले
+     * फेरि Supabase ownership जाँच गर्छ।
+     */
+
+    const ownPost = Boolean(
+      currentUser.id &&
+      post.authorId &&
+      String(currentUser.id) === String(post.authorId)
+    );
+
+    const saved = isPostSaved(postId);
+
+    const items = ownPost
+      ? `
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-action="post-edit"
+            data-menu-value="${escapeHTML(postId)}">
+
+            <span aria-hidden="true">✏️</span>
+
+            ${english
+              ? "Edit post"
+              : "पोस्ट सम्पादन"}
+
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            class="is-danger"
+            data-menu-action="post-delete"
+            data-menu-value="${escapeHTML(postId)}">
+
+            <span aria-hidden="true">🗑️</span>
+
+            ${english
+              ? "Delete post"
+              : "पोस्ट मेटाउनुहोस्"}
+
+          </button>
+        `
+      : `
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-action="post-save"
+            data-menu-value="${escapeHTML(postId)}">
+
+            <span aria-hidden="true">
+              ${saved ? "🔖" : "☆"}
+            </span>
+
+            ${saved
+              ? (
+                  english
+                    ? "Remove from saved"
+                    : "सेभ सूचीबाट हटाउनुहोस्"
+                )
+              : (
+                  english
+                    ? "Save post"
+                    : "पोस्ट सेभ गर्नुहोस्"
+                )}
+
+          </button>
+        `;
+
+    return `
+      <div class="ksk-action-menu">
+
+        <button
+          class="icon-button"
+          type="button"
+          data-ksk-menu-trigger
+          data-post-menu="${escapeHTML(postId)}"
+          aria-controls="${escapeHTML(menuId)}"
+          aria-expanded="false"
+          aria-haspopup="menu"
+          aria-label="${english
+            ? "Post options"
+            : "पोस्टका विकल्प"}"
+          title="${english
+            ? "More options"
+            : "थप विकल्प"}">
+
+          ⋯
+
+        </button>
+
+        <div
+          id="${escapeHTML(menuId)}"
+          data-ksk-menu
+          role="menu"
+          hidden>
+
+          ${items}
+
+        </div>
+
+      </div>
+    `;
+  }
 
   /* RENDER POST CARD */
 
@@ -353,18 +526,14 @@
 
     const saved = isPostSaved(post.id);
 
-    /*
-     * Supabase commentCount लाई
-     * comments array भन्दा प्राथमिकता दिइन्छ।
-     */
-
     const commentCount = getCommentCount(post);
-
     const shareCount = getShareCount(post);
 
     const mediaUrl = isImageSource(post.mediaUrl)
       ? escapeHTML(post.mediaUrl.trim())
       : "";
+
+    const menuMarkup = renderPostMenu(post, options);
 
     return `
       <article
@@ -395,17 +564,7 @@
 
           </div>
 
-          <button
-            class="icon-button"
-            type="button"
-            data-post-menu="${id}"
-            aria-label="${english
-              ? "Post options"
-              : "पोस्ट विकल्प"}">
-
-            ⋯
-
-          </button>
+          ${menuMarkup}
 
         </header>
 
@@ -445,6 +604,7 @@
 
             💬
             ${english ? "Comment" : "टिप्पणी"}
+
             <span
               class="post-comment-count"
               data-comment-count-post-id="${id}">${commentCount}</span>
@@ -476,6 +636,7 @@
 
             ↗
             ${english ? "Share" : "साझा"}
+
             (<span
               class="post-share-count"
               data-share-count-post-id="${id}">${shareCount}</span>)
