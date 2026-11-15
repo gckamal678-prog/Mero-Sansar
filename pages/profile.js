@@ -15,6 +15,10 @@
 
   let remoteProfile = null;
   let remoteLoadPromise = null;
+  let viewingUserId = "";
+  let profilePosts = [];
+  let profilePostsPromise = null;
+  let profileRequestToken = 0;
 
   function isEnglish() {
     return global.KSKLanguage?.getLanguage?.() === "en";
@@ -53,6 +57,20 @@
         display:flex;
         flex-direction:column;
         gap:14px;
+      }
+
+      .profile-section.is-public-profile .profile-main-actions,
+      .profile-section.is-public-profile .profile-tools-card,
+      .profile-section.is-public-profile .profile-avatar-label,
+      .profile-section.is-public-profile .ksk-profile-avatar-hint,
+      .profile-section.is-public-profile .ksk-profile-photo-hint {
+        display:none !important;
+      }
+
+      .profile-section.is-public-profile .profile-avatar,
+      .profile-section.is-public-profile .ksk-profile-cover {
+        pointer-events:none;
+        cursor:default;
       }
 
       .profile-section .profile-card {
@@ -119,9 +137,7 @@
       }
 
       /*
-       * AVATAR FIX:
-       * बाहिरी सेतो अण्डाकार wrapper हटाइएको छ।
-       * फोटो देखिने एउटै गोलो avatar मात्र राखिएको छ।
+       * AVATAR FIX
        */
 
       .profile-section .profile-card .profile-avatar {
@@ -475,7 +491,25 @@
   }
 
   function getProfile() {
-    return remoteProfile || getLocalProfile();
+    if (remoteProfile) return remoteProfile;
+    return viewingUserId ? {} : getLocalProfile();
+  }
+
+  function getCurrentUserId() {
+    return String(
+      global.KSKSupabaseAuth?.getUser?.()?.id || ""
+    ).trim();
+  }
+
+  function isOwnProfile(user = getProfile()) {
+    const currentId = getCurrentUserId();
+    const profileId = String(user?.id || user?.userId || "").trim();
+
+    if (!currentId) return !viewingUserId;
+
+    return !viewingUserId ||
+      viewingUserId === currentId ||
+      (profileId && profileId === currentId);
   }
 
   function normalizeRemoteProfile(profile) {
@@ -528,30 +562,146 @@
     global.KSKProfileMediaUI?.refresh?.();
   }
 
+  /* LOAD PROFILE FROM SUPABASE */
+
   function loadSupabaseProfile() {
     if (remoteLoadPromise) return remoteLoadPromise;
 
     const api = global.KSKSupabaseProfile;
-    if (!api?.getMyProfile) return Promise.resolve(null);
+    if (!api) return Promise.resolve(null);
 
-    remoteLoadPromise = api.getMyProfile()
-      .then(result => {
-        if (!result) return null;
+    const requestedId = String(viewingUserId || "").trim();
+    const currentId = getCurrentUserId();
+    const requestToken = ++profileRequestToken;
+
+    const isOtherUser = Boolean(
+      requestedId && requestedId !== currentId
+    );
+
+    const loader = isOtherUser
+      ? api.getProfileById
+      : api.getMyProfile;
+
+    if (typeof loader !== "function") {
+      return Promise.resolve(null);
+    }
+
+    remoteLoadPromise = Promise.resolve(
+      isOtherUser
+        ? loader.call(api, requestedId)
+        : loader.call(api)
+    )
+      .then(async result => {
+        if (requestToken !== profileRequestToken) return null;
+
+        if (!result) {
+          remoteProfile = null;
+          profilePosts = [];
+          refreshProfilePage();
+          return null;
+        }
 
         remoteProfile = normalizeRemoteProfile(result);
-        saveRemoteProfileToCache(remoteProfile);
-        refreshProfilePage();
+
+        if (isOtherUser) {
+          await loadProfilePosts(requestedId, requestToken);
+        } else {
+          saveRemoteProfileToCache(remoteProfile);
+        }
+
+        if (requestToken === profileRequestToken) {
+          refreshProfilePage();
+        }
 
         console.info("KSK Profile: Supabase profile loaded.");
+
         return remoteProfile;
       })
       .catch(error => {
-        console.warn("KSK Profile: Supabase profile could not be loaded.", error);
-        remoteLoadPromise = null;
+        if (requestToken === profileRequestToken) {
+          remoteLoadPromise = null;
+        }
+
+        console.warn(
+          "KSK Profile: Supabase profile could not be loaded.",
+          error
+        );
+
         return null;
       });
 
     return remoteLoadPromise;
+  }
+
+  /* LOAD SELECTED USER'S POSTS */
+
+  async function loadProfilePosts(userId, requestToken) {
+    const api = global.KSKSupabasePosts;
+
+    if (!api?.getFeed || !userId) {
+      profilePosts = [];
+      return [];
+    }
+
+    if (profilePostsPromise) {
+      return profilePostsPromise;
+    }
+
+    profilePostsPromise = api.getFeed({ limit: 100 })
+      .then(response => {
+        if (requestToken !== profileRequestToken) return [];
+
+        if (!response?.ok) {
+          throw new Error(
+            response?.message || "प्रोफाइलका पोस्ट लोड भएनन्।"
+          );
+        }
+
+        const rows = Array.isArray(response.data)
+          ? response.data
+          : [];
+
+        profilePosts = rows.filter(post =>
+          String(post?.authorId || "") === String(userId)
+        );
+
+        return profilePosts;
+      })
+      .catch(error => {
+        console.warn(
+          "Profile posts could not be loaded.",
+          error
+        );
+
+        profilePosts = [];
+        return [];
+      })
+      .finally(() => {
+        profilePostsPromise = null;
+      });
+
+    return profilePostsPromise;
+  }
+
+  /* NAVIGATION PROFILE ID */
+
+  function handleProfileNavigation(event) {
+    const detail = event?.detail || {};
+
+    if (detail.page !== "profile") return;
+
+    const nextId = String(
+      detail.options?.profileUserId || ""
+    ).trim();
+
+    if (nextId === viewingUserId) return;
+
+    viewingUserId = nextId;
+    remoteProfile = null;
+    remoteLoadPromise = null;
+    profilePosts = [];
+    profilePostsPromise = null;
+    profileRequestToken += 1;
   }
 
   /* POSTS AND FRIENDS */
@@ -567,13 +717,13 @@
   }
 
   function getDisplayName(user) {
-    return String(user?.name || t("तपाईंको प्रोफाइल", "Your Profile"));
+    return String(
+      user?.name || t("तपाईंको प्रोफाइल", "Your Profile")
+    );
   }
 
   /*
    * Direct avatar markup.
-   * KSKUserCard wrapper intentionally not used here.
-   * This prevents the second outer avatar shape.
    */
 
   function renderAvatar(user) {
@@ -608,7 +758,9 @@
 
       const authorId = String(post.authorId || "");
 
-      if (userId && authorId) return authorId === userId;
+      if (userId && authorId) {
+        return authorId === userId;
+      }
 
       const author = String(post.author || "").trim();
 
@@ -680,7 +832,9 @@
   }
 
   function safeCount(value) {
-    const count = Array.isArray(value) ? value.length : Number(value);
+    const count = Array.isArray(value)
+      ? value.length
+      : Number(value);
 
     return Number.isFinite(count) && count > 0
       ? Math.floor(count)
@@ -759,14 +913,21 @@
     const link = getProfileLink();
 
     if (!link) {
-      showToast(t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."), "error");
+      showToast(
+        t("प्रोफाइल लिंक उपलब्ध भएन।", "Profile link is unavailable."),
+        "error"
+      );
+
       return false;
     }
 
     let copied = false;
 
     try {
-      if (global.isSecureContext && global.navigator?.clipboard?.writeText) {
+      if (
+        global.isSecureContext &&
+        global.navigator?.clipboard?.writeText
+      ) {
         await global.navigator.clipboard.writeText(link);
         copied = true;
       }
@@ -802,6 +963,7 @@
     );
 
     button?.blur();
+
     return copied;
   }
 
@@ -843,8 +1005,8 @@
 
     if (!rows.length) {
       return `<div class="empty-state">${t(
-        "अहिलेसम्म About जानकारी थपिएको छैन। Edit Profile बाट जानकारी थप्न सक्नुहुन्छ।",
-        "No About information yet. Add details from Edit Profile."
+        "अहिलेसम्म About जानकारी थपिएको छैन।",
+        "No About information yet."
       )}</div>`;
     }
 
@@ -869,70 +1031,112 @@
   /* MAIN RENDER */
 
   function render(options = {}) {
-    options = options && typeof options === "object" ? options : {};
+    options = options && typeof options === "object"
+      ? options
+      : {};
 
     ensureStyles();
+
+    const requestedId = String(
+      options.profileUserId || viewingUserId || ""
+    ).trim();
+
+    if (requestedId !== viewingUserId) {
+      viewingUserId = requestedId;
+      remoteProfile = null;
+      remoteLoadPromise = null;
+      profilePosts = [];
+      profilePostsPromise = null;
+      profileRequestToken += 1;
+    }
+
     loadSupabaseProfile();
 
     const user = options.user && typeof options.user === "object"
       ? options.user
       : getProfile();
 
+    const ownProfile = isOwnProfile(user);
+
     const allPosts = Array.isArray(options.posts)
       ? options.posts
-      : getPosts();
+      : (ownProfile ? getPosts() : profilePosts);
 
     const posts = getProfilePosts(user, allPosts);
     const photos = posts.filter(isPhotoPost);
-    const counts = getSocialCounts(user);
+
+    const counts = ownProfile
+      ? getSocialCounts(user)
+      : {
+          followers: safeCount(user.followersCount ?? user.followers),
+          following: safeCount(user.followingCount ?? user.following),
+          friends: safeCount(user.friendsCount ?? user.friends)
+        };
 
     const activeTab = VALID_TABS.has(options.activeTab)
       ? options.activeTab
       : "posts";
 
     return `
-      <section class="profile-section" data-profile-section>
+      <section class="profile-section${ownProfile ? "" : " is-public-profile"}" data-profile-section>
 
         <section class="card profile-card" aria-label="${t(
-          "मेरो प्रोफाइल",
-          "My profile"
+          ownProfile ? "मेरो प्रोफाइल" : "प्रोफाइल",
+          ownProfile ? "My profile" : "Profile"
         )}">
 
           <div
             class="ksk-profile-cover"
-            role="button"
-            tabindex="0"
-            aria-label="${t("Cover फोटो परिवर्तन गर्नुहोस्", "Change cover photo")}"
-            title="${t("Cover फोटो राख्न ट्याप गर्नुहोस्", "Tap to add a cover photo")}"
+            role="${ownProfile ? "button" : "img"}"
+            ${ownProfile ? 'tabindex="0"' : ""}
+            aria-label="${t("Cover फोटो", "Cover photo")}"
           >
             <div class="ksk-profile-cover-empty">
               <span class="ksk-profile-cover-icon">🌄</span>
               <span class="ksk-profile-cover-label">
-                ${t("Cover फोटो राख्नुहोस्", "Add cover photo")}
+                ${ownProfile
+                  ? t("Cover फोटो राख्नुहोस्", "Add cover photo")
+                  : t("Cover फोटो", "Cover photo")
+                }
               </span>
             </div>
-            <span class="ksk-profile-photo-hint" aria-hidden="true">📷</span>
+
+            ${ownProfile
+              ? '<span class="ksk-profile-photo-hint" aria-hidden="true">📷</span>'
+              : ""
+            }
           </div>
 
           <div
             class="profile-avatar"
-            role="button"
-            tabindex="0"
-            aria-label="${t("प्रोफाइल फोटो परिवर्तन गर्नुहोस्", "Change profile photo")}"
-            title="${t("प्रोफाइल फोटो राख्न ट्याप गर्नुहोस्", "Tap to add a profile photo")}"
+            role="${ownProfile ? "button" : "img"}"
+            ${ownProfile ? 'tabindex="0"' : ""}
+            aria-label="${escapeHTML(getDisplayName(user))}"
           >
             ${renderAvatar(user)}
-            <span class="profile-avatar-label">
-              ${t("प्रोफाइल फोटो परिवर्तन गर्न ट्याप गर्नुहोस्", "Tap to change profile photo")}
-            </span>
-            <span class="ksk-profile-avatar-hint" aria-hidden="true">📷</span>
+
+            ${ownProfile ? `
+              <span class="profile-avatar-label">
+                ${t(
+                  "प्रोफाइल फोटो परिवर्तन गर्न ट्याप गर्नुहोस्",
+                  "Tap to change profile photo"
+                )}
+              </span>
+
+              <span class="ksk-profile-avatar-hint" aria-hidden="true">
+                📷
+              </span>
+            ` : ""}
           </div>
 
           <h2>${escapeHTML(getDisplayName(user))}</h2>
 
           ${user.bio ? `<p>${escapeHTML(user.bio)}</p>` : ""}
 
-          ${user.location ? `<p>📍 ${escapeHTML(user.location)}</p>` : ""}
+          ${user.location
+            ? `<p>📍 ${escapeHTML(user.location)}</p>`
+            : ""
+          }
 
           <div class="profile-stats">
             ${renderStat(counts.followers, t("फलोअर्स", "Followers"))}
@@ -944,46 +1148,50 @@
             ${posts.length} ${t("पोस्ट", "Posts")}
           </div>
 
-          <div class="profile-main-actions">
-            <button class="profile-action-btn primary" type="button" data-edit-profile>
-              <span>✏️</span>
-              <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
-            </button>
+          ${ownProfile ? `
+            <div class="profile-main-actions">
+              <button class="profile-action-btn primary" type="button" data-edit-profile>
+                <span>✏️</span>
+                <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
+              </button>
 
-            <button class="profile-action-btn" type="button" data-open-settings>
-              <span>⚙️</span>
-              <span>${t("सेटिङ", "Settings")}</span>
-            </button>
-          </div>
+              <button class="profile-action-btn" type="button" data-open-settings>
+                <span>⚙️</span>
+                <span>${t("सेटिङ", "Settings")}</span>
+              </button>
+            </div>
+          ` : ""}
 
         </section>
 
-        <section class="card profile-tools-card">
-          <div class="profile-tools-heading">
-            <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
-            <p>${t(
-              "आफ्नो प्रोफाइल र सामग्री व्यवस्थापन गर्नुहोस्।",
-              "Manage your profile and saved content."
-            )}</p>
-          </div>
+        ${ownProfile ? `
+          <section class="card profile-tools-card">
+            <div class="profile-tools-heading">
+              <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
+              <p>${t(
+                "आफ्नो प्रोफाइल र सामग्री व्यवस्थापन गर्नुहोस्।",
+                "Manage your profile and saved content."
+              )}</p>
+            </div>
 
-          <div class="profile-tool-grid" data-profile-extras>
-            <button type="button" data-copy-profile-link>
-              🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
-            </button>
+            <div class="profile-tool-grid" data-profile-extras>
+              <button type="button" data-copy-profile-link>
+                🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
+              </button>
 
-            <button type="button" data-page="saved">
-              🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
-            </button>
-          </div>
+              <button type="button" data-page="saved">
+                🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
+              </button>
+            </div>
 
-          <p class="profile-tool-note">
-            ${t(
-              "QR, उपलब्धि र Insights का विकल्पहरू यही सेक्सनमा देखिन्छन्।",
-              "QR, achievements and insights appear in this section."
-            )}
-          </p>
-        </section>
+            <p class="profile-tool-note">
+              ${t(
+                "QR, उपलब्धि र Insights का विकल्पहरू यही सेक्सनमा देखिन्छन्।",
+                "QR, achievements and insights appear in this section."
+              )}
+            </p>
+          </section>
+        ` : ""}
 
         <div class="profile-tabs" role="tablist">
           <button
@@ -1096,6 +1304,7 @@
   }
 
   document.addEventListener("click", handleClick);
+  global.addEventListener("ksk:navigate", handleProfileNavigation);
 
   /* PUBLIC API */
 
@@ -1109,7 +1318,38 @@
 
     refreshFromSupabase() {
       remoteLoadPromise = null;
+      profilePostsPromise = null;
       return loadSupabaseProfile();
+    },
+
+    openUserProfile(userId) {
+      const id = String(userId || "").trim();
+      if (!id) return false;
+
+      const navigation = global.KSKNavigation;
+
+      if (typeof navigation?.navigate === "function") {
+        return navigation.navigate("profile", {
+          profileUserId: id,
+          source: "comment-author"
+        });
+      }
+
+      global.dispatchEvent(new CustomEvent("ksk:navigate-request", {
+        detail: {
+          page: "profile",
+          options: {
+            profileUserId: id,
+            source: "comment-author"
+          }
+        }
+      }));
+
+      return true;
+    },
+
+    getViewingUserId() {
+      return viewingUserId;
     }
   });
 
