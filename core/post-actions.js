@@ -9,7 +9,7 @@
  * - Open post options menu
  * - Edit posts through Supabase
  * - Delete posts through Supabase
- * - Save / Unsave: waiting for Supabase saved_posts table
+ * - Save / Unsave: Supabase saved_posts table
  *
  * LIKE / REACTION:
  * Owned by core/reactions.js
@@ -30,6 +30,12 @@
   const AUTH = () => global.KSKSupabaseAuth || null;
 
   let initialized = false;
+
+  const savedPostIds = new Set();
+  const savingPostIds = new Set();
+  let savedCacheUserId = "";
+  let savedPostsLoading = null;
+  let savedPostsLoaded = false;
 
   let app = {
     isEnglish: () => false,
@@ -222,6 +228,8 @@
 
     initialized = true;
 
+    loadSavedPosts().catch(() => {});
+
     document.removeEventListener(
       "click",
       onDocumentClick,
@@ -238,28 +246,255 @@
   }
 
   /* =======================================================
-     SAVE / UNSAVE
-     
-     Not connected yet:
-     Supabase saved_posts table and RLS are not available.
-     Do not report fake success.
+     CLOUD SAVED POSTS
   ======================================================= */
 
-  function isPostSaved() {
-    return false;
+  async function getSavedPostsContext() {
+    const auth = AUTH();
+
+    if (!auth || typeof auth.initialize !== "function") {
+      throw new Error(
+        isEnglish()
+          ? "Supabase authentication is unavailable."
+          : "Supabase Authentication उपलब्ध छैन।"
+      );
+    }
+
+    const initializedAuth = await auth.initialize();
+
+    if (!initializedAuth || !auth.isAuthenticated?.()) {
+      throw new Error(
+        isEnglish()
+          ? "Please sign in first."
+          : "पहिले आफ्नो खातामा लगइन गर्नुहोस्।"
+      );
+    }
+
+    const client = auth.getClient?.();
+    const user = auth.getUser?.();
+
+    if (!client || !user?.id) {
+      throw new Error(
+        isEnglish()
+          ? "Your login session could not be found."
+          : "लगइन Session प्राप्त भएन।"
+      );
+    }
+
+    const userId = String(user.id);
+
+    if (savedCacheUserId !== userId) {
+      savedPostIds.clear();
+      savedCacheUserId = userId;
+      savedPostsLoading = null;
+      savedPostsLoaded = false;
+    }
+
+    return { client, user, userId };
   }
 
-  function toggleSave() {
-    if (!isReady()) return false;
+  async function loadSavedPosts(force = false) {
+    if (savedPostsLoading && !force) {
+      return savedPostsLoading;
+    }
 
-    toast(
-      isEnglish()
-        ? "Cloud saving is not available yet."
-        : "Cloud Save सुविधा अझै तयार भएको छैन।",
-      "info"
+    savedPostsLoading = (async () => {
+      try {
+        const { client, userId } = await getSavedPostsContext();
+
+        const { data, error } = await client
+          .from("saved_posts")
+          .select("post_id")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        savedPostIds.clear();
+
+        (Array.isArray(data) ? data : []).forEach(row => {
+          if (row?.post_id) {
+            savedPostIds.add(String(row.post_id));
+          }
+        });
+
+        savedPostsLoaded = true;
+
+        global.dispatchEvent(
+          new CustomEvent("ksk:saved-posts-change", {
+            detail: {
+              action: "loaded",
+              userId,
+              postIds: Array.from(savedPostIds)
+            }
+          })
+        );
+
+        return {
+          ok: true,
+          data: Array.from(savedPostIds)
+        };
+
+      } catch (error) {
+        console.error("KSK Saved Posts load failed:", error);
+
+        return {
+          ok: false,
+          message: getErrorMessage(
+            error,
+            isEnglish()
+              ? "Could not load saved posts."
+              : "सेभ गरिएका पोस्ट लोड गर्न सकिएन।"
+          )
+        };
+
+      } finally {
+        savedPostsLoading = null;
+      }
+    })();
+
+    return savedPostsLoading;
+  }
+
+  function isPostSaved(postId) {
+    const id = String(postId || "").trim();
+
+    if (!id) return false;
+
+    const currentUserId = String(
+      AUTH()?.getUser?.()?.id || ""
     );
 
-    return false;
+    if (currentUserId && savedCacheUserId !== currentUserId) {
+      savedPostIds.clear();
+      savedCacheUserId = currentUserId;
+      savedPostsLoading = null;
+      savedPostsLoaded = false;
+    }
+
+    if (!savedCacheUserId || (!savedPostsLoaded && !savedPostsLoading)) {
+      loadSavedPosts().catch(() => {});
+    }
+
+    return savedPostIds.has(id);
+  }
+
+  async function toggleSave(postId, button = null) {
+    if (!isReady()) return false;
+
+    const id = String(postId || "").trim();
+
+    if (!id) {
+      toast(
+        isEnglish()
+          ? "Post ID is missing."
+          : "पोस्ट ID उपलब्ध छैन।",
+        "error"
+      );
+      return false;
+    }
+
+    if (savingPostIds.has(id)) return false;
+
+    savingPostIds.add(id);
+
+    if (button) button.disabled = true;
+
+    try {
+      const { client, userId } = await getSavedPostsContext();
+
+      if (!savedPostsLoaded) {
+        const loaded = await loadSavedPosts(true);
+
+        if (!loaded?.ok) {
+          throw new Error(
+            loaded?.message || "Saved posts load failed."
+          );
+        }
+      }
+
+      const wasSaved = savedPostIds.has(id);
+
+      if (wasSaved) {
+        const { error } = await client
+          .from("saved_posts")
+          .delete()
+          .eq("user_id", userId)
+          .eq("post_id", id);
+
+        if (error) throw error;
+
+        savedPostIds.delete(id);
+
+        toast(
+          isEnglish()
+            ? "Post removed from saved."
+            : "सेभ सूचीबाट पोस्ट हटाइयो।",
+          "success"
+        );
+
+      } else {
+        const { error } = await client
+          .from("saved_posts")
+          .insert({
+            user_id: userId,
+            post_id: id
+          });
+
+        if (error) throw error;
+
+        savedPostIds.add(id);
+
+        toast(
+          isEnglish()
+            ? "Post saved successfully."
+            : "पोस्ट सफलतापूर्वक सेभ भयो।",
+          "success"
+        );
+      }
+
+      global.dispatchEvent(
+        new CustomEvent("ksk:saved-posts-change", {
+          detail: {
+            action: wasSaved ? "removed" : "saved",
+            userId,
+            postId: id,
+            saved: !wasSaved
+          }
+        })
+      );
+
+      global.dispatchEvent(
+        new CustomEvent("ksk:posts-cloud-change", {
+          detail: {
+            action: wasSaved ? "post-unsaved" : "post-saved",
+            postId: id,
+            source: "post-actions"
+          }
+        })
+      );
+
+      return true;
+
+    } catch (error) {
+      console.error("KSK Saved Posts action failed:", error);
+
+      toast(
+        error?.message ||
+          (
+            isEnglish()
+              ? "Could not update saved posts."
+              : "पोस्ट सेभ सूची परिवर्तन गर्न सकिएन।"
+          ),
+        "error"
+      );
+
+      return false;
+
+    } finally {
+      savingPostIds.delete(id);
+      if (button) button.disabled = false;
+    }
   }
 
   /* =======================================================
@@ -692,7 +927,7 @@
     event.preventDefault();
     event.stopImmediatePropagation();
 
-    toggleSave(saveButton.dataset.postId);
+    toggleSave(saveButton.dataset.postId, saveButton);
   }
 
   /* =======================================================
@@ -755,6 +990,11 @@
     );
 
     initialized = false;
+    savedPostIds.clear();
+    savingPostIds.clear();
+    savedCacheUserId = "";
+    savedPostsLoading = null;
+    savedPostsLoaded = false;
 
     return true;
   }
