@@ -34,6 +34,7 @@
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
   const SIGNED_URL_SECONDS = 3600;
   const SIGNED_URL_REFRESH_MARGIN = 30000;
+  const COMMENT_COUNT_PAGE_SIZE = 1000;
 
   const ALLOWED_TYPES = [
     "image/jpeg",
@@ -386,7 +387,13 @@
     };
   }
 
-  /* LOAD COMMENT COUNTS IN BATCH */
+  /*
+   * LOAD COMMENT COUNTS IN BATCH
+   *
+   * IMPORTANT:
+   * Do not silently return zero when Supabase fails.
+   * A failed count query must be visible to the caller.
+   */
 
   async function getCommentCountMap(rows, client) {
     const postIds = [
@@ -403,7 +410,12 @@
 
     if (!postIds.length) return countMap;
 
-    const PAGE_SIZE = 1000;
+    if (!client) {
+      throw new Error(
+        "Comment count लोड गर्न Supabase Client उपलब्ध छैन।"
+      );
+    }
+
     let offset = 0;
 
     try {
@@ -412,7 +424,10 @@
           .from("post_comments")
           .select("post_id")
           .in("post_id", postIds)
-          .range(offset, offset + PAGE_SIZE - 1);
+          .range(
+            offset,
+            offset + COMMENT_COUNT_PAGE_SIZE - 1
+          );
 
         if (error) throw error;
 
@@ -429,15 +444,22 @@
           }
         });
 
-        if (page.length < PAGE_SIZE) break;
+        if (page.length < COMMENT_COUNT_PAGE_SIZE) {
+          break;
+        }
 
-        offset += PAGE_SIZE;
+        offset += COMMENT_COUNT_PAGE_SIZE;
       }
 
     } catch (error) {
-      console.warn(
+      console.error(
         "Post comment counts could not be loaded:",
         error
+      );
+
+      throw new Error(
+        "Comment count Database बाट लोड गर्न सकिएन: " +
+        getErrorMessage(error)
       );
     }
 
@@ -566,6 +588,10 @@
 
         if (status === "TIMED_OUT") {
           console.warn("Posts Realtime connection timed out.");
+        }
+
+        if (status === "SUBSCRIBED") {
+          console.info("Posts Realtime connected.");
         }
       });
 
