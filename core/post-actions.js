@@ -2,21 +2,10 @@
 "use strict";
 
 /*
- * =========================================================
- * KSK — POST ACTIONS MODULE
- * Mero-Sansar
+ * KSK — POST ACTIONS
+ * Shared Action Menu integration
  *
- * - Open post options menu
- * - Edit posts through Supabase
- * - Delete posts through Supabase
- * - Save / Unsave: Supabase saved_posts table
- *
- * LIKE / REACTION:
- * Owned by core/reactions.js
- *
- * REFRESH:
- * Owned by core/data-refresh.js and Supabase post events
- * =========================================================
+ * Existing Supabase save/edit/delete features preserved.
  */
 
 (function (global) {
@@ -33,24 +22,19 @@
 
   const savedPostIds = new Set();
   const savingPostIds = new Set();
+
   let savedCacheUserId = "";
   let savedPostsLoading = null;
   let savedPostsLoaded = false;
 
   let app = {
     isEnglish: () => false,
-
-    translate: (key, fallback = "") =>
-      fallback || key,
-
+    translate: (key, fallback = "") => fallback || key,
     toast: () => {},
-
     refreshCurrentPage: () => {}
   };
 
-  /* =======================================================
-     UTILITIES
-  ======================================================= */
+  /* UTILITIES */
 
   function escapeHTML(value = "") {
     if (typeof UTILS()?.escapeHTML === "function") {
@@ -101,17 +85,12 @@
   function isReady() {
     if (initialized) return true;
 
-    console.error(
-      "KSKPostActions is not initialized."
-    );
-
+    console.error("KSKPostActions is not initialized.");
     return false;
   }
 
   function getCurrentUserId() {
-    return String(
-      AUTH()?.getUser?.()?.id || ""
-    );
+    return String(AUTH()?.getUser?.()?.id || "");
   }
 
   function getErrorMessage(result, fallback) {
@@ -122,9 +101,7 @@
     );
   }
 
-  /* =======================================================
-     SUPABASE POST LOOKUP
-  ======================================================= */
+  /* SUPABASE POST LOOKUP */
 
   async function getCloudPost(postId) {
     const id = String(postId || "").trim();
@@ -147,34 +124,53 @@
       );
     }
 
-    const result = await api.getFeed({
-      limit: 100
-    });
+    const loaders = [
+      () => api.getFeed({ limit: 100 }),
 
-    if (!result?.ok || !Array.isArray(result.data)) {
-      throw new Error(
-        getErrorMessage(
-          result,
-          isEnglish()
-            ? "Could not load the post."
-            : "पोस्ट लोड गर्न सकिएन।"
-        )
-      );
+      ...(typeof api.getMyPosts === "function"
+        ? [() => api.getMyPosts({ limit: 100 })]
+        : []),
+
+      ...(typeof api.getSavedPosts === "function"
+        ? [() => api.getSavedPosts()]
+        : [])
+    ];
+
+    let lastError = null;
+
+    for (const load of loaders) {
+      try {
+        const result = await load();
+
+        if (!result?.ok || !Array.isArray(result.data)) {
+          lastError = new Error(
+            getErrorMessage(
+              result,
+              isEnglish()
+                ? "Could not load the post."
+                : "पोस्ट लोड गर्न सकिएन।"
+            )
+          );
+
+          continue;
+        }
+
+        const post = result.data.find(
+          item => String(item?.id) === id
+        );
+
+        if (post) return post;
+
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    const post = result.data.find(
-      item => String(item?.id) === id
+    throw lastError || new Error(
+      isEnglish()
+        ? "Post could not be found."
+        : "पोस्ट भेटिएन।"
     );
-
-    if (!post) {
-      throw new Error(
-        isEnglish()
-          ? "Post could not be found in the live feed."
-          : "लाइभ Feed मा पोस्ट भेटिएन।"
-      );
-    }
-
-    return post;
   }
 
   function canManagePost(post) {
@@ -201,9 +197,7 @@
     return post;
   }
 
-  /* =======================================================
-     INITIALIZATION
-  ======================================================= */
+  /* INITIALIZATION */
 
   function initialize(options = {}) {
     if (options && typeof options === "object") {
@@ -242,12 +236,22 @@
       true
     );
 
+    document.removeEventListener(
+      "ksk:action-menu-select",
+      handleActionMenuSelect
+    );
+
+    document.addEventListener(
+      "ksk:action-menu-select",
+      handleActionMenuSelect
+    );
+
+    global.KSKActionMenu?.initialize?.();
+
     return true;
   }
 
-  /* =======================================================
-     CLOUD SAVED POSTS
-  ======================================================= */
+  /* SAVED POSTS */
 
   async function getSavedPostsContext() {
     const auth = AUTH();
@@ -300,7 +304,8 @@
 
     savedPostsLoading = (async () => {
       try {
-        const { client, userId } = await getSavedPostsContext();
+        const { client, userId } =
+          await getSavedPostsContext();
 
         const { data, error } = await client
           .from("saved_posts")
@@ -336,7 +341,10 @@
         };
 
       } catch (error) {
-        console.error("KSK Saved Posts load failed:", error);
+        console.error(
+          "KSK Saved Posts load failed:",
+          error
+        );
 
         return {
           ok: false,
@@ -365,14 +373,20 @@
       AUTH()?.getUser?.()?.id || ""
     );
 
-    if (currentUserId && savedCacheUserId !== currentUserId) {
+    if (
+      currentUserId &&
+      savedCacheUserId !== currentUserId
+    ) {
       savedPostIds.clear();
       savedCacheUserId = currentUserId;
       savedPostsLoading = null;
       savedPostsLoaded = false;
     }
 
-    if (!savedCacheUserId || (!savedPostsLoaded && !savedPostsLoading)) {
+    if (
+      !savedCacheUserId ||
+      (!savedPostsLoaded && !savedPostsLoading)
+    ) {
       loadSavedPosts().catch(() => {});
     }
 
@@ -391,6 +405,7 @@
           : "पोस्ट ID उपलब्ध छैन।",
         "error"
       );
+
       return false;
     }
 
@@ -401,7 +416,8 @@
     if (button) button.disabled = true;
 
     try {
-      const { client, userId } = await getSavedPostsContext();
+      const { client, userId } =
+        await getSavedPostsContext();
 
       if (!savedPostsLoaded) {
         const loaded = await loadSavedPosts(true);
@@ -467,7 +483,9 @@
       global.dispatchEvent(
         new CustomEvent("ksk:posts-cloud-change", {
           detail: {
-            action: wasSaved ? "post-unsaved" : "post-saved",
+            action: wasSaved
+              ? "post-unsaved"
+              : "post-saved",
             postId: id,
             source: "post-actions"
           }
@@ -477,7 +495,10 @@
       return true;
 
     } catch (error) {
-      console.error("KSK Saved Posts action failed:", error);
+      console.error(
+        "KSK Saved Posts action failed:",
+        error
+      );
 
       toast(
         error?.message ||
@@ -493,13 +514,12 @@
 
     } finally {
       savingPostIds.delete(id);
+
       if (button) button.disabled = false;
     }
   }
 
-  /* =======================================================
-     EDIT POST
-  ======================================================= */
+  /* EDIT POST */
 
   async function editPost(postId) {
     if (!isReady()) return false;
@@ -508,6 +528,7 @@
 
     try {
       post = await getOwnedCloudPost(postId);
+
     } catch (error) {
       toast(
         error?.message ||
@@ -671,78 +692,244 @@
     return true;
   }
 
-  /* =======================================================
-     POST OPTIONS MENU
-  ======================================================= */
+  /* SHARED ACTION MENU */
 
-  async function openPostMenu(postId) {
-    if (!isReady()) return false;
+  function getActionMenuService() {
+    const menu = global.KSKActionMenu || null;
 
-    let post;
-
-    try {
-      post = await getOwnedCloudPost(postId);
-    } catch (error) {
-      toast(
-        error?.message ||
-          (
-            isEnglish()
-              ? "Post options are unavailable."
-              : "पोस्ट विकल्प उपलब्ध छैन।"
-          ),
-        "warning"
+    if (typeof menu?.initialize !== "function") {
+      throw new Error(
+        isEnglish()
+          ? "Shared action menu is unavailable."
+          : "साझा Action Menu उपलब्ध छैन।"
       );
-
-      return false;
     }
 
-    openModal({
-      title: isEnglish()
-        ? "Post options"
-        : "पोस्ट विकल्प",
+    menu.initialize();
 
-      content: `
-        <div class="post-menu-actions">
+    return menu;
+  }
 
+  function safeMenuId(postId) {
+    return "ksk-post-menu-" +
+      String(postId || "").replace(
+        /[^a-zA-Z0-9_-]/g,
+        ""
+      );
+  }
+
+  function buildPostMenuMarkup(post) {
+    const id = String(post.id);
+    const menuId = safeMenuId(id);
+
+    const ownPost = canManagePost(post);
+    const saved = isPostSaved(id);
+
+    const items = ownPost
+      ? `
           <button
-            class="dropdown-item"
             type="button"
-            data-edit-post="${escapeHTML(post.id)}">
-            ✏️
+            role="menuitem"
+            data-menu-action="post-edit"
+            data-menu-value="${escapeHTML(id)}">
+            <span aria-hidden="true">✏️</span>
             ${isEnglish()
               ? "Edit post"
               : "पोस्ट सम्पादन"}
           </button>
 
           <button
-            class="dropdown-item"
             type="button"
-            data-delete-post="${escapeHTML(post.id)}">
-            🗑️
+            role="menuitem"
+            class="is-danger"
+            data-menu-action="post-delete"
+            data-menu-value="${escapeHTML(id)}">
+            <span aria-hidden="true">🗑️</span>
             ${isEnglish()
               ? "Delete post"
               : "पोस्ट मेटाउनुहोस्"}
           </button>
+        `
+      : `
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-action="post-save"
+            data-menu-value="${escapeHTML(id)}">
+            <span aria-hidden="true">
+              ${saved ? "🔖" : "☆"}
+            </span>
 
-        </div>
-      `,
+            ${saved
+              ? (
+                  isEnglish()
+                    ? "Remove from saved"
+                    : "सेभ सूचीबाट हटाउनुहोस्"
+                )
+              : (
+                  isEnglish()
+                    ? "Save post"
+                    : "पोस्ट सेभ गर्नुहोस्"
+                )}
+          </button>
+        `;
 
-      footer: `
+    return `
+      <div class="ksk-action-menu">
+
         <button
-          class="btn btn-secondary"
           type="button"
-          data-modal-close>
-          ${app.translate("close", "बन्द")}
+          class="icon-button"
+          data-ksk-menu-trigger
+          aria-controls="${menuId}"
+          aria-expanded="false"
+          aria-label="${isEnglish()
+            ? "Post options"
+            : "पोस्टका विकल्प"}"
+          title="${isEnglish()
+            ? "More options"
+            : "थप विकल्प"}">
+          ⋯
         </button>
-      `
-    });
 
-    return true;
+        <div
+          id="${menuId}"
+          data-ksk-menu
+          role="menu"
+          hidden>
+          ${items}
+        </div>
+
+      </div>
+    `;
   }
 
-  /* =======================================================
-     DELETE CONFIRMATION
-  ======================================================= */
+  async function openPostMenu(postId, trigger = null) {
+    if (!isReady()) return false;
+
+    const id = String(postId || "").trim();
+
+    if (!id) {
+      toast(
+        isEnglish()
+          ? "Post ID is missing."
+          : "पोस्ट ID उपलब्ध छैन।",
+        "warning"
+      );
+
+      return false;
+    }
+
+    try {
+      const menuService = getActionMenuService();
+      const post = await getCloudPost(id);
+
+      let button = trigger;
+
+      if (!button?.isConnected) {
+        button = Array.from(
+          document.querySelectorAll("[data-post-menu]")
+        ).find(
+          node => String(node.dataset.postMenu || "") === id
+        );
+      }
+
+      if (!button?.isConnected) {
+        toast(
+          isEnglish()
+            ? "Post options are no longer available."
+            : "पोस्टका विकल्प अहिले उपलब्ध छैनन्।",
+          "warning"
+        );
+
+        return false;
+      }
+
+      const existing = button.closest(
+        ".ksk-action-menu"
+      );
+
+      const wrapper = document.createElement("div");
+
+      wrapper.innerHTML =
+        buildPostMenuMarkup(post);
+
+      const newWrapper = wrapper.firstElementChild;
+
+      const newTrigger = newWrapper?.querySelector(
+        "[data-ksk-menu-trigger]"
+      );
+
+      if (!newWrapper || !newTrigger) {
+        throw new Error(
+          "Could not build the post action menu."
+        );
+      }
+
+      if (existing) {
+        existing.replaceWith(newWrapper);
+      } else {
+        button.replaceWith(newWrapper);
+      }
+
+      menuService.open(newTrigger, false);
+
+      return true;
+
+    } catch (error) {
+      console.error(
+        "KSK Post menu failed:",
+        error
+      );
+
+      toast(
+        error?.message ||
+          (
+            isEnglish()
+              ? "Post options are unavailable."
+              : "पोस्ट विकल्प उपलब्ध छैनन्।"
+          ),
+        "error"
+      );
+
+      return false;
+    }
+  }
+
+  function handleActionMenuSelect(event) {
+    const detail = event?.detail || {};
+
+    const action = String(
+      detail.action || ""
+    );
+
+    const postId = String(
+      detail.value || ""
+    ).trim();
+
+    if (
+      !postId ||
+      !action.startsWith("post-")
+    ) {
+      return;
+    }
+
+    if (action === "post-edit") {
+      editPost(postId);
+      return;
+    }
+
+    if (action === "post-delete") {
+      deletePost(postId);
+      return;
+    }
+
+    if (action === "post-save") {
+      toggleSave(postId);
+    }
+  }
+
+  /* DELETE CONFIRMATION */
 
   async function confirmDeletePost(postId) {
     if (!isReady()) return false;
@@ -751,6 +938,7 @@
 
     try {
       post = await getOwnedCloudPost(postId);
+
     } catch (error) {
       toast(
         error?.message ||
@@ -834,72 +1022,73 @@
       return false;
     }
 
-    confirmButton.addEventListener("click", async () => {
-      if (confirmButton.disabled) return;
+    confirmButton.addEventListener(
+      "click",
+      async () => {
+        if (confirmButton.disabled) return;
 
-      confirmButton.disabled = true;
+        confirmButton.disabled = true;
 
-      const api = POSTS();
+        const api = POSTS();
 
-      if (typeof api?.deletePost !== "function") {
-        closeModal();
+        if (typeof api?.deletePost !== "function") {
+          closeModal();
 
-        toast(
-          isEnglish()
-            ? "Supabase delete service is unavailable."
-            : "Supabase Delete सेवा उपलब्ध छैन।",
-          "error"
-        );
-
-        return;
-      }
-
-      try {
-        const result = await api.deletePost(post.id);
-
-        if (!result?.ok) {
-          throw new Error(
-            getErrorMessage(
-              result,
-              isEnglish()
-                ? "Could not delete post."
-                : "पोस्ट मेटाउन सकिएन।"
-            )
+          toast(
+            isEnglish()
+              ? "Supabase delete service is unavailable."
+              : "Supabase Delete सेवा उपलब्ध छैन।",
+            "error"
           );
+
+          return;
         }
 
-        closeModal();
+        try {
+          const result = await api.deletePost(post.id);
 
-        toast(
-          isEnglish()
-            ? "Post deleted successfully."
-            : "पोस्ट सफलतापूर्वक मेटाइयो।",
-          "success"
-        );
+          if (!result?.ok) {
+            throw new Error(
+              getErrorMessage(
+                result,
+                isEnglish()
+                  ? "Could not delete post."
+                  : "पोस्ट मेटाउन सकिएन।"
+              )
+            );
+          }
 
-        app.refreshCurrentPage();
+          closeModal();
 
-      } catch (error) {
-        confirmButton.disabled = false;
+          toast(
+            isEnglish()
+              ? "Post deleted successfully."
+              : "पोस्ट सफलतापूर्वक मेटाइयो।",
+            "success"
+          );
 
-        toast(
-          error?.message ||
-            (
-              isEnglish()
-                ? "Could not delete post."
-                : "पोस्ट मेटाउन सकिएन।"
-            ),
-          "error"
-        );
+          app.refreshCurrentPage();
+
+        } catch (error) {
+          confirmButton.disabled = false;
+
+          toast(
+            error?.message ||
+              (
+                isEnglish()
+                  ? "Could not delete post."
+                  : "पोस्ट मेटाउन सकिएन।"
+              ),
+            "error"
+          );
+        }
       }
-    });
+    );
 
     return true;
   }
 
-  /* =======================================================
-     DELETE POST
-  ======================================================= */
+  /* DELETE POST */
 
   function deletePost(postId) {
     if (!isReady()) return false;
@@ -909,9 +1098,7 @@
     return true;
   }
 
-  /* =======================================================
-     SAVE BUTTON CAPTURE HANDLER
-  ======================================================= */
+  /* SAVE BUTTON CAPTURE HANDLER */
 
   function onDocumentClick(event) {
     const target = event.target;
@@ -927,12 +1114,13 @@
     event.preventDefault();
     event.stopImmediatePropagation();
 
-    toggleSave(saveButton.dataset.postId, saveButton);
+    toggleSave(
+      saveButton.dataset.postId,
+      saveButton
+    );
   }
 
-  /* =======================================================
-     DELEGATED POST MENU ACTIONS
-  ======================================================= */
+  /* DELEGATED POST ACTIONS */
 
   function handleClick(target) {
     if (!isReady()) return false;
@@ -949,7 +1137,11 @@
     );
 
     if (postMenu) {
-      openPostMenu(postMenu.dataset.postMenu);
+      openPostMenu(
+        postMenu.dataset.postMenu,
+        postMenu
+      );
+
       return true;
     }
 
@@ -978,9 +1170,7 @@
     return false;
   }
 
-  /* =======================================================
-     CLEANUP
-  ======================================================= */
+  /* CLEANUP */
 
   function destroy() {
     document.removeEventListener(
@@ -989,9 +1179,16 @@
       true
     );
 
+    document.removeEventListener(
+      "ksk:action-menu-select",
+      handleActionMenuSelect
+    );
+
     initialized = false;
+
     savedPostIds.clear();
     savingPostIds.clear();
+
     savedCacheUserId = "";
     savedPostsLoading = null;
     savedPostsLoaded = false;
@@ -999,18 +1196,16 @@
     return true;
   }
 
-  /* =======================================================
-     PUBLIC API
-  ======================================================= */
+  /* PUBLIC API */
 
   global.KSKPostActions = Object.freeze({
     initialize,
     destroy,
 
     handleClick,
+    openPostMenu,
 
     editPost,
-    openPostMenu,
     deletePost,
 
     toggleSave,
