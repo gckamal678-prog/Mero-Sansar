@@ -4,16 +4,10 @@
 /*
  * MERO SANSAR — SUPABASE PROFILE ADAPTER
  *
- * Responsibilities:
- * - Load the signed-in user's profile from Supabase.
- * - Update the signed-in user's profile.
- * - Map Supabase column names to the app's profile format.
- *
- * Dependencies:
- * - core/supabase-auth.js
- *
- * Supabase table:
- * - public.profiles
+ * - Load own profile
+ * - Load another user's public profile by ID
+ * - Update own profile only
+ * - Normalize Supabase profile rows
  */
 
 (function (global) {
@@ -22,6 +16,20 @@
   if (global.KSKSupabaseProfile) return;
 
   const TABLE = "profiles";
+
+  const PROFILE_COLUMNS = [
+    "id",
+    "name",
+    "first_name",
+    "last_name",
+    "bio",
+    "location",
+    "avatar_url",
+    "cover_url",
+    "created_at",
+    "updated_at",
+    "onboarding_completed"
+  ].join(",");
 
   function getAuth() {
     return global.KSKSupabaseAuth || null;
@@ -53,10 +61,7 @@
       );
     }
 
-    return {
-      client,
-      user
-    };
+    return { client, user };
   }
 
   function normalizeProfile(row) {
@@ -110,15 +115,8 @@
 
     const update = {};
 
-    /*
-     * NAME
-     */
-
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "name"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "name")
     ) {
       update.name = cleanText(
         profile.name,
@@ -127,15 +125,8 @@
       );
     }
 
-    /*
-     * FIRST NAME
-     */
-
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "firstName"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "firstName")
     ) {
       update.first_name = cleanText(
         profile.firstName,
@@ -145,10 +136,7 @@
     }
 
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "first_name"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "first_name")
     ) {
       update.first_name = cleanText(
         profile.first_name,
@@ -157,15 +145,8 @@
       );
     }
 
-    /*
-     * LAST NAME
-     */
-
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "lastName"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "lastName")
     ) {
       update.last_name = cleanText(
         profile.lastName,
@@ -175,10 +156,7 @@
     }
 
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "last_name"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "last_name")
     ) {
       update.last_name = cleanText(
         profile.last_name,
@@ -187,15 +165,8 @@
       );
     }
 
-    /*
-     * BIO
-     */
-
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "bio"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "bio")
     ) {
       update.bio = cleanText(
         profile.bio,
@@ -204,15 +175,8 @@
       );
     }
 
-    /*
-     * LOCATION
-     */
-
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "location"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "location")
     ) {
       update.location = cleanText(
         profile.location,
@@ -221,49 +185,29 @@
       );
     }
 
-    /*
-     * AVATAR URL
-     */
-
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "avatar"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "avatar")
     ) {
       update.avatar_url =
         String(profile.avatar || "").trim();
     }
 
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "avatar_url"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "avatar_url")
     ) {
       update.avatar_url =
         String(profile.avatar_url || "").trim();
     }
 
-    /*
-     * COVER URL
-     */
-
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "cover"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "cover")
     ) {
       update.cover_url =
         String(profile.cover || "").trim();
     }
 
     if (
-      Object.prototype.hasOwnProperty.call(
-        profile,
-        "cover_url"
-      )
+      Object.prototype.hasOwnProperty.call(profile, "cover_url")
     ) {
       update.cover_url =
         String(profile.cover_url || "").trim();
@@ -280,9 +224,6 @@
 
   /*
    * GET MY PROFILE
-   *
-   * Reads only the profile belonging to the
-   * currently authenticated Supabase user.
    */
 
   async function getMyProfile() {
@@ -305,19 +246,7 @@
 
     const { data, error } = await client
       .from(TABLE)
-      .select([
-        "id",
-        "name",
-        "first_name",
-        "last_name",
-        "bio",
-        "location",
-        "avatar_url",
-        "cover_url",
-        "created_at",
-        "updated_at",
-        "onboarding_completed"
-      ].join(","))
+      .select(PROFILE_COLUMNS)
       .eq("id", user.id)
       .maybeSingle();
 
@@ -334,10 +263,52 @@
   }
 
   /*
-   * UPDATE MY PROFILE
+   * GET ANOTHER USER'S PUBLIC PROFILE
    *
-   * Updates only the authenticated user's own row.
-   * Row-level security remains enforced by Supabase.
+   * Reads only the selected profile row.
+   * Supabase RLS remains responsible for access.
+   */
+
+  async function getProfileById(userId) {
+    const id = String(userId || "").trim();
+
+    if (!id) {
+      throw new Error(
+        "प्रयोगकर्ताको ID उपलब्ध भएन।"
+      );
+    }
+
+    const { client, user } =
+      await getAuthenticatedContext();
+
+    if (id === String(user.id)) {
+      return getMyProfile();
+    }
+
+    const { data, error } = await client
+      .from(TABLE)
+      .select(PROFILE_COLUMNS)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      console.error(
+        "Public Profile Load Failed:",
+        error
+      );
+
+      throw error;
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    return normalizeProfile(data);
+  }
+
+  /*
+   * UPDATE MY PROFILE ONLY
    */
 
   async function updateMyProfile(profile) {
@@ -350,19 +321,7 @@
       .from(TABLE)
       .update(update)
       .eq("id", user.id)
-      .select([
-        "id",
-        "name",
-        "first_name",
-        "last_name",
-        "bio",
-        "location",
-        "avatar_url",
-        "cover_url",
-        "created_at",
-        "updated_at",
-        "onboarding_completed"
-      ].join(","))
+      .select(PROFILE_COLUMNS)
       .maybeSingle();
 
     if (error) {
@@ -407,8 +366,8 @@
     },
 
     getMyProfile,
+    getProfileById,
     updateMyProfile,
-
     normalizeProfile
   });
 
