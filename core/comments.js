@@ -8,7 +8,7 @@
  * - Supabase comments and nested replies
  * - Edit / Delete own comments
  * - Comment likes and emoji reactions
- * - @mentions
+ * - Supabase friends based @mentions
  * - Realtime updates
  *
  * DATA SOURCE: SUPABASE ONLY
@@ -31,6 +31,8 @@
 
   let comments = [];
   let reactions = [];
+
+  let mentionFriends = [];
 
   let replyTarget = null;
   let editTarget = null;
@@ -131,8 +133,79 @@
     `;
   }
 
+  /* =========================================
+     SUPABASE FRIENDS / MENTIONS
+  ========================================= */
+
   function getFriends() {
-    return global.KSKData?.getFriends?.() || [];
+    return Array.isArray(mentionFriends)
+      ? mentionFriends
+      : [];
+  }
+
+  async function loadMentionFriends() {
+    const friendsAPI = global.KSKSupabaseFriends;
+
+    if (!friendsAPI?.getDashboard) {
+      mentionFriends = [];
+
+      console.warn(
+        "Supabase Friends API unavailable."
+      );
+
+      return false;
+    }
+
+    try {
+      const response = await friendsAPI.getDashboard();
+
+      if (!response?.ok) {
+        mentionFriends = [];
+
+        console.warn(
+          "Mention friends could not load:",
+          response?.message || response?.code
+        );
+
+        return false;
+      }
+
+      const rows = Array.isArray(response.data?.friends)
+        ? response.data.friends
+        : [];
+
+      mentionFriends = rows
+        .map(friend => ({
+          id: String(friend.id || friend.userId || ""),
+          name: cleanText(friend.name, 60),
+          avatar: String(
+            friend.avatarUrl || friend.avatar || ""
+          ).trim()
+        }))
+        .filter(friend =>
+          friend.id &&
+          friend.name
+        );
+
+      return true;
+
+    } catch (error) {
+      mentionFriends = [];
+
+      console.error(
+        "Mention friends loading failed:",
+        error
+      );
+
+      return false;
+    }
+  }
+
+  function escapeRegExp(value) {
+    return String(value).replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    );
   }
 
   function getMentionedFriends(value) {
@@ -143,19 +216,14 @@
 
       if (!name) return;
 
-      const escaped = name.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-      );
-
       const regex = new RegExp(
-        `(^|\\s)@${escaped}(?=\\s|$|[.,!?])`,
+        `(^|\\s)@${escapeRegExp(name)}(?=\\s|$|[.,!?])`,
         "i"
       );
 
       if (regex.test(value)) {
         found.push({
-          id: String(friend.id || ""),
+          id: String(friend.id),
           name
         });
       }
@@ -172,13 +240,8 @@
 
       if (!name) return;
 
-      const escaped = name.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-      );
-
       const regex = new RegExp(
-        `(^|\\s)(@${escaped})(?=\\s|$|[.,!?])`,
+        `(^|\\s)(@${escapeRegExp(name)})(?=\\s|$|[.,!?])`,
         "gi"
       );
 
@@ -260,13 +323,11 @@
      LOAD COMMENTS AND REACTIONS
   ========================================= */
 
-  
   async function loadComments() {
     if (!activePostId) return false;
 
     const { client } = await getContext();
 
-    // 1. सक्रिय पोस्टका कमेन्ट मात्र लोड गर्ने।
     const { data: commentRows, error: commentError } =
       await client
         .from(COMMENTS_TABLE)
@@ -291,7 +352,6 @@
       ? commentRows
       : [];
 
-    // 2. Database rows लाई UI format मा बदल्ने।
     comments = rows.map(row => {
       const parent = rows.find(item =>
         String(item.id) === String(row.parent_id || "")
@@ -320,18 +380,15 @@
       };
     });
 
-    // 3. सक्रिय पोस्टका कमेन्ट ID मात्र लिने।
     const commentIds = comments.map(item =>
       String(item.id)
     );
 
-    // कमेन्ट नभए Reaction query आवश्यक छैन।
     if (!commentIds.length) {
       reactions = [];
       return true;
     }
 
-    // 4. ती कमेन्टका Reaction मात्र लोड गर्ने।
     const { data: reactionRows, error: reactionError } =
       await client
         .from(REACTIONS_TABLE)
@@ -346,7 +403,6 @@
 
     return true;
   }
-
 
   /* =========================================
      COMMENT TREE
@@ -533,7 +589,7 @@
   }
 
   /* =========================================
-     MENTIONS
+     MENTION SUGGESTIONS
   ========================================= */
 
   function renderMentionSuggestions(query) {
@@ -1152,12 +1208,8 @@
 
       if (target.hasAttribute("data-comment-like")) {
         const id = target.getAttribute("data-comment-like");
-        const current = getMyReaction(id);
 
-        setCommentReaction(
-          id,
-          current?.emoji === "❤️" ? "❤️" : "❤️"
-        );
+        setCommentReaction(id, "❤️");
         return;
       }
 
@@ -1231,6 +1283,11 @@
 
       await stopRealtime();
 
+      // Cloud friends load for @mentions.
+      // Mention loading failure must not block comments.
+      mentionFriends = [];
+      await loadMentionFriends();
+
       activePostId = id;
       replyTarget = null;
       editTarget = null;
@@ -1295,6 +1352,7 @@
 
     comments = [];
     reactions = [];
+    mentionFriends = [];
 
     replyTarget = null;
     editTarget = null;
