@@ -9,7 +9,7 @@
  * - Create, update and delete posts
  * - Private Storage image upload
  * - Signed media URLs with expiry cache
- * - Realtime post changes
+ * - Realtime post and comment changes
  *
  * Dependencies:
  * - core/supabase-auth.js
@@ -18,6 +18,7 @@
  * Tables / Storage:
  * - public.posts
  * - public.profiles
+ * - public.post_comments
  * - posts-media
  */
 
@@ -275,15 +276,7 @@
     return url;
   }
 
-  /*
-   * AUTHOR AVATAR LOOKUP
-   *
-   * Current avatar URLs are loaded from profiles.
-   * This also fixes older posts with empty or outdated
-   * author_avatar_url snapshots.
-   *
-   * Profile photos use the public profile-media bucket.
-   */
+  /* AUTHOR AVATAR LOOKUP */
 
   async function getAuthorAvatarMap(rows, client) {
     const userIds = [
@@ -327,7 +320,14 @@
     return avatarMap;
   }
 
-  async function normalizePost(row, client, avatarMap = null) {
+  /* NORMALIZE SINGLE POST */
+
+  async function normalizePost(
+    row,
+    client,
+    avatarMap = null,
+    commentCount = 0
+  ) {
     if (!row) return null;
 
     let mediaUrl = "";
@@ -376,28 +376,99 @@
       likes: 0,
       liked: false,
       comments: [],
+
+      commentCount: Math.max(
+        0,
+        Number(commentCount) || 0
+      ),
+
       reactionCounts: {}
     };
   }
 
+  /* LOAD COMMENT COUNTS IN BATCH */
+
+  async function getCommentCountMap(rows, client) {
+    const postIds = [
+      ...new Set(
+        (rows || [])
+          .map(row => String(row?.id || "").trim())
+          .filter(Boolean)
+      )
+    ];
+
+    const countMap = new Map(
+      postIds.map(id => [id, 0])
+    );
+
+    if (!postIds.length) return countMap;
+
+    const PAGE_SIZE = 1000;
+    let offset = 0;
+
+    try {
+      while (true) {
+        const { data, error } = await client
+          .from("post_comments")
+          .select("post_id")
+          .in("post_id", postIds)
+          .range(offset, offset + PAGE_SIZE - 1);
+
+        if (error) throw error;
+
+        const page = Array.isArray(data) ? data : [];
+
+        page.forEach(row => {
+          const id = String(row?.post_id || "");
+
+          if (countMap.has(id)) {
+            countMap.set(
+              id,
+              countMap.get(id) + 1
+            );
+          }
+        });
+
+        if (page.length < PAGE_SIZE) break;
+
+        offset += PAGE_SIZE;
+      }
+
+    } catch (error) {
+      console.warn(
+        "Post comment counts could not be loaded:",
+        error
+      );
+    }
+
+    return countMap;
+  }
+
+  /* NORMALIZE FEED ROWS */
+
   async function normalizeRows(rows, client) {
     const sourceRows = Array.isArray(rows) ? rows : [];
 
-    const avatarMap = await getAuthorAvatarMap(
-      sourceRows,
-      client
-    );
+    const [avatarMap, commentCountMap] = await Promise.all([
+      getAuthorAvatarMap(sourceRows, client),
+      getCommentCountMap(sourceRows, client)
+    ]);
 
     return Promise.all(
-      sourceRows.map(row =>
-        normalizePost(row, client, avatarMap)
-      )
+      sourceRows.map(row => {
+        const id = String(row?.id || "");
+
+        return normalizePost(
+          row,
+          client,
+          avatarMap,
+          commentCountMap.get(id) || 0
+        );
+      })
     );
   }
 
-  /* =====================================================
-     REALTIME
-  ===================================================== */
+  /* REALTIME */
 
   async function stopRealtime() {
     const auth = getAuth();
@@ -446,6 +517,7 @@
 
       const channel = client
         .channel("ksk-posts-live")
+
         .on(
           "postgres_changes",
           {
@@ -460,6 +532,25 @@
               postId:
                 payload?.new?.id ||
                 payload?.old?.id ||
+                ""
+            });
+          }
+        )
+
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "post_comments"
+          },
+          payload => {
+            dispatchPostChange({
+              action: "comment-realtime",
+              eventType: payload?.eventType || "",
+              postId:
+                payload?.new?.post_id ||
+                payload?.old?.post_id ||
                 ""
             });
           }
@@ -493,9 +584,7 @@
     }
   }
 
-  /* =====================================================
-     INITIALIZE
-  ===================================================== */
+  /* INITIALIZE */
 
   async function initialize() {
     try {
@@ -517,9 +606,7 @@
     }
   }
 
-  /* =====================================================
-     READ FEED
-  ===================================================== */
+  /* READ FEED */
 
   async function getFeed(options = {}) {
     try {
@@ -529,7 +616,10 @@
 
       const limit = Math.min(
         100,
-        Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 50)
+        Math.max(
+          1,
+          Number.isFinite(requestedLimit) ? requestedLimit : 50
+        )
       );
 
       let query = client
@@ -563,9 +653,7 @@
     }
   }
 
-  /* =====================================================
-     READ MY POSTS
-  ===================================================== */
+  /* READ MY POSTS */
 
   async function getMyPosts(options = {}) {
     try {
@@ -575,7 +663,10 @@
 
       const limit = Math.min(
         100,
-        Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 50)
+        Math.max(
+          1,
+          Number.isFinite(requestedLimit) ? requestedLimit : 50
+        )
       );
 
       const { data, error } = await client
@@ -604,9 +695,7 @@
     }
   }
 
-  /* =====================================================
-     CREATE POST
-  ===================================================== */
+  /* CREATE POST */
 
   async function createPost(input = {}) {
     let uploadedPath = "";
@@ -688,6 +777,7 @@
               cleanupError
             );
           }
+
         } catch (cleanupError) {
           console.warn("Failed upload cleanup:", cleanupError);
         }
@@ -706,9 +796,7 @@
     }
   }
 
-  /* =====================================================
-     UPDATE POST
-  ===================================================== */
+  /* UPDATE POST */
 
   async function updatePost(postId, changes = {}) {
     try {
@@ -777,9 +865,7 @@
     }
   }
 
-  /* =====================================================
-     DELETE POST
-  ===================================================== */
+  /* DELETE POST */
 
   async function deletePost(postId) {
     try {
@@ -820,6 +906,7 @@
               storageError
             );
           }
+
         } catch (cleanupError) {
           console.warn(
             "Post media cleanup failed:",
@@ -854,9 +941,7 @@
     }
   }
 
-  /* =====================================================
-     AUTH CHANGE HANDLING
-  ===================================================== */
+  /* AUTH CHANGE HANDLING */
 
   global.addEventListener("ksk:auth-change", event => {
     clearSignedUrlCache();
@@ -885,9 +970,7 @@
     }
   });
 
-  /* =====================================================
-     PUBLIC API
-  ===================================================== */
+  /* PUBLIC API */
 
   global.KSKSupabasePosts = Object.freeze({
     initialize,
