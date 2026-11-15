@@ -10,6 +10,7 @@
  * - Display author, avatar, date and post text
  * - Display reaction, comment, save and share actions
  * - Display live Supabase comment and share counts
+ * - Saved status owned by KSKPostActions / Supabase
  * =========================================================
  */
 
@@ -23,6 +24,7 @@
   const DATA = () => global.KSKData || null;
   const UTILS = () => global.KSKUtils || null;
   const LANG = () => global.KSKLanguage || null;
+  const POST_ACTIONS = () => global.KSKPostActions || null;
 
   function escapeHTML(value = "") {
     if (typeof UTILS()?.escapeHTML === "function") {
@@ -122,16 +124,76 @@
     `;
   }
 
-  /* SAVED STATUS */
+  /* SUPABASE SAVED STATUS */
 
   function isPostSaved(postId) {
-    const savedPosts = DATA()?.getSavedPosts?.() || [];
+    const actions = POST_ACTIONS();
 
-    return Array.isArray(savedPosts) &&
-      savedPosts.some(item =>
-        String(item) === String(postId)
-      );
+    if (typeof actions?.isPostSaved === "function") {
+      return Boolean(actions.isPostSaved(postId));
+    }
+
+    return false;
   }
+
+  function updateSaveButton(button, saved) {
+    if (!button) return;
+
+    const english = LANG()?.getLanguage?.() === "en";
+
+    button.textContent = saved
+      ? `🔖 ${english ? "Saved" : "सेभ भयो"}`
+      : `☆ ${english ? "Save" : "सेभ"}`;
+
+    button.classList.toggle("is-active", Boolean(saved));
+    button.setAttribute("aria-pressed", String(Boolean(saved)));
+    button.dataset.postSaved = String(Boolean(saved));
+  }
+
+  function handleSavedPostsChange(event) {
+    const detail = event?.detail || {};
+    const action = String(detail.action || "");
+
+    if (action === "loaded") {
+      const postIds = new Set(
+        Array.isArray(detail.postIds)
+          ? detail.postIds.map(String)
+          : []
+      );
+
+      document
+        .querySelectorAll('[data-post-action="save"][data-post-id]')
+        .forEach(button => {
+          updateSaveButton(
+            button,
+            postIds.has(String(button.dataset.postId || ""))
+          );
+        });
+
+      return;
+    }
+
+    const postId = String(detail.postId || "").trim();
+
+    if (!postId) return;
+
+    const saved = typeof detail.saved === "boolean"
+      ? detail.saved
+      : action === "saved";
+
+    document
+      .querySelectorAll(
+        `[data-post-action="save"][data-post-id="${postId}"]`
+      )
+      .forEach(button => {
+        updateSaveButton(button, saved);
+      });
+  }
+
+  global.addEventListener(
+    "ksk:saved-posts-change",
+    handleSavedPostsChange
+  );
 
   /* REACTION SUMMARY */
 
@@ -292,7 +354,7 @@
     const saved = isPostSaved(post.id);
 
     /*
-     * अब Supabase commentCount लाई
+     * Supabase commentCount लाई
      * comments array भन्दा प्राथमिकता दिइन्छ।
      */
 
@@ -390,13 +452,16 @@
           </button>
 
           <button
-            class="post-action"
+            class="post-action ${saved ? "is-active" : ""}"
             type="button"
             data-post-action="save"
-            data-post-id="${id}">
+            data-post-id="${id}"
+            data-post-saved="${String(saved)}"
+            aria-pressed="${String(saved)}">
 
-            ${saved ? "🔖" : "☆"}
-            ${english ? "Save" : "सेभ"}
+            ${saved
+              ? `🔖 ${english ? "Saved" : "सेभ भयो"}`
+              : `☆ ${english ? "Save" : "सेभ"}`}
 
           </button>
 
@@ -428,7 +493,9 @@
   global.KSKPostCard = Object.freeze({
     render,
     renderAvatar,
-    getCommentCount
+    getCommentCount,
+    getShareCount,
+    isPostSaved
   });
 
 })(window);
