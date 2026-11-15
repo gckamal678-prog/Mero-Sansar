@@ -2,8 +2,13 @@
 "use strict";
 
 /*
- * MERO SANSAR — REAL FRIENDS PAGE
- * Version: 2.0.0
+ * MERO SANSAR — CONNECTED FRIENDS PAGE
+ * Version: 2.1.0
+ *
+ * Connected with:
+ *   core/supabase-friends.js
+ *   pages/messages.js
+ *   pages/profile.js
  */
 
 (function (global) {
@@ -50,10 +55,6 @@
     }
   }
 
-  function refresh() {
-    global.KSKNavigation?.refreshCurrentPage?.();
-  }
-
   function avatar(person) {
     if (person?.avatarUrl) {
       return `<img src="${esc(person.avatarUrl)}" alt="" loading="lazy">`;
@@ -77,15 +78,16 @@
 
   function person(personData, subtitle, actions = "") {
     const p = personData || {};
-    const id = p.id || p.userId || "";
 
     return `
       <article class="ksf-person">
         <div class="ksf-avatar">${avatar(p)}</div>
+
         <div class="ksf-person-info">
           <strong>${esc(p.name || "प्रोफाइल उपलब्ध छैन")}</strong>
           <small>${esc(subtitle || "")}</small>
         </div>
+
         <div class="ksf-person-actions">${actions}</div>
       </article>
     `;
@@ -108,6 +110,7 @@
           <strong>${title}</strong>
           <span class="ksf-count">${Number(count || 0)}</span>
         </summary>
+
         <div class="ksf-section-content">${content}</div>
       </details>
     `;
@@ -125,23 +128,28 @@
         padding:4px 0 30px;
         color:var(--color-text,inherit);
       }
+
       .ksf-page * { box-sizing:border-box; }
+
       .ksf-heading {
         display:flex;
         align-items:center;
         justify-content:space-between;
         margin:0 0 14px;
       }
+
       .ksf-heading h2 {
         margin:0;
         font-size:21px;
         font-weight:850;
       }
+
       .ksf-heading p {
         margin:5px 0 0;
         color:var(--color-muted,#888);
         font-size:12px;
       }
+
       .ksf-card {
         margin:12px 0;
         padding:15px;
@@ -149,11 +157,13 @@
         border-radius:16px;
         background:var(--color-surface,#fff);
       }
+
       .ksf-search-box {
         display:flex;
         gap:8px;
         margin:14px 0;
       }
+
       .ksf-search-box input {
         width:100%;
         min-width:0;
@@ -166,6 +176,7 @@
         font:inherit;
         font-size:13px;
       }
+
       .ksf-btn {
         min-height:34px;
         padding:7px 10px;
@@ -178,18 +189,26 @@
         font-weight:750;
         cursor:pointer;
       }
+
       .ksf-btn:disabled { opacity:.5; }
+
       .ksf-primary {
         color:white;
         background:var(--color-primary,#2563eb);
         border-color:transparent;
       }
+
       .ksf-danger {
         color:#c43d3d;
         background:rgba(210,60,60,.07);
         border-color:rgba(210,60,60,.2);
       }
-      .ksf-search-button { flex:none; min-width:75px; }
+
+      .ksf-search-button {
+        flex:none;
+        min-width:75px;
+      }
+
       .ksf-results {
         margin:12px 0;
         padding:0 12px;
@@ -197,12 +216,15 @@
         border-radius:14px;
         background:var(--color-surface,#fff);
       }
+
       .ksf-results:empty { display:none; }
+
       .ksf-result-heading {
         padding:12px 0 4px;
         font-size:12px;
         font-weight:800;
       }
+
       .ksf-person {
         display:flex;
         align-items:center;
@@ -211,7 +233,9 @@
         padding:11px 0;
         border-bottom:1px solid var(--color-border,rgba(128,128,128,.15));
       }
+
       .ksf-person:last-child { border-bottom:0; }
+
       .ksf-avatar {
         display:grid;
         place-items:center;
@@ -223,32 +247,38 @@
         background:var(--color-surface-secondary,#eee);
         font-weight:800;
       }
+
       .ksf-avatar img {
         width:100%;
         height:100%;
         object-fit:cover;
       }
+
       .ksf-person-info {
         flex:1;
         min-width:0;
       }
+
       .ksf-person-info strong {
         display:block;
         overflow-wrap:anywhere;
         font-size:12px;
       }
+
       .ksf-person-info small {
         display:block;
         margin-top:4px;
         color:var(--color-muted,#888);
         font-size:10px;
       }
+
       .ksf-person-actions {
         display:flex;
         flex-wrap:wrap;
         justify-content:flex-end;
         gap:5px;
       }
+
       .ksf-section {
         margin:11px 0;
         overflow:hidden;
@@ -256,6 +286,7 @@
         border-radius:15px;
         background:var(--color-surface,#fff);
       }
+
       .ksf-section summary {
         display:flex;
         align-items:center;
@@ -265,9 +296,18 @@
         cursor:pointer;
         list-style:none;
       }
-      .ksf-section summary::-webkit-details-marker { display:none; }
-      .ksf-section summary strong { flex:1; font-size:13px; }
+
+      .ksf-section summary::-webkit-details-marker {
+        display:none;
+      }
+
+      .ksf-section summary strong {
+        flex:1;
+        font-size:13px;
+      }
+
       .ksf-section-icon { font-size:18px; }
+
       .ksf-count {
         display:grid;
         place-items:center;
@@ -279,24 +319,29 @@
         font-size:10px;
         font-weight:800;
       }
+
       .ksf-section-content {
         padding:0 13px 10px;
         border-top:1px solid var(--color-border,rgba(128,128,128,.15));
       }
+
       .ksf-empty {
         padding:17px 5px;
         text-align:center;
         color:var(--color-muted,#888);
         font-size:12px;
       }
+
       .ksf-empty span { font-size:22px; }
       .ksf-empty p { margin:7px 0 0; }
+
       .ksf-loading {
         padding:24px 10px;
         text-align:center;
         color:var(--color-muted,#888);
         font-size:12px;
       }
+
       .ksf-note {
         margin:12px 0;
         padding:11px;
@@ -306,8 +351,10 @@
         font-size:11px;
         line-height:1.6;
       }
+
       @media(max-width:390px) {
         .ksf-person { flex-wrap:wrap; }
+
         .ksf-person-actions {
           width:100%;
           padding-left:49px;
@@ -322,19 +369,21 @@
   function render() {
     styles();
 
-    const uid = API()?.getCurrentUserId?.() || "";
-
-    const html = `
+    return `
       <section class="page-section ksf-page" id="ksfFriendsRoot">
         <header class="ksf-heading">
           <div>
             <h2>${t("साथीहरू", "Friends")}</h2>
-            <p>${t("साथी खोज्नुहोस् र सम्बन्ध व्यवस्थापन गर्नुहोस्।", "Find people and manage your connections.")}</p>
+            <p>${t(
+              "साथी खोज्नुहोस् र सम्बन्ध व्यवस्थापन गर्नुहोस्।",
+              "Find people and manage your connections."
+            )}</p>
           </div>
         </header>
 
         <section class="ksf-card">
           <strong>${t("नयाँ साथी खोज्नुहोस्", "Find people")}</strong>
+
           <div class="ksf-search-box">
             <input
               id="ksfUserSearch"
@@ -344,26 +393,37 @@
               placeholder="${t("नाम वा थर लेख्नुहोस्...", "Search by name...")}"
               aria-label="${t("प्रयोगकर्ता खोज्नुहोस्", "Search users")}"
             >
-            <button class="ksf-btn ksf-primary ksf-search-button"
-              type="button" data-friends-search>
+
+            <button
+              class="ksf-btn ksf-primary ksf-search-button"
+              type="button"
+              data-friends-search
+            >
               ${t("खोज्नुहोस्", "Search")}
             </button>
           </div>
-          <div id="ksfSearchResults" class="ksf-results" aria-live="polite"></div>
+
+          <div
+            id="ksfSearchResults"
+            class="ksf-results"
+            aria-live="polite"
+          ></div>
+
           <p class="ksf-note">
-            ${t("खोजीमा सार्वजनिक प्रोफाइलको नाम मात्र देखिन्छ। Request स्वीकार भएपछि मात्र साथी सूचीमा जोडिन्छ।", "Search shows public profile names only. A person becomes your friend after accepting your request.")}
+            ${t(
+              "खोजीमा सार्वजनिक प्रोफाइलको नाम मात्र देखिन्छ। Request स्वीकार भएपछि मात्र साथी सूचीमा जोडिन्छ।",
+              "Search shows public profile names only. A person becomes your friend after accepting your request."
+            )}
           </p>
         </section>
 
         <div id="ksfDashboard">
-          <div class="ksf-loading">${t("साथीहरूको विवरण लोड हुँदैछ...", "Loading your connections...")}</div>
+          <div class="ksf-loading">
+            ${t("साथीहरूको विवरण लोड हुँदैछ...", "Loading your connections...")}
+          </div>
         </div>
       </section>
     `;
-
-    Promise.resolve().then(loadDashboard);
-
-    return html;
   }
 
   async function loadDashboard() {
@@ -371,12 +431,17 @@
     if (!root) return;
 
     const version = ++dashboardVersion;
-    root.innerHTML = `<div class="ksf-loading">${t("लोड हुँदैछ...", "Loading...")}</div>`;
+
+    root.innerHTML = `
+      <div class="ksf-loading">${t("लोड हुँदैछ...", "Loading...")}</div>
+    `;
 
     const api = API();
 
     if (!api) {
-      root.innerHTML = empty(t("Friends सेवा उपलब्ध छैन।", "Friends service is unavailable."));
+      root.innerHTML = empty(
+        t("Friends सेवा उपलब्ध छैन।", "Friends service is unavailable.")
+      );
       return;
     }
 
@@ -386,7 +451,9 @@
     if (!document.getElementById("ksfDashboard")) return;
 
     if (!response.ok) {
-      root.innerHTML = empty(response.message || t("डाटा लोड हुन सकेन।", "Could not load data."));
+      root.innerHTML = empty(
+        response.message || t("डाटा लोड हुन सकेन।", "Could not load data.")
+      );
       return;
     }
 
@@ -413,10 +480,17 @@
       ? d.friends.map(p => person(
           p,
           t("तपाईंको साथी", "Your friend"),
+          button("profile", p.id, t("प्रोफाइल", "Profile")) +
+          button("message", p.id, t("मेसेज", "Message"), "primary") +
           button("unfriend", p.id, t("साथी हटाउनुहोस्", "Unfriend"), "danger") +
           button("block", p.id, "Block", "danger")
         )).join("")
-      : empty(t("अहिलेसम्म साथी छैनन्। नामबाट खोजेर Request पठाउनुहोस्।", "No friends yet. Search for people and send a request."));
+      : empty(
+          t(
+            "अहिलेसम्म साथी छैनन्। नामबाट खोजेर Request पठाउनुहोस्।",
+            "No friends yet. Search for people and send a request."
+          )
+        );
 
     const followers = d.followers.length
       ? d.followers.map(p => person(
@@ -432,7 +506,10 @@
           button("unfollow", p.id, "Unfollow", "danger") +
           button("block", p.id, "Block", "danger")
         )).join("")
-      : empty(t("तपाईंले कसैलाई Follow गर्नुभएको छैन।", "You are not following anyone."), "↗️");
+      : empty(
+          t("तपाईंले कसैलाई Follow गर्नुभएको छैन।", "You are not following anyone."),
+          "↗️"
+        );
 
     const blocked = d.blocked.length
       ? d.blocked.map(p => person(
@@ -443,12 +520,39 @@
       : empty(t("Block गरिएको प्रयोगकर्ता छैन।", "No blocked users."), "🛡️");
 
     root.innerHTML = `
-      ${section(t("आएका Friend Request", "Incoming requests"), "📩", d.incoming.length, incoming, d.incoming.length > 0)}
-      ${section(t("पठाएका Request", "Sent requests"), "📤", d.outgoing.length, outgoing)}
-      ${section(t("तपाईंका साथीहरू", "Your friends"), "👥", d.friends.length, friends, true)}
+      ${section(
+        t("आएका Friend Request", "Incoming requests"),
+        "📩",
+        d.incoming.length,
+        incoming,
+        d.incoming.length > 0
+      )}
+
+      ${section(
+        t("पठाएका Request", "Sent requests"),
+        "📤",
+        d.outgoing.length,
+        outgoing
+      )}
+
+      ${section(
+        t("तपाईंका साथीहरू", "Your friends"),
+        "👥",
+        d.friends.length,
+        friends,
+        true
+      )}
+
       ${section("Followers", "↙️", d.followers.length, followers)}
+
       ${section("Following", "↗️", d.following.length, following)}
-      ${section(t("Block सूची", "Blocked users"), "🛡️", d.blocked.length, blocked)}
+
+      ${section(
+        t("Block सूची", "Blocked users"),
+        "🛡️",
+        d.blocked.length,
+        blocked
+      )}
     `;
   }
 
@@ -460,43 +564,145 @@
     if (!box) return;
 
     if (term.length < 2) {
-      box.innerHTML = empty(t("कम्तीमा २ अक्षर लेख्नुहोस्।", "Enter at least 2 characters."), "🔎");
+      box.innerHTML = empty(
+        t("कम्तीमा २ अक्षर लेख्नुहोस्।", "Enter at least 2 characters."),
+        "🔎"
+      );
       return;
     }
 
     const version = ++searchVersion;
-    box.innerHTML = `<div class="ksf-loading">${t("खोज्दैछ...", "Searching...")}</div>`;
+
+    box.innerHTML = `
+      <div class="ksf-loading">${t("खोज्दैछ...", "Searching...")}</div>
+    `;
 
     const response = await API().searchUsers(term);
 
     if (version !== searchVersion) return;
 
     if (!response.ok) {
-      box.innerHTML = empty(response.message || t("खोजी असफल भयो।", "Search failed."));
+      box.innerHTML = empty(
+        response.message || t("खोजी असफल भयो।", "Search failed.")
+      );
       return;
     }
 
     const users = response.data || [];
 
     if (!users.length) {
-      box.innerHTML = empty(t("मिल्दो प्रयोगकर्ता भेटिएन।", "No matching users found."), "🔎");
+      box.innerHTML = empty(
+        t("मिल्दो प्रयोगकर्ता भेटिएन।", "No matching users found."),
+        "🔎"
+      );
       return;
     }
 
     box.innerHTML = `
-      <div class="ksf-result-heading">${t("खोजी नतिजा", "Search results")} · ${users.length}</div>
+      <div class="ksf-result-heading">
+        ${t("खोजी नतिजा", "Search results")} · ${users.length}
+      </div>
+
       ${users.map(p => person(
         p,
         t("Mero Sansar प्रयोगकर्ता", "Mero Sansar user"),
+        button("profile", p.id, t("प्रोफाइल", "Profile")) +
         button("add", p.id, t("Request पठाउनुहोस्", "Add friend"), "primary") +
         button("follow", p.id, "Follow")
       )).join("")}
     `;
   }
 
+  async function openFriendProfile(userId) {
+    const id = String(userId || "").trim();
+    if (!id) return false;
+
+    const profile = global.KSKProfilePage;
+
+    if (typeof profile?.openUserProfile === "function") {
+      return Boolean(profile.openUserProfile(id));
+    }
+
+    return Boolean(global.KSKNavigation?.navigate?.("profile", {
+      profileUserId: id,
+      source: "friends"
+    }));
+  }
+
+  async function openFriendMessenger(userId) {
+    const id = String(userId || "").trim();
+    if (!id) return false;
+
+    const messenger = global.KSKMessagesPage;
+
+    if (!messenger || typeof messenger.openFriendChat !== "function") {
+      toast(
+        t(
+          "Messenger सेवा उपलब्ध छैन। पृष्ठ पुनः लोड गरेर प्रयास गर्नुहोस्।",
+          "Messenger is unavailable. Reload the page and try again."
+        ),
+        "error"
+      );
+      return false;
+    }
+
+    const ready = await messenger.initialize?.();
+
+    if (ready === false) {
+      toast(
+        t("Messenger सुरु हुन सकेन।", "Messenger could not initialize."),
+        "error"
+      );
+      return false;
+    }
+
+    const navigation = global.KSKNavigation;
+
+    if (typeof navigation?.navigate === "function") {
+      navigation.navigate("messages", {
+        source: "friends",
+        friendId: id
+      });
+    }
+
+    const opened = await messenger.openFriendChat(id);
+
+    if (!opened) {
+      toast(
+        t(
+          "साथीसँग कुराकानी खोल्न सकिएन।",
+          "Could not open this friend's chat."
+        ),
+        "error"
+      );
+      return false;
+    }
+
+    return true;
+  }
+
   async function performAction(action, id, element) {
+    if (!id) return;
+
+    if (action === "profile") {
+      await openFriendProfile(id);
+      return;
+    }
+
+    if (action === "message") {
+      if (element) element.disabled = true;
+
+      try {
+        await openFriendMessenger(id);
+      } finally {
+        if (element) element.disabled = false;
+      }
+
+      return;
+    }
+
     const api = API();
-    if (!api || !id) return;
+    if (!api) return;
 
     if (element) element.disabled = true;
 
@@ -506,40 +712,57 @@
       case "add":
         response = await api.sendFriendRequest(id);
         break;
+
       case "follow":
         response = await api.followUser(id);
         break;
+
       case "accept":
         response = await api.respondToFriendRequest(id, "accepted");
         break;
+
       case "reject":
         response = await api.respondToFriendRequest(id, "rejected");
         break;
+
       case "cancel":
         response = await api.cancelFriendRequest(id);
         break;
+
       case "unfriend":
         response = await api.removeFriend(id);
         break;
+
       case "unfollow":
         response = await api.unfollowUser(id);
         break;
+
       case "block":
-        if (!global.confirm(t("यो प्रयोगकर्तालाई Block गर्ने?", "Block this user?"))) {
+        if (!global.confirm(t(
+          "यो प्रयोगकर्तालाई Block गर्ने?",
+          "Block this user?"
+        ))) {
           if (element) element.disabled = false;
           return;
         }
+
         response = await api.blockUser(id);
         break;
+
       case "unblock":
         response = await api.unblockUser(id);
         break;
+
       default:
         return;
     }
 
     if (!response?.ok) {
-      toast(response?.message || t("कार्य पूरा हुन सकेन।", "Action failed."), "error");
+      toast(
+        response?.message || t("कार्य पूरा हुन सकेन।", "Action failed."),
+        "error"
+      );
+
       if (element) element.disabled = false;
       return;
     }
@@ -574,15 +797,16 @@
       return;
     }
 
-    const button = event.target.closest("[data-friends-action]");
-    if (!button) return;
+    const actionButton = event.target.closest("[data-friends-action]");
+
+    if (!actionButton) return;
 
     event.preventDefault();
 
     performAction(
-      button.dataset.friendsAction,
-      button.dataset.userId,
-      button
+      actionButton.dataset.friendsAction,
+      actionButton.dataset.userId,
+      actionButton
     );
   }
 
@@ -607,9 +831,22 @@
 
   global.KSKFriendsPage = Object.freeze({
     render,
+
     openAddFriend: () => {
       global.KSKNavigation?.navigate?.("friends");
-      setTimeout(() => document.getElementById("ksfUserSearch")?.focus(), 100);
+
+      setTimeout(() => {
+        document.getElementById("ksfUserSearch")?.focus();
+      }, 100);
+
+      return true;
+    },
+
+    openFriendProfile,
+    openFriendMessenger,
+
+    async refresh() {
+      await loadDashboard();
       return true;
     }
   });
