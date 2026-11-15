@@ -10,6 +10,7 @@
  * - Comment likes and emoji reactions
  * - Supabase friends based @mentions
  * - Realtime updates
+ * - Automatic feed notification after comment create/delete
  *
  * DATA SOURCE: SUPABASE ONLY
  */
@@ -31,7 +32,6 @@
 
   let comments = [];
   let reactions = [];
-
   let mentionFriends = [];
 
   let replyTarget = null;
@@ -67,6 +67,34 @@
 
   function toast(message, type = "info") {
     global.KSKToast?.show?.(message, type);
+  }
+
+  /*
+   * Notify the home feed after a comment count changes.
+   * pages/home.js listens for this event and refreshes
+   * the cloud feed without requiring a manual page refresh.
+   */
+  function notifyFeedCommentChange(action = "comment-change") {
+    const postId = String(activePostId || "").trim();
+
+    if (!postId) return false;
+
+    try {
+      global.dispatchEvent(
+        new CustomEvent("ksk:posts-cloud-change", {
+          detail: {
+            action,
+            postId,
+            source: "comments"
+          }
+        })
+      );
+
+      return true;
+    } catch (error) {
+      console.error("Feed comment notification failed:", error);
+      return false;
+    }
   }
 
   function formatDate(value) {
@@ -149,9 +177,7 @@
     if (!friendsAPI?.getDashboard) {
       mentionFriends = [];
 
-      console.warn(
-        "Supabase Friends API unavailable."
-      );
+      console.warn("Supabase Friends API unavailable.");
 
       return false;
     }
@@ -192,10 +218,7 @@
     } catch (error) {
       mentionFriends = [];
 
-      console.error(
-        "Mention friends loading failed:",
-        error
-      );
+      console.error("Mention friends loading failed:", error);
 
       return false;
     }
@@ -839,6 +862,7 @@
         () => {
           if (String(activePostId) === String(postId)) {
             refreshFromDatabase();
+            notifyFeedCommentChange("comment-realtime");
           }
         }
       )
@@ -857,7 +881,9 @@
         }
       )
 
-      .subscribe();
+      .subscribe(status => {
+        console.info("Comments realtime status:", status);
+      });
   }
 
   async function stopRealtime() {
@@ -997,6 +1023,13 @@
 
         replyTarget = null;
 
+        /*
+         * Immediately notify the home feed after the
+         * Supabase insert succeeds. The feed listener
+         * can now reload the updated comment count.
+         */
+        notifyFeedCommentChange("comment-created");
+
         toast(
           t("टिप्पणी प्रकाशित भयो।", "Comment published."),
           "success"
@@ -1129,6 +1162,12 @@
       if (String(editTarget) === String(commentId)) {
         editTarget = null;
       }
+
+      /*
+       * Notify the feed immediately after successful
+       * deletion so its displayed count can be refreshed.
+       */
+      notifyFeedCommentChange("comment-deleted");
 
       toast(
         t("टिप्पणी मेटाइयो।", "Comment deleted."),
