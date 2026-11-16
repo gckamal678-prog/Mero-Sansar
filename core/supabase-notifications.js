@@ -13,6 +13,9 @@
  * - Mark one / all as read
  * - Delete notification
  * - Realtime INSERT / UPDATE / DELETE
+ * - Automatic Realtime reconnect with exponential backoff
+ * - Safe Auth change handling
+ * - Realtime channel cleanup
  */
 
 (function (global) {
@@ -40,6 +43,9 @@
   let realtimeUserId = "";
   let realtimeStartPromise = null;
   let realtimeGeneration = 0;
+
+  let realtimeRetryTimer = null;
+  let realtimeRetryAttempt = 0;
 
   function result(ok, code, data = null, message = "") {
     return { ok, code, data, message };
@@ -363,6 +369,12 @@
   async function stopRealtime() {
     realtimeGeneration += 1;
     realtimeStartPromise = null;
+    realtimeRetryAttempt = 0;
+
+    if (realtimeRetryTimer !== null) {
+      global.clearTimeout(realtimeRetryTimer);
+      realtimeRetryTimer = null;
+    }
 
     const channel = realtimeChannel;
     const client = realtimeClient;
@@ -381,6 +393,36 @@
         );
       }
     }
+
+    return true;
+  }
+
+  /* =========================================
+     REALTIME RETRY
+  ========================================= */
+
+  function scheduleRealtimeRetry(generation) {
+    if (
+      generation !== realtimeGeneration ||
+      realtimeRetryTimer !== null
+    ) {
+      return false;
+    }
+
+    const delay = Math.min(
+      30000,
+      1500 * Math.pow(2, Math.min(realtimeRetryAttempt, 5))
+    );
+
+    realtimeRetryAttempt += 1;
+
+    realtimeRetryTimer = global.setTimeout(() => {
+      realtimeRetryTimer = null;
+
+      if (generation !== realtimeGeneration) return;
+
+      startRealtime();
+    }, delay);
 
     return true;
   }
@@ -487,6 +529,7 @@
                     "add",
                     normalizeNotification(payload.new)
                   );
+
                 } else if (
                   eventType === "UPDATE" &&
                   payload?.new
@@ -495,6 +538,7 @@
                     "update",
                     normalizeNotification(payload.new)
                   );
+
                 } else if (
                   eventType === "DELETE" &&
                   payload?.old?.id
@@ -515,6 +559,7 @@
             dispatch("realtime-status", null, {
               status: "TIMED_OUT"
             });
+
             finish(false);
           }, 15000);
 
@@ -529,6 +574,13 @@
             });
 
             if (status === "SUBSCRIBED") {
+              realtimeRetryAttempt = 0;
+
+              if (realtimeRetryTimer !== null) {
+                global.clearTimeout(realtimeRetryTimer);
+                realtimeRetryTimer = null;
+              }
+
               finish(true);
               return;
             }
@@ -545,6 +597,7 @@
               }
 
               finish(false);
+              scheduleRealtimeRetry(generation);
             }
           });
         });
@@ -567,6 +620,7 @@
             }
           }
 
+          scheduleRealtimeRetry(generation);
           return false;
         }
 
@@ -595,8 +649,10 @@
           message: error?.message || ""
         });
 
+        scheduleRealtimeRetry(generation);
         return false;
       }
+
     })().finally(() => {
       if (realtimeStartPromise === startPromise) {
         realtimeStartPromise = null;
@@ -604,6 +660,7 @@
     });
 
     realtimeStartPromise = startPromise;
+
     return startPromise;
   }
 
@@ -618,23 +675,39 @@
   global.addEventListener("ksk:auth-change", event => {
     const user = event?.detail?.user;
 
-    if (!user?.id) {
-      stopRealtime();
-      return;
+    stopRealtime().then(() => {
+      if (user?.id) {
+        startRealtime();
+      }
+    });
+  });
+
+  /* =========================================
+     NETWORK RECONNECT
+  ========================================= */
+
+  global.addEventListener("online", () => {
+    if (realtimeRetryTimer !== null) {
+      global.clearTimeout(realtimeRetryTimer);
+      realtimeRetryTimer = null;
     }
 
     startRealtime();
   });
 
-  global.addEventListener("online", () => {
-    startRealtime();
-  });
+  /* =========================================
+     PAGE RESTORE
+  ========================================= */
 
   global.addEventListener("pageshow", event => {
     if (event?.persisted) {
       startRealtime();
     }
   });
+
+  /* =========================================
+     PAGE EXIT
+  ========================================= */
 
   global.addEventListener("pagehide", () => {
     stopRealtime();
@@ -656,4 +729,3 @@
   });
 
 })(window);
-ओ
