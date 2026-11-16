@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -99,6 +100,7 @@
   let loading = false;
   let loaded = false;
   let loadPromise = null;
+  let loadGeneration = 0;
   let loadError = null;
 
   const playedNotificationIds = new Set();
@@ -276,7 +278,6 @@
     const type = classifyNotification(item);
     const id = getItemId(item);
 
-    // Messenger ले आफ्नै sound handler चलाउँछ।
     if (type === "message") {
       return false;
     }
@@ -466,16 +467,27 @@
       };
     }
 
+    const requestGeneration = loadGeneration;
     loading = true;
     loadError = null;
 
     if (!options.silent) refresh();
 
-    loadPromise = (async () => {
+    let requestPromise;
+
+    requestPromise = (async () => {
       try {
         const response = await api.getNotifications({
           limit: PAGE_SIZE
         });
+
+        if (requestGeneration !== loadGeneration) {
+          return {
+            ok: false,
+            code: "STALE_NOTIFICATION_REQUEST",
+            message: "यो Notification अनुरोध पुरानो खातासँग सम्बन्धित छ।"
+          };
+        }
 
         if (!response?.ok) {
           loadError = response?.message || t(
@@ -508,6 +520,14 @@
         };
 
       } catch (error) {
+        if (requestGeneration !== loadGeneration) {
+          return {
+            ok: false,
+            code: "STALE_NOTIFICATION_REQUEST",
+            message: "यो Notification अनुरोध पुरानो खातासँग सम्बन्धित छ।"
+          };
+        }
+
         console.error("Notification load failed:", error);
 
         loadError = error?.message || t(
@@ -524,13 +544,17 @@
         };
 
       } finally {
-        loading = false;
-        loadPromise = null;
-        refresh();
+        if (loadPromise === requestPromise) {
+          loading = false;
+          loadPromise = null;
+          refresh();
+        }
       }
     })();
 
-    return loadPromise;
+    loadPromise = requestPromise;
+
+    return requestPromise;
   }
 
   function handleCloudChange(event) {
@@ -575,14 +599,16 @@
   function handleAuthChange(event) {
     const user = event?.detail?.user;
 
+    loadGeneration += 1;
+    loading = false;
+    loadPromise = null;
+    notificationCache = [];
+    loaded = false;
+    loadError = null;
+
     if (user?.id) {
-      notificationCache = [];
-      loaded = false;
       loadCloudNotifications();
     } else {
-      notificationCache = [];
-      loaded = false;
-      loadError = null;
       refresh();
     }
   }
