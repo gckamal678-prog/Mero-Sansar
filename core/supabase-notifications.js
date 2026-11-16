@@ -9,7 +9,7 @@
  *
  * Features:
  * - Load notifications
- * - Create notification
+ * - Create notification (server managed)
  * - Mark one / all as read
  * - Delete notification
  * - Realtime INSERT / UPDATE / DELETE
@@ -38,7 +38,8 @@
   let realtimeChannel = null;
   let realtimeClient = null;
   let realtimeUserId = "";
-  let realtimeStarting = false;
+  let realtimeStartPromise = null;
+  let realtimeGeneration = 0;
 
   function result(ok, code, data = null, message = "") {
     return { ok, code, data, message };
@@ -196,6 +197,7 @@
 
   /* =========================================
      CREATE NOTIFICATION
+     DATABASE MANAGED
   ========================================= */
 
   async function createNotification(input = {}) {
@@ -203,80 +205,19 @@
 
     if (!session.ok) return session;
 
-    const { client, userId } = session.data;
-
-    const recipientId = normalizeId(input.recipientId);
-    const text = normalizeText(input.text);
     const type = normalizeText(input.type || "system", 60);
 
-    if (!recipientId) {
+    if (type === "message") {
       return fail(
-        "INVALID_RECIPIENT",
-        "Notification प्राप्त गर्ने User ID मान्य छैन।"
+        "MESSAGE_NOTIFICATION_AUTOMATIC",
+        "Messenger Notification Database Trigger बाट स्वतः बनाइन्छ।"
       );
     }
 
-    if (recipientId === userId) {
-      return fail(
-        "SELF_NOTIFICATION",
-        "आफैँलाई Notification पठाउन मिल्दैन।"
-      );
-    }
-
-    if (!text) {
-      return fail(
-        "EMPTY_NOTIFICATION",
-        "Notification को Text खाली छ।"
-      );
-    }
-
-    const entityType = normalizeText(
-      input.entityType,
-      40
+    return fail(
+      "CLIENT_INSERT_NOT_ALLOWED",
+      "सुरक्षाका लागि Notification प्रयोगकर्ताको Browser बाट सीधै सिर्जना गर्न मिल्दैन।"
     );
-
-    const entityId = input.entityId
-      ? normalizeId(String(input.entityId))
-      : null;
-
-    if (input.entityId && !entityId) {
-      return fail(
-        "INVALID_ENTITY_ID",
-        "सम्बन्धित पोस्ट वा वस्तुको ID मान्य छैन।"
-      );
-    }
-
-    try {
-      const payload = {
-        recipient_id: recipientId,
-        actor_id: userId,
-        type,
-        text,
-        entity_type: entityType || null,
-        entity_id: entityId
-      };
-
-      const { data, error } = await client
-        .from(TABLE)
-        .insert(payload)
-        .select(SELECT_FIELDS)
-        .single();
-
-      if (error) throw error;
-
-      const item = normalizeNotification(data);
-
-      dispatch("add", item);
-
-      return result(
-        true,
-        "NOTIFICATION_CREATED",
-        item
-      );
-
-    } catch (error) {
-      return handleError(error);
-    }
   }
 
   /* =========================================
@@ -420,15 +361,17 @@
   ========================================= */
 
   async function stopRealtime() {
+    realtimeGeneration += 1;
+    realtimeStartPromise = null;
+
     const channel = realtimeChannel;
     const client = realtimeClient;
 
     realtimeChannel = null;
     realtimeClient = null;
     realtimeUserId = "";
-    realtimeStarting = false;
 
-    if (channel && client) {
+    if (channel && client?.removeChannel) {
       try {
         await client.removeChannel(channel);
       } catch (error) {
@@ -447,86 +390,221 @@
   ========================================= */
 
   async function startRealtime() {
-    if (realtimeStarting) return false;
-
-    const session = await ready();
-
-    if (!session.ok) {
-      await stopRealtime();
-      return false;
+    if (realtimeStartPromise) {
+      return realtimeStartPromise;
     }
 
-    const { client, userId } = session.data;
+    const generation = realtimeGeneration;
 
-    if (
-      realtimeChannel &&
-      realtimeClient === client &&
-      realtimeUserId === userId
-    ) {
-      return true;
-    }
+    let startPromise;
 
-    await stopRealtime();
+    startPromise = (async () => {
+      const session = await ready();
 
-    realtimeStarting = true;
+      if (!session.ok) {
+        if (generation === realtimeGeneration) {
+          await stopRealtime();
+        }
 
-    try {
-      const channel = client
-        .channel(REALTIME_CHANNEL + ":" + userId)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: TABLE,
-            filter: "recipient_id=eq." + userId
-          },
-          payload => {
-            const eventType = String(
-              payload?.eventType || ""
-            ).toUpperCase();
+        return false;
+      }
 
-            if (eventType === "INSERT") {
-              dispatch(
-                "add",
-                normalizeNotification(payload.new)
-              );
-            } else if (eventType === "UPDATE") {
-              dispatch(
-                "update",
-                normalizeNotification(payload.new)
-              );
-            } else if (eventType === "DELETE") {
-              dispatch(
-                "delete",
-                { id: payload.old?.id || "" }
-              );
+      const { client, userId } = session.data;
+
+      if (generation !== realtimeGeneration) {
+        return false;
+      }
+
+      if (
+        realtimeChannel &&
+        realtimeClient === client &&
+        realtimeUserId === userId
+      ) {
+        return true;
+      }
+
+      const previousChannel = realtimeChannel;
+      const previousClient = realtimeClient;
+
+      realtimeChannel = null;
+      realtimeClient = null;
+      realtimeUserId = "";
+
+      if (previousChannel && previousClient?.removeChannel) {
+        try {
+          await previousClient.removeChannel(previousChannel);
+        } catch (error) {
+          console.warn(
+            "Previous notification channel cleanup failed:",
+            error
+          );
+        }
+      }
+
+      if (generation !== realtimeGeneration) {
+        return false;
+      }
+
+      let channel = null;
+      let timeoutId = null;
+
+      try {
+        const subscribed = await new Promise(resolve => {
+          let settled = false;
+
+          const finish = value => {
+            if (settled) return;
+
+            settled = true;
+
+            if (timeoutId !== null) {
+              global.clearTimeout(timeoutId);
+              timeoutId = null;
             }
-          }
-        )
-        .subscribe(status => {
-          dispatch("realtime-status", null, {
-            status
+
+            resolve(value);
+          };
+
+          channel = client
+            .channel(REALTIME_CHANNEL + ":" + userId)
+            .on(
+              "postgres_changes",
+              {
+                event: "*",
+                schema: "public",
+                table: TABLE,
+                filter: "recipient_id=eq." + userId
+              },
+              payload => {
+                if (generation !== realtimeGeneration) return;
+
+                const eventType = String(
+                  payload?.eventType || ""
+                ).toUpperCase();
+
+                if (eventType === "INSERT" && payload?.new) {
+                  dispatch(
+                    "add",
+                    normalizeNotification(payload.new)
+                  );
+                } else if (
+                  eventType === "UPDATE" &&
+                  payload?.new
+                ) {
+                  dispatch(
+                    "update",
+                    normalizeNotification(payload.new)
+                  );
+                } else if (
+                  eventType === "DELETE" &&
+                  payload?.old?.id
+                ) {
+                  dispatch(
+                    "delete",
+                    { id: payload.old.id }
+                  );
+                }
+              }
+            );
+
+          realtimeChannel = channel;
+          realtimeClient = client;
+          realtimeUserId = userId;
+
+          timeoutId = global.setTimeout(() => {
+            dispatch("realtime-status", null, {
+              status: "TIMED_OUT"
+            });
+            finish(false);
+          }, 15000);
+
+          channel.subscribe(status => {
+            if (generation !== realtimeGeneration) {
+              finish(false);
+              return;
+            }
+
+            dispatch("realtime-status", null, {
+              status
+            });
+
+            if (status === "SUBSCRIBED") {
+              finish(true);
+              return;
+            }
+
+            if (
+              status === "CHANNEL_ERROR" ||
+              status === "TIMED_OUT" ||
+              status === "CLOSED"
+            ) {
+              if (realtimeChannel === channel) {
+                realtimeChannel = null;
+                realtimeClient = null;
+                realtimeUserId = "";
+              }
+
+              finish(false);
+            }
           });
         });
 
-      realtimeChannel = channel;
-      realtimeClient = client;
-      realtimeUserId = userId;
+        if (!subscribed || generation !== realtimeGeneration) {
+          if (realtimeChannel === channel) {
+            realtimeChannel = null;
+            realtimeClient = null;
+            realtimeUserId = "";
+          }
 
-      return true;
+          if (channel && client.removeChannel) {
+            try {
+              await client.removeChannel(channel);
+            } catch (error) {
+              console.warn(
+                "Failed notification channel cleanup:",
+                error
+              );
+            }
+          }
 
-    } catch (error) {
-      console.error(
-        "Notification Realtime error:",
-        error
-      );
+          return false;
+        }
 
-      return false;
+        return true;
 
-    } finally {
-      realtimeStarting = false;
-    }
+      } catch (error) {
+        console.error(
+          "Notification Realtime error:",
+          error
+        );
+
+        if (realtimeChannel === channel) {
+          realtimeChannel = null;
+          realtimeClient = null;
+          realtimeUserId = "";
+        }
+
+        if (channel && client.removeChannel) {
+          try {
+            await client.removeChannel(channel);
+          } catch (_) {}
+        }
+
+        dispatch("realtime-status", null, {
+          status: "CHANNEL_ERROR",
+          message: error?.message || ""
+        });
+
+        return false;
+      }
+    })().finally(() => {
+      if (realtimeStartPromise === startPromise) {
+        realtimeStartPromise = null;
+      }
+    });
+
+    realtimeStartPromise = startPromise;
+    return startPromise;
   }
 
   /* =========================================
@@ -548,6 +626,20 @@
     startRealtime();
   });
 
+  global.addEventListener("online", () => {
+    startRealtime();
+  });
+
+  global.addEventListener("pageshow", event => {
+    if (event?.persisted) {
+      startRealtime();
+    }
+  });
+
+  global.addEventListener("pagehide", () => {
+    stopRealtime();
+  });
+
   /* =========================================
      PUBLIC API
   ========================================= */
@@ -564,3 +656,4 @@
   });
 
 })(window);
+ओ
