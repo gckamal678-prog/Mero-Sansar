@@ -1955,8 +1955,9 @@
         await loadMessages(activeChatId);
         const isIncomingInsert = detail.action === "realtime-message" &&
           (detail.eventType === "INSERT" || detail.type === "INSERT") &&
-          eventMessage && !eventMessage.fromMe &&
-          String(eventMessage.conversationId || eventMessage.conversation_id || "") === String(activeChatId);
+          eventMessage &&
+          String(eventMessage.sender_id || eventMessage.senderId || "") !== String(currentUserId) &&
+          String(eventMessage.conversation_id || eventMessage.conversationId || "") === String(activeChatId);
         if (isIncomingInsert && eventMessage.id) await service().markDelivered(eventMessage.id);
         if (isPageVisible()) await service().markRead(activeChatId);
       } catch (error) { console.warn("Realtime refresh:", error); }
