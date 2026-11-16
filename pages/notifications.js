@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -15,6 +14,7 @@
  * - Notification type preferences
  * - MP3 notification sounds
  * - Realtime updates
+ * - Messenger sound handled separately
  */
 
 (function (global) {
@@ -195,7 +195,9 @@
   }
 
   function isValidTone(id) {
-    return getToneOptions().some(tone => tone.id === String(id || ""));
+    return getToneOptions().some(
+      tone => tone.id === String(id || "")
+    );
   }
 
   function playTone(id, purpose = "preview") {
@@ -273,6 +275,11 @@
     const preferences = loadPreferences();
     const type = classifyNotification(item);
     const id = getItemId(item);
+
+    // Messenger ले आफ्नै sound handler चलाउँछ।
+    if (type === "message") {
+      return false;
+    }
 
     if (
       !preferences.enabled ||
@@ -414,6 +421,7 @@
     if (!item?.id) return;
 
     const id = String(item.id);
+
     const index = notificationCache.findIndex(
       row => String(row.id) === id
     );
@@ -1543,7 +1551,16 @@
       return false;
     }
 
-    upsertNotification(response.data);
+    if (response.data) {
+      upsertNotification(response.data);
+    } else {
+      const item = notificationCache.find(
+        row => String(row.id) === key
+      );
+
+      if (item) item.read = true;
+    }
+
     refresh();
     return true;
   }
