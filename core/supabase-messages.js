@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -32,8 +31,10 @@
   const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
   let realtimeChannel = null;
+  let realtimeClient = null;
   let realtimeUserId = "";
-  let startingRealtime = false;
+  let realtimeStartPromise = null;
+
   let presenceChannel = null;
   let presenceReady = null;
   let activePresenceConversation = "";
@@ -360,7 +361,6 @@
           ",and(created_at.eq." + createdAt + ",id.lt." + messageId + ")"
         );
       } else if (cursor) {
-        // पुरानो timestamp-only caller का लागि Compatibility
         query = query.lt("created_at", String(cursor));
       }
 
@@ -1462,11 +1462,11 @@
   ========================================= */
 
   async function stopRealtime() {
-    const auth = getAuth();
-    const client = auth?.getClient?.();
     const old = realtimeChannel;
+    const client = realtimeClient || getAuth()?.getClient?.();
 
     realtimeChannel = null;
+    realtimeClient = null;
     realtimeUserId = "";
 
     if (old && client?.removeChannel) {
@@ -1483,96 +1483,160 @@
   }
 
   async function startRealtime() {
-    if (startingRealtime) return false;
-
-    let context;
-
-    try {
-      context = await getContext();
-    } catch (_) {
-      await stopRealtime();
-      return false;
+    if (realtimeStartPromise) {
+      return realtimeStartPromise;
     }
 
-    const { client, user } = context;
+    realtimeStartPromise = (async () => {
+      let context;
 
-    if (
-      realtimeChannel &&
-      realtimeUserId === user.id
-    ) {
-      return true;
-    }
+      try {
+        context = await getContext();
+      } catch (error) {
+        await stopRealtime();
+        return false;
+      }
 
-    startingRealtime = true;
+      const { client, user } = context;
 
-    try {
+      if (
+        realtimeChannel &&
+        realtimeClient === client &&
+        realtimeUserId === user.id
+      ) {
+        return true;
+      }
+
       await stopRealtime();
 
-      const channel = client
-        .channel("ksk-messages-" + user.id)
-        .on("postgres_changes", {
-          event: "*",
-          schema: "public",
-          table: TABLE.messages
-        }, payload => {
-          notify("realtime-message", {
-            eventType: payload?.eventType || "",
-            message: payload?.new || payload?.old || null
-          });
-        })
-        .on("postgres_changes", {
-          event: "*",
-          schema: "public",
-          table: TABLE.receipts
-        }, payload => {
-          notify("realtime-receipt", {
-            eventType: payload?.eventType || "",
-            receipt: payload?.new || payload?.old || null
-          });
-        })
-        .on("postgres_changes", {
-          event: "*",
-          schema: "public",
-          table: TABLE.members
-        }, payload => {
-          notify("realtime-members", {
-            eventType: payload?.eventType || "",
-            member: payload?.new || payload?.old || null
+      let channel = null;
+      let timeoutId = null;
+
+      try {
+        const subscribed = await new Promise(resolve => {
+          let settled = false;
+
+          const finish = value => {
+            if (settled) return;
+            settled = true;
+
+            if (timeoutId !== null) {
+              global.clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+
+            resolve(value);
+          };
+
+          channel = client
+            .channel("ksk-messages-" + user.id)
+            .on("postgres_changes", {
+              event: "*",
+              schema: "public",
+              table: TABLE.messages
+            }, payload => {
+              notify("realtime-message", {
+                eventType: payload?.eventType || "",
+                message: payload?.new || payload?.old || null
+              });
+            })
+            .on("postgres_changes", {
+              event: "*",
+              schema: "public",
+              table: TABLE.receipts
+            }, payload => {
+              notify("realtime-receipt", {
+                eventType: payload?.eventType || "",
+                receipt: payload?.new || payload?.old || null
+              });
+            })
+            .on("postgres_changes", {
+              event: "*",
+              schema: "public",
+              table: TABLE.members
+            }, payload => {
+              notify("realtime-members", {
+                eventType: payload?.eventType || "",
+                member: payload?.new || payload?.old || null
+              });
+            });
+
+          realtimeChannel = channel;
+          realtimeClient = client;
+          realtimeUserId = user.id;
+
+          timeoutId = global.setTimeout(() => {
+            console.warn("Messenger Realtime: subscription timeout");
+            notify("realtime-error", { status: "TIMED_OUT" });
+            finish(false);
+          }, 15000);
+
+          channel.subscribe(status => {
+            if (settled) return;
+
+            if (status === "SUBSCRIBED") {
+              notify("realtime-connected", {
+                userId: user.id
+              });
+              finish(true);
+              return;
+            }
+
+            if (
+              status === "CHANNEL_ERROR" ||
+              status === "TIMED_OUT" ||
+              status === "CLOSED"
+            ) {
+              console.warn("Messenger Realtime:", status);
+              notify("realtime-error", { status });
+              finish(false);
+            }
           });
         });
 
-      realtimeChannel = channel;
-      realtimeUserId = user.id;
+        if (!subscribed) {
+          if (realtimeChannel === channel) {
+            realtimeChannel = null;
+            realtimeClient = null;
+            realtimeUserId = "";
+          }
 
-      channel.subscribe(status => {
-        if (
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT"
-        ) {
-          console.warn("Messenger Realtime:", status);
-          notify("realtime-error", { status });
+          if (channel && client.removeChannel) {
+            try {
+              await client.removeChannel(channel);
+            } catch (error) {
+              console.warn("Realtime failed-channel cleanup:", error);
+            }
+          }
+
+          return false;
         }
 
-        if (status === "SUBSCRIBED") {
-          notify("realtime-connected", {
-            userId: user.id
-          });
+        await updateLastSeen();
+        return true;
+
+      } catch (error) {
+        console.error("Messenger Realtime:", error);
+
+        if (realtimeChannel === channel) {
+          realtimeChannel = null;
+          realtimeClient = null;
+          realtimeUserId = "";
         }
-      });
 
-      await updateLastSeen();
+        if (channel && client.removeChannel) {
+          try {
+            await client.removeChannel(channel);
+          } catch (_) {}
+        }
 
-      return true;
-    } catch (error) {
-      console.error("Messenger Realtime:", error);
+        return false;
+      }
+    })().finally(() => {
+      realtimeStartPromise = null;
+    });
 
-      realtimeChannel = null;
-      realtimeUserId = "";
-
-      return false;
-    } finally {
-      startingRealtime = false;
-    }
+    return realtimeStartPromise;
   }
 
   /* =========================================
