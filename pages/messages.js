@@ -1,25 +1,13 @@
+
 "use strict";
 
-/*
- * MERO SANSAR — COMPLETE SUPABASE MESSENGER PAGE
- *
- * Requires:
- *   core/supabase-auth.js
- *   core/supabase-friends.js
- *   core/supabase-messages.js
- *   pages/profile.js
- *
- * Features:
- *   Direct chat, group chat, group members
- *   Realtime messages, history, older messages
- *   Edit, delete, copy, reply, forward
- *   Delivery/read receipts
- *   Typing, presence, last seen
- *   Image, video, file and voice messages
- *   Search, pin, archive, mute, block
- *   Supabase-backed preferences
- *   Friend profile navigation
- */
+/* =========================================================
+   MERO SANSAR — MESSENGER PAGE
+   Supabase API: core/supabase-messages.js
+   Friends API: core/supabase-friends.js
+   Theme: core/design-system.css
+   No voice recorder / audio-video calling.
+========================================================= */
 
 (function (global) {
   "use strict";
@@ -27,20 +15,17 @@
   if (global.KSKMessagesPage) return;
 
   const PAGE_SIZE = 50;
-  const MAX_GROUP_NAME = 60;
   const MAX_MESSAGE = 5000;
+  const MAX_GROUP_NAME = 60;
 
   let initialized = false;
   let initializing = false;
   let listenersAttached = false;
-  let loading = false;
-  let sending = false;
-  let loadingOlder = false;
 
   let conversations = [];
   let friends = [];
-  let activeChatId = null;
   let activeChat = null;
+  let activeChatId = null;
   let activeMessages = [];
 
   let activeTab = "all";
@@ -48,17 +33,29 @@
   let messageSearchQuery = "";
   let messageSearchResults = [];
 
+  let replyTarget = null;
   let groupFormOpen = false;
   let groupMembersOpen = false;
-  let replyTarget = null;
+
+  let loading = false;
+  let loadingOlder = false;
+  let sending = false;
+
+  let oldestCursor = null;
+  let hasOlderMessages = false;
+
+  let currentUserId = "";
+  let chatRequestToken = 0;
+  let conversationRequestToken = 0;
+  let messageRequestToken = 0;
+
   let typingTimer = null;
   let typingUsers = new Set();
   let presenceUsers = new Set();
-  let mediaUrls = new Map();
 
-  let currentUserId = "";
-  let oldestCursor = null;
-  let hasOlderMessages = false;
+  const mediaUrls = new Map();
+  const receiptCache = new Map();
+  const receiptLoading = new Set();
 
   const service = () => global.KSKSupabaseMessages;
   const friendsAPI = () => global.KSKSupabaseFriends;
@@ -91,17 +88,15 @@
     }
   }
 
-  function getCurrentPage() {
-    return global.KSKNavigation?.getCurrentPage?.() || "";
-  }
-
   function isPageVisible() {
-    return getCurrentPage() === "messages";
+    return global.KSKNavigation?.getCurrentPage?.() === "messages";
   }
 
   function refreshPage() {
-    if (isPageVisible() &&
-        typeof global.KSKApp?.refreshCurrentPage === "function") {
+    if (
+      isPageVisible() &&
+      typeof global.KSKApp?.refreshCurrentPage === "function"
+    ) {
       global.KSKApp.refreshCurrentPage();
       return true;
     }
@@ -118,22 +113,8 @@
 
     return date.toLocaleString(
       language()?.getLanguage?.() === "en" ? "en-US" : "ne-NP",
-      {
-        dateStyle: "short",
-        timeStyle: "short"
-      }
+      { dateStyle: "short", timeStyle: "short" }
     );
-  }
-
-  function formatLastSeen(value) {
-    if (!value) {
-      return t("अहिले Offline", "Offline");
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-
-    return t("अन्तिम पटक: ", "Last seen: ") + formatTime(value);
   }
 
   function getChatName(chat = {}) {
@@ -146,10 +127,6 @@
 
   function getFriendName(friend = {}) {
     return String(friend.name || friend.fullName || "साथी");
-  }
-
-  function getFriendAvatar(friend = {}) {
-    return friend.avatarUrl || friend.avatar || "";
   }
 
   function getAvatar(person = {}) {
@@ -175,10 +152,12 @@
     `;
   }
 
+  /* =======================================================
+     THEME-SAFE STYLES
+  ======================================================= */
+
   function ensureStyles() {
-    if (document.getElementById("kskSupabaseMessagesStyles")) {
-      return;
-    }
+    if (document.getElementById("kskSupabaseMessagesStyles")) return;
 
     const style = document.createElement("style");
     style.id = "kskSupabaseMessagesStyles";
@@ -187,12 +166,21 @@
       .ksk-msg-page {
         width:100%;
         min-width:0;
-        color:var(--text-color,inherit);
+        box-sizing:border-box;
+        color:var(--color-text,#172033);
+        color-scheme:light dark;
+      }
+
+      .ksk-msg-page *,
+      .ksk-msg-page *::before,
+      .ksk-msg-page *::after {
+        box-sizing:border-box;
       }
 
       .ksk-msg-toolbar {
         display:flex;
         flex-wrap:wrap;
+        align-items:center;
         gap:8px;
         margin:12px 0;
       }
@@ -200,39 +188,79 @@
       .ksk-msg-search,
       .ksk-msg-compose,
       .ksk-msg-input {
-        box-sizing:border-box;
         width:100%;
         min-width:0;
-        padding:12px;
-        border:1px solid var(--border-color,#ddd);
-        border-radius:12px;
-        background:var(--card-bg,#fff);
-        color:var(--text-color,inherit);
+        padding:12px 14px;
+        border:1px solid var(--color-border,#e2e8f0);
+        border-radius:13px;
+        background:var(--color-surface,#fff);
+        color:var(--color-text,#172033);
         font:inherit;
+        outline:none;
+      }
+
+      .ksk-msg-search::placeholder,
+      .ksk-msg-compose::placeholder,
+      .ksk-msg-input::placeholder {
+        color:var(--color-placeholder,#94a3b8);
+        opacity:1;
+      }
+
+      .ksk-msg-search:focus,
+      .ksk-msg-compose:focus,
+      .ksk-msg-input:focus {
+        border-color:var(--color-primary,#2563eb);
+        box-shadow:var(--focus-ring,0 0 0 3px rgba(37,99,235,.15));
       }
 
       .ksk-msg-tabs {
         display:flex;
         gap:7px;
         overflow-x:auto;
-        padding:3px 0 8px;
+        padding:3px 0 9px;
         margin:8px 0;
       }
 
-      .ksk-msg-tab {
+      .ksk-msg-tab,
+      .ksk-msg-action,
+      .ksk-msg-secondary {
         flex-shrink:0;
-        border:1px solid var(--border-color,#ddd);
-        border-radius:30px;
-        padding:8px 13px;
-        background:var(--card-bg,#fff);
-        color:inherit;
+        border:1px solid var(--color-border,#e2e8f0);
+        border-radius:10px;
+        padding:9px 12px;
+        background:var(--color-surface,#fff);
+        color:var(--color-text,#172033);
         cursor:pointer;
+        font:inherit;
+        font-size:13px;
+      }
+
+      .ksk-msg-tab {
+        border-radius:30px;
       }
 
       .ksk-msg-tab.is-active {
-        background:#2563eb;
-        border-color:#2563eb;
-        color:white;
+        background:var(--color-primary,#2563eb);
+        border-color:var(--color-primary,#2563eb);
+        color:#fff;
+      }
+
+      .ksk-msg-primary {
+        border:0;
+        border-radius:11px;
+        padding:11px 15px;
+        background:var(--color-primary,#2563eb);
+        color:#fff;
+        cursor:pointer;
+        font:inherit;
+        font-weight:600;
+      }
+
+      .ksk-msg-primary:disabled,
+      .ksk-msg-secondary:disabled,
+      .ksk-msg-action:disabled {
+        opacity:.5;
+        cursor:not-allowed;
       }
 
       .ksk-msg-list {
@@ -244,41 +272,44 @@
         display:flex;
         align-items:center;
         gap:10px;
-        padding:11px;
-        border:1px solid var(--border-color,#ddd);
-        border-radius:13px;
-        background:var(--card-bg,#fff);
         min-width:0;
+        padding:11px;
+        border:1px solid var(--color-border,#e2e8f0);
+        border-radius:14px;
+        background:var(--color-surface,#fff);
+        color:var(--color-text,#172033);
       }
 
       .ksk-msg-row-main {
         flex:1;
         min-width:0;
-        cursor:pointer;
         overflow-wrap:anywhere;
+        cursor:pointer;
       }
 
       .ksk-msg-row-title {
         font-weight:700;
+        color:var(--color-text,#172033);
       }
 
       .ksk-msg-row-subtitle {
         margin-top:4px;
         font-size:13px;
-        color:var(--muted-color,#777);
+        color:var(--color-muted,#64748b);
         overflow-wrap:anywhere;
       }
 
       .ksk-msg-avatar {
-        width:45px;
-        height:45px;
-        min-width:45px;
+        width:46px;
+        height:46px;
+        min-width:46px;
         display:inline-flex;
         align-items:center;
         justify-content:center;
         overflow:hidden;
         border-radius:50%;
-        background:var(--surface-color,#eee);
+        background:var(--color-surface-secondary,#f8fafc);
+        color:var(--color-text,#172033);
         font-weight:700;
       }
 
@@ -294,90 +325,71 @@
         gap:5px;
       }
 
-      .ksk-msg-action,
-      .ksk-msg-secondary {
-        border:1px solid var(--border-color,#ddd);
-        border-radius:9px;
-        padding:8px 10px;
-        background:transparent;
-        color:inherit;
-        cursor:pointer;
-        font:inherit;
-        font-size:12px;
-      }
-
-      .ksk-msg-primary {
-        border:0;
-        border-radius:10px;
-        padding:11px 15px;
-        background:#2563eb;
-        color:white;
-        cursor:pointer;
-        font:inherit;
-      }
-
-      .ksk-msg-primary:disabled {
-        opacity:.55;
-        cursor:wait;
-      }
-
       .ksk-msg-empty,
       .ksk-msg-note {
         padding:18px;
         margin:12px 0;
-        border:1px dashed var(--border-color,#ddd);
+        border:1px dashed var(--color-border,#e2e8f0);
         border-radius:13px;
+        color:var(--color-muted,#64748b);
         text-align:center;
-        color:var(--muted-color,#777);
       }
 
       .ksk-msg-detail,
       .ksk-msg-form {
-        padding:12px;
+        min-width:0;
+        padding:14px;
         margin-top:12px;
-        border:1px solid var(--border-color,#ddd);
-        border-radius:14px;
-        background:var(--card-bg,#fff);
+        border:1px solid var(--color-border,#e2e8f0);
+        border-radius:17px;
+        background:var(--color-surface,#fff);
+        color:var(--color-text,#172033);
       }
 
       .ksk-msg-chat-header {
         display:flex;
         align-items:center;
         gap:10px;
-        padding-bottom:12px;
-        border-bottom:1px solid var(--border-color,#ddd);
+        min-width:0;
+        padding-bottom:13px;
+        border-bottom:1px solid var(--color-border,#e2e8f0);
       }
 
       .ksk-msg-chat-header-main {
         flex:1;
         min-width:0;
+        overflow-wrap:anywhere;
       }
 
       .ksk-msg-chat-status {
+        margin-top:4px;
+        color:var(--color-muted,#64748b);
         font-size:12px;
-        color:var(--muted-color,#777);
-        margin-top:3px;
       }
 
       .ksk-msg-history {
         display:flex;
         flex-direction:column;
-        gap:9px;
-        margin:14px 0;
+        gap:10px;
+        min-width:0;
         min-height:120px;
+        margin:14px 0;
       }
 
       .ksk-msg-history-item {
         max-width:88%;
         min-width:80px;
-        padding:10px 12px;
-        border-radius:13px;
-        background:var(--surface-color,#eee);
+        padding:11px 13px;
+        border:1px solid var(--color-border,#e2e8f0);
+        border-radius:15px;
+        background:var(--color-surface-secondary,#f8fafc);
+        color:var(--color-text,#172033);
         overflow-wrap:anywhere;
       }
 
       .ksk-msg-history-item.from-me {
         align-self:flex-end;
+        border-color:#bfdbfe;
         background:#dbeafe;
         color:#172554;
       }
@@ -387,48 +399,72 @@
       }
 
       .ksk-msg-history-item.deleted {
-        opacity:.7;
+        opacity:.75;
         font-style:italic;
       }
 
       .ksk-msg-history-time {
         display:block;
-        margin-top:5px;
-        font-size:10px;
-        opacity:.7;
+        margin-top:7px;
+        color:inherit;
+        opacity:.72;
+        font-size:11px;
+      }
+
+      .ksk-msg-bubble-actions {
+        display:flex;
+        flex-wrap:wrap;
+        gap:5px;
+        margin-top:8px;
+      }
+
+      .ksk-msg-bubble-actions button {
+        min-height:34px;
+        padding:6px 10px;
+        border:1px solid rgba(100,116,139,.35);
+        border-radius:8px;
+        background:rgba(100,116,139,.12);
+        color:inherit;
+        font:inherit;
+        font-size:12px;
+        cursor:pointer;
+      }
+
+      .ksk-msg-history-item.from-me .ksk-msg-bubble-actions button {
+        border-color:rgba(37,99,235,.25);
+        background:rgba(37,99,235,.12);
+        color:#172554;
       }
 
       .ksk-msg-send-form {
         display:grid;
-        gap:8px;
+        gap:9px;
         margin-top:12px;
       }
 
       .ksk-msg-compose {
-        min-height:48px;
+        min-height:70px;
         resize:vertical;
       }
 
       .ksk-msg-compose-actions {
         display:flex;
         flex-wrap:wrap;
-        gap:7px;
         align-items:center;
+        gap:8px;
       }
 
-      .ksk-msg-compose-actions label,
-      .ksk-msg-compose-actions button {
+      .ksk-msg-compose-actions label {
         display:inline-flex;
         align-items:center;
         justify-content:center;
-        min-height:38px;
-        padding:8px 11px;
-        border:1px solid var(--border-color,#ddd);
-        border-radius:9px;
-        background:transparent;
-        color:inherit;
-        font:inherit;
-        font-size:12px;
+        min-height:40px;
+        padding:8px 12px;
+        border:1px solid var(--color-border,#e2e8f0);
+        border-radius:10px;
+        background:var(--color-surface,#fff);
+        color:var(--color-text,#172033);
+        font-size:13px;
         cursor:pointer;
       }
 
@@ -448,9 +484,10 @@
         display:flex;
         align-items:center;
         gap:10px;
-        padding:9px;
-        border-radius:9px;
-        background:var(--surface-color,rgba(127,127,127,.08));
+        padding:10px;
+        border-radius:10px;
+        background:var(--color-surface-secondary,#f8fafc);
+        color:var(--color-text,#172033);
       }
 
       .ksk-msg-friend-option input {
@@ -459,32 +496,35 @@
       }
 
       .ksk-msg-reply-preview {
-        padding:9px;
+        padding:10px;
         margin:8px 0;
-        border-left:3px solid #2563eb;
-        background:var(--surface-color,#eee);
-        border-radius:7px;
-        font-size:12px;
+        border-left:3px solid var(--color-primary,#2563eb);
+        border-radius:8px;
+        background:var(--color-surface-secondary,#f8fafc);
+        color:var(--color-text,#172033);
+        font-size:13px;
+        overflow-wrap:anywhere;
       }
 
       .ksk-msg-media {
         display:block;
         max-width:100%;
-        max-height:300px;
-        border-radius:9px;
-        margin-top:5px;
+        max-height:320px;
+        margin-top:7px;
+        border-radius:10px;
+        object-fit:contain;
       }
 
       .ksk-msg-unread {
         display:inline-flex;
-        min-width:20px;
-        height:20px;
+        min-width:19px;
+        height:19px;
         padding:0 5px;
         align-items:center;
         justify-content:center;
         border-radius:20px;
-        background:#2563eb;
-        color:white;
+        background:var(--color-primary,#2563eb);
+        color:#fff;
         font-size:11px;
       }
 
@@ -495,15 +535,18 @@
       }
 
       .ksk-msg-search-result {
-        padding:10px;
-        border:1px solid var(--border-color,#ddd);
-        border-radius:10px;
+        padding:11px;
+        border:1px solid var(--color-border,#e2e8f0);
+        border-radius:11px;
+        background:var(--color-surface-secondary,#f8fafc);
+        color:var(--color-text,#172033);
         overflow-wrap:anywhere;
       }
 
       .ksk-msg-status {
-        font-size:10px;
-        opacity:.75;
+        margin-left:4px;
+        font-size:11px;
+        font-weight:700;
       }
 
       .ksk-msg-hidden {
@@ -511,6 +554,10 @@
       }
 
       @media(max-width:520px) {
+        .ksk-msg-detail {
+          padding:10px;
+        }
+
         .ksk-msg-row {
           flex-wrap:wrap;
         }
@@ -523,12 +570,16 @@
           width:100%;
         }
 
-        .ksk-msg-action {
+        .ksk-msg-actions .ksk-msg-action {
           flex:1;
         }
 
         .ksk-msg-history-item {
           max-width:94%;
+        }
+
+        .ksk-msg-bubble-actions button {
+          flex:1 1 auto;
         }
       }
     `;
@@ -546,15 +597,18 @@
     `;
   }
 
-  function getConversationPreference(chat, key) {
+  function preference(chat, key) {
     const map = {
       pinned: "isPinned",
       archived: "isArchived",
       muted: "isMuted"
     };
-
     return Boolean(chat?.[map[key]]);
   }
+
+  /* =======================================================
+     DATA LOADING — REQUEST TOKENS PREVENT CHAT MIXUPS
+  ======================================================= */
 
   async function loadFriends() {
     const api = friendsAPI();
@@ -564,28 +618,36 @@
       return false;
     }
 
-    const result = await api.getDashboard();
+    try {
+      const result = await api.getDashboard();
 
-    if (!result?.ok) {
+      if (!result?.ok) {
+        friends = [];
+        console.warn("Messenger friends:", result?.message);
+        return false;
+      }
+
+      friends = Array.isArray(result.data?.friends)
+        ? result.data.friends
+        : [];
+
+      return true;
+    } catch (error) {
+      console.warn("Messenger friends:", error);
       friends = [];
-      console.warn("Messenger friends:", result?.message);
       return false;
     }
-
-    friends = result.data?.friends || [];
-    return true;
   }
 
   async function loadConversations() {
-    if (loading) return false;
-
+    const token = ++conversationRequestToken;
     loading = true;
 
     try {
       const api = service();
 
       if (!api?.getConversations) {
-        throw new Error("Supabase Messenger सेवा उपलब्ध छैन।");
+        throw new Error("Messenger सेवा उपलब्ध छैन।");
       }
 
       const result = await api.getConversations();
@@ -594,9 +656,9 @@
         throw new Error(result.message || "कुराकानी लोड गर्न सकिएन।");
       }
 
-      conversations = Array.isArray(result.data)
-        ? result.data
-        : [];
+      if (token !== conversationRequestToken) return false;
+
+      conversations = Array.isArray(result.data) ? result.data : [];
 
       if (activeChatId) {
         activeChat = conversations.find(
@@ -606,39 +668,79 @@
         if (!activeChat) {
           activeChatId = null;
           activeMessages = [];
+          ++chatRequestToken;
         }
       }
 
       return true;
     } catch (error) {
-      console.error("Messenger conversations:", error);
-      toast(error.message, "error");
+      if (token === conversationRequestToken) {
+        console.error("Messenger conversations:", error);
+        toast(error.message, "error");
+      }
       return false;
     } finally {
-      loading = false;
+      if (token === conversationRequestToken) loading = false;
     }
   }
 
-  async function loadMessages(conversationId, options = {}) {
-    const result = await service().getMessages(
-      conversationId,
-      {
-        limit: options.limit || PAGE_SIZE,
-        before: options.before || undefined
-      }
+  async function loadReceipts(messages) {
+    const api = service();
+    if (!api?.getMessageReceipts) return;
+
+    const outgoing = messages.filter(
+      message => message.fromMe && message.id
     );
+
+    const pending = outgoing.filter(
+      message =>
+        !receiptCache.has(message.id) &&
+        !receiptLoading.has(message.id)
+    );
+
+    await Promise.all(pending.map(async message => {
+      receiptLoading.add(message.id);
+
+      try {
+        const result = await api.getMessageReceipts(message.id);
+        if (result?.ok) {
+          receiptCache.set(message.id, Array.isArray(result.data) ? result.data : []);
+        }
+      } catch (error) {
+        console.warn("Message receipt:", error);
+      } finally {
+        receiptLoading.delete(message.id);
+      }
+    }));
+  }
+
+  async function loadMessages(conversationId, options = {}) {
+    const id = String(conversationId || "");
+    const token = options.token || messageRequestToken;
+
+    const result = await service().getMessages(id, {
+      limit: options.limit || PAGE_SIZE,
+      before: options.before || undefined
+    });
 
     if (!result?.ok) {
       throw new Error(result.message || "सन्देश लोड गर्न सकिएन।");
     }
 
+    if (
+      token !== messageRequestToken ||
+      id !== String(activeChatId || "")
+    ) {
+      return false;
+    }
+
     const rows = Array.isArray(result.data) ? result.data : [];
 
     if (options.append) {
-      const existing = new Set(activeMessages.map(x => x.id));
+      const existing = new Set(activeMessages.map(item => item.id));
 
       activeMessages = [
-        ...rows.filter(x => !existing.has(x.id)),
+        ...rows.filter(item => !existing.has(item.id)),
         ...activeMessages
       ];
     } else {
@@ -648,31 +750,38 @@
     oldestCursor = activeMessages[0]?.createdAt || null;
     hasOlderMessages = rows.length >= (options.limit || PAGE_SIZE);
 
+    await loadReceipts(rows);
+
     return true;
   }
 
   async function loadOlderMessages() {
-    if (!activeChatId || !oldestCursor ||
-        !hasOlderMessages || loadingOlder) {
-      return false;
-    }
+    if (
+      !activeChatId ||
+      !oldestCursor ||
+      !hasOlderMessages ||
+      loadingOlder
+    ) return false;
 
     loadingOlder = true;
+    const id = activeChatId;
+    const token = messageRequestToken;
 
     try {
       const beforeCount = activeMessages.length;
 
-      const ok = await loadMessages(activeChatId, {
+      const ok = await loadMessages(id, {
         limit: PAGE_SIZE,
         before: oldestCursor,
-        append: true
+        append: true,
+        token
       });
 
       if (ok && activeMessages.length === beforeCount) {
         hasOlderMessages = false;
       }
 
-      refreshPage();
+      if (ok) refreshPage();
       return ok;
     } catch (error) {
       toast(error.message, "error");
@@ -682,56 +791,58 @@
     }
   }
 
+  /* =======================================================
+     CONVERSATION LIST
+  ======================================================= */
+
   function getVisibleChats() {
     const query = searchQuery.trim().toLowerCase();
 
     return conversations
       .filter(chat => {
-        const archived = getConversationPreference(chat, "archived");
+        const archived = preference(chat, "archived");
 
         if (activeTab === "archived" && !archived) return false;
         if (activeTab !== "archived" && archived) return false;
 
-        if (activeTab === "groups" && chat.type !== "group") {
-          return false;
-        }
+        if (activeTab === "groups" && chat.type !== "group") return false;
+        if (activeTab === "pinned" && !preference(chat, "pinned")) return false;
 
-        if (activeTab === "pinned" &&
-            !getConversationPreference(chat, "pinned")) {
-          return false;
-        }
-
-        if (query && !getChatName(chat).toLowerCase().includes(query)) {
-          return false;
-        }
+        if (
+          query &&
+          !getChatName(chat).toLowerCase().includes(query)
+        ) return false;
 
         return true;
       })
       .sort((a, b) => {
-        const ap = getConversationPreference(a, "pinned") ? 1 : 0;
-        const bp = getConversationPreference(b, "pinned") ? 1 : 0;
+        const ap = preference(a, "pinned") ? 1 : 0;
+        const bp = preference(b, "pinned") ? 1 : 0;
 
-        if (activeTab !== "archived" && ap !== bp) {
-          return bp - ap;
-        }
+        if (activeTab !== "archived" && ap !== bp) return bp - ap;
 
         return new Date(b.lastMessageAt || b.createdAt || 0) -
           new Date(a.lastMessageAt || a.createdAt || 0);
       });
   }
 
-  function getUnreadCount(chat) {
-    if (!chat?.lastMessage || chat.lastMessage.fromMe) return 0;
+  /*
+   * The current conversations API returns only the latest message
+   * and lastReadAt, not a complete unread-message count.
+   * Display an unread indicator, not a fabricated numeric count.
+   */
+  function hasUnread(chat) {
+    if (!chat?.lastMessage || chat.lastMessage.fromMe) return false;
 
-    const lastRead = chat.lastReadAt
+    const readAt = chat.lastReadAt
       ? new Date(chat.lastReadAt).getTime()
       : 0;
 
-    const messageTime = new Date(
+    const messageAt = new Date(
       chat.lastMessage.createdAt || 0
     ).getTime();
 
-    return messageTime > lastRead ? 1 : 0;
+    return Number.isFinite(messageAt) && messageAt > readAt;
   }
 
   function renderChatRow(chat) {
@@ -741,8 +852,6 @@
       (chat.lastMessage?.type
         ? "📎 " + chat.lastMessage.type
         : t("कुराकानी खोल्नुहोस्", "Open conversation"));
-
-    const unread = getUnreadCount(chat);
 
     return `
       <article class="ksk-msg-row">
@@ -757,9 +866,11 @@
           <div class="ksk-msg-row-title">
             ${escapeHTML(name)}
             ${chat.type === "group" ? " 👥" : ""}
-            ${getConversationPreference(chat, "pinned") ? " 📌" : ""}
-            ${getConversationPreference(chat, "muted") ? " 🔕" : ""}
-            ${unread ? `<span class="ksk-msg-unread">${unread}</span>` : ""}
+            ${preference(chat, "pinned") ? " 📌" : ""}
+            ${preference(chat, "muted") ? " 🔕" : ""}
+            ${hasUnread(chat)
+              ? `<span class="ksk-msg-unread" aria-label="Unread message">●</span>`
+              : ""}
           </div>
 
           <div class="ksk-msg-row-subtitle">
@@ -772,21 +883,21 @@
                   type="button"
                   data-action="toggle-pin"
                   data-id="${escapeHTML(id)}">
-            ${getConversationPreference(chat, "pinned") ? "Unpin" : "Pin"}
+            ${preference(chat, "pinned") ? "Unpin" : "Pin"}
           </button>
 
           <button class="ksk-msg-action"
                   type="button"
                   data-action="toggle-archive"
                   data-id="${escapeHTML(id)}">
-            ${getConversationPreference(chat, "archived") ? "Restore" : "Archive"}
+            ${preference(chat, "archived") ? "Restore" : "Archive"}
           </button>
 
           <button class="ksk-msg-action"
                   type="button"
                   data-action="toggle-mute"
                   data-id="${escapeHTML(id)}">
-            ${getConversationPreference(chat, "muted") ? "Unmute" : "Mute"}
+            ${preference(chat, "muted") ? "Unmute" : "Mute"}
           </button>
         </div>
       </article>
@@ -846,9 +957,7 @@
         ${loading
           ? emptyMessage(t("लोड हुँदैछ...", "Loading..."))
           : chats.length
-            ? `<div class="ksk-msg-list">
-                ${chats.map(renderChatRow).join("")}
-               </div>`
+            ? `<div class="ksk-msg-list">${chats.map(renderChatRow).join("")}</div>`
             : emptyMessage(
                 t("कुराकानी छैन", "No conversations"),
                 t(
@@ -866,7 +975,10 @@
     if (!friends.length) {
       return emptyMessage(
         t("साथी भेटिएनन्", "No friends found"),
-        t("Group बनाउन पहिले साथी हुनुपर्छ।", "Add friends before creating a group.")
+        t(
+          "Group बनाउन पहिले साथी हुनुपर्छ।",
+          "Add friends before creating a group."
+        )
       );
     }
 
@@ -905,25 +1017,31 @@
     `;
   }
 
+  /* =======================================================
+     RECEIPTS AND MEDIA
+  ======================================================= */
+
   function getMessageStatus(message) {
     if (!message.fromMe) return "";
 
-    const receipts = Array.isArray(message.receipts)
-      ? message.receipts
-      : [];
+    const receipts = receiptCache.get(message.id) ||
+      message.receipts ||
+      [];
 
-    if (receipts.some(x => x.read_at || x.readAt)) return "✓✓";
-    if (receipts.some(x => x.delivered_at || x.deliveredAt)) return "✓✓";
+    if (receipts.some(item => item.read_at || item.readAt)) {
+      return "✓✓ Read";
+    }
 
-    return "✓";
+    if (receipts.some(item => item.delivered_at || item.deliveredAt)) {
+      return "✓✓ Delivered";
+    }
+
+    return "✓ Sent";
   }
 
   async function getMediaUrl(path) {
     if (!path) return "";
-
-    if (mediaUrls.has(path)) {
-      return mediaUrls.get(path);
-    }
+    if (mediaUrls.has(path)) return mediaUrls.get(path);
 
     const result = await service().getMediaUrl(path);
 
@@ -939,13 +1057,26 @@
     const url = mediaUrls.get(message.mediaPath);
 
     if (!url) {
-      getMediaUrl(message.mediaPath).then(() => refreshPage());
-      return `<div class="ksk-msg-note">${escapeHTML(t("Media लोड हुँदैछ...", "Loading media..."))}</div>`;
+      if (!message._mediaLoading) {
+        message._mediaLoading = true;
+
+        getMediaUrl(message.mediaPath)
+          .then(() => refreshPage())
+          .catch(error => console.warn("Media URL:", error));
+      }
+
+      return `
+        <div class="ksk-msg-note">
+          ${escapeHTML(t("Media लोड हुँदैछ...", "Loading media..."))}
+        </div>
+      `;
     }
 
     if (message.type === "image") {
       return `
-        <a href="${escapeHTML(url)}" target="_blank" rel="noopener">
+        <a href="${escapeHTML(url)}"
+           target="_blank"
+           rel="noopener noreferrer">
           <img class="ksk-msg-media"
                src="${escapeHTML(url)}"
                alt="${escapeHTML(message.mediaName || "Image")}"
@@ -966,7 +1097,7 @@
     return `
       <a href="${escapeHTML(url)}"
          target="_blank"
-         rel="noopener"
+         rel="noopener noreferrer"
          download="${escapeHTML(message.mediaName || "file")}">
         📎 ${escapeHTML(message.mediaName || "Download file")}
       </a>
@@ -1005,14 +1136,16 @@
 
         ${renderReplyPreview(message)}
 
-        ${deleted ? escapeHTML(content) : escapeHTML(content)}
+        ${escapeHTML(content)}
 
         ${!deleted ? renderMessageMedia(message) : ""}
 
         <small class="ksk-msg-history-time">
           ${escapeHTML(formatTime(message.createdAt))}
           ${message.editedAt ? " · Edited" : ""}
-          ${mine ? `<span class="ksk-msg-status">${getMessageStatus(message)}</span>` : ""}
+          ${mine
+            ? `<span class="ksk-msg-status">${escapeHTML(getMessageStatus(message))}</span>`
+            : ""}
         </small>
 
         ${!deleted ? `
@@ -1020,33 +1153,23 @@
             ${mine ? `
               <button type="button"
                       data-action="edit-message"
-                      data-id="${escapeHTML(message.id)}">
-                Edit
-              </button>
+                      data-id="${escapeHTML(message.id)}">Edit</button>
               <button type="button"
                       data-action="delete-message"
-                      data-id="${escapeHTML(message.id)}">
-                Delete
-              </button>
+                      data-id="${escapeHTML(message.id)}">Delete</button>
             ` : ""}
 
             <button type="button"
                     data-action="reply-message"
-                    data-id="${escapeHTML(message.id)}">
-              Reply
-            </button>
+                    data-id="${escapeHTML(message.id)}">Reply</button>
 
             <button type="button"
                     data-action="copy-message"
-                    data-id="${escapeHTML(message.id)}">
-              Copy
-            </button>
+                    data-id="${escapeHTML(message.id)}">Copy</button>
 
             <button type="button"
                     data-action="forward-message"
-                    data-id="${escapeHTML(message.id)}">
-              Forward
-            </button>
+                    data-id="${escapeHTML(message.id)}">Forward</button>
           </div>
         ` : ""}
       </div>
@@ -1067,6 +1190,10 @@
       </div>
     `;
   }
+
+  /* =======================================================
+     GROUP MEMBERS
+  ======================================================= */
 
   function renderGroupMemberControls(chat) {
     if (chat.type !== "group") return "";
@@ -1096,10 +1223,13 @@
             <div class="ksk-msg-row">
               <div class="ksk-msg-row-main">
                 <strong>${escapeHTML(member.name || "सदस्य")}</strong>
-                <div class="ksk-msg-row-subtitle">${escapeHTML(member.role || "member")}</div>
+                <div class="ksk-msg-row-subtitle">
+                  ${escapeHTML(member.role || "member")}
+                </div>
               </div>
 
-              ${canManage && member.id !== currentUserId &&
+              ${canManage &&
+                member.id !== currentUserId &&
                 member.role !== "owner" ? `
                 <button class="ksk-msg-action"
                         type="button"
@@ -1123,12 +1253,14 @@
         ${escapeHTML(replyTarget.text || "📎 Media")}
         <button type="button"
                 data-action="cancel-reply"
-                style="float:right">
-          ✕
-        </button>
+                style="float:right">✕</button>
       </div>
     `;
   }
+
+  /* =======================================================
+     CHAT VIEW
+  ======================================================= */
 
   function renderChat(chat = activeChat) {
     if (!chat) return renderConversationList();
@@ -1158,14 +1290,21 @@
 
             <div class="ksk-msg-chat-header-main">
               <strong>${escapeHTML(getChatName(chat))}</strong>
+
               <div class="ksk-msg-chat-status">
                 ${chat.type === "group"
                   ? `${(chat.members || []).length} ${t("सदस्य", "members")}`
                   : online
                     ? t("Online", "Online")
-                    : escapeHTML(formatLastSeen(person?.lastSeenAt))
+                    : escapeHTML(person?.lastSeenAt
+                      ? t("अन्तिम पटक: ", "Last seen: ") + formatTime(person.lastSeenAt)
+                      : t("अहिले Offline", "Offline"))
                 }
-                <span data-typing-indicator></span>
+                <span data-typing-indicator>
+                  ${typingUsers.size
+                    ? escapeHTML(t(" · लेख्दै हुनुहुन्छ...", " · typing..."))
+                    : ""}
+                </span>
               </div>
             </div>
 
@@ -1186,7 +1325,10 @@
                    type="search"
                    data-message-content-search
                    value="${escapeHTML(messageSearchQuery)}"
-                   placeholder="${escapeHTML(t("यो कुराकानीमा सन्देश खोज्नुहोस्", "Search messages in this chat"))}">
+                   placeholder="${escapeHTML(t(
+                     "यो कुराकानीमा सन्देश खोज्नुहोस्",
+                     "Search messages in this chat"
+                   ))}">
 
             <button class="ksk-msg-secondary"
                     type="button"
@@ -1218,14 +1360,17 @@
             <textarea class="ksk-msg-compose"
                       name="message"
                       maxlength="${MAX_MESSAGE}"
-                      placeholder="${escapeHTML(t("सन्देश लेख्नुहोस्...", "Write a message..."))}"></textarea>
+                      placeholder="${escapeHTML(t(
+                        "सन्देश लेख्नुहोस्...",
+                        "Write a message..."
+                      ))}"></textarea>
 
             <div class="ksk-msg-compose-actions">
               <label>
                 📎 ${escapeHTML(t("फाइल", "File"))}
                 <input type="file"
                        data-media-file
-                       accept="image/*,video/*,audio/*,.pdf,.doc,.docx">
+                       accept="image/*,video/*,.pdf,.doc,.docx">
               </label>
 
               <button class="ksk-msg-primary"
@@ -1252,6 +1397,10 @@
     return renderConversationList();
   }
 
+  /* =======================================================
+     OPEN / CLOSE CHAT
+  ======================================================= */
+
   async function openChat(chatId) {
     const id = String(chatId || "");
 
@@ -1264,44 +1413,70 @@
       return false;
     }
 
+    const token = ++chatRequestToken;
+    ++messageRequestToken;
+
     activeChatId = id;
     activeChat = chat;
     activeMessages = [];
+
     replyTarget = null;
     messageSearchResults = [];
+    messageSearchQuery = "";
+
     oldestCursor = null;
     hasOlderMessages = false;
+
     presenceUsers.clear();
     typingUsers.clear();
+    groupMembersOpen = false;
+
+    global.clearTimeout(typingTimer);
+    service()?.stopPresence?.();
 
     refreshPage();
 
     try {
-      await loadMessages(id);
+      const messageToken = messageRequestToken;
 
-      await service().markRead(id);
+      const ok = await loadMessages(id, {
+        limit: PAGE_SIZE,
+        token: messageToken
+      });
+
+      if (!ok || token !== chatRequestToken) return false;
+
+      /*
+       * markRead writes delivered_at and read_at together for
+       * incoming messages. Do not call markDelivered afterwards:
+       * that older sequence could overwrite receipt timestamps.
+       */
+      const readResult = await service().markRead(id);
+
+      if (token !== chatRequestToken) return false;
+
+      if (!readResult?.ok) {
+        console.warn("Messenger markRead:", readResult?.message);
+      }
 
       await service().startPresence(id);
 
-      const incoming = activeMessages.filter(
-        message => !message.fromMe
-      );
+      if (token !== chatRequestToken) return false;
 
-      for (const message of incoming) {
-        service().markDelivered(message.id);
-      }
+      await loadConversations();
 
       refreshPage();
       return true;
     } catch (error) {
-      toast(error.message, "error");
+      if (token === chatRequestToken) {
+        toast(error.message, "error");
+      }
       return false;
     }
   }
 
   async function openFriendChat(friendId) {
     const id = String(friendId || "").trim();
-
     if (!id) return false;
 
     const existing = conversations.find(chat =>
@@ -1322,23 +1497,41 @@
     }
 
     await loadConversations();
-    return openChat(result.data);
+
+    const created = conversations.find(
+      chat => String(chat.id) === String(result.data)
+    );
+
+    return created
+      ? openChat(created.id)
+      : false;
   }
 
   function closeChat() {
+    ++chatRequestToken;
+    ++messageRequestToken;
+
     activeChatId = null;
     activeChat = null;
     activeMessages = [];
+
     replyTarget = null;
     messageSearchResults = [];
+    messageSearchQuery = "";
+
     presenceUsers.clear();
     typingUsers.clear();
 
-    service().stopPresence();
-    refreshPage();
+    global.clearTimeout(typingTimer);
+    service()?.stopPresence?.();
 
+    refreshPage();
     return true;
   }
+
+  /* =======================================================
+     CHAT PREFERENCES
+  ======================================================= */
 
   async function updatePreference(id, key, value) {
     const chat = conversations.find(
@@ -1360,15 +1553,21 @@
     });
 
     if (!result?.ok) {
-      toast(result.message || "सेटिङ परिवर्तन गर्न सकिएन।", "error");
+      toast(result.message || t(
+        "सेटिङ परिवर्तन गर्न सकिएन।",
+        "Could not update preference."
+      ), "error");
       return false;
     }
 
     await loadConversations();
     refreshPage();
-
     return true;
   }
+
+  /* =======================================================
+     GROUP ACTIONS
+  ======================================================= */
 
   async function createGroup(form) {
     const name = String(
@@ -1380,13 +1579,10 @@
     ).map(input => input.value);
 
     if (!name || selected.length < 2) {
-      toast(
-        t(
-          "Group को नाम लेखेर कम्तीमा दुई साथी छान्नुहोस्।",
-          "Enter a group name and select at least two friends."
-        ),
-        "warning"
-      );
+      toast(t(
+        "Group को नाम लेखेर कम्तीमा दुई साथी छान्नुहोस्।",
+        "Enter a group name and select at least two friends."
+      ), "warning");
       return false;
     }
 
@@ -1407,215 +1603,13 @@
     return true;
   }
 
-  async function sendTextMessage(form) {
-    if (sending || !activeChatId) return false;
-
-    const input = form.querySelector('[name="message"]');
-    const content = String(input?.value || "").trim();
-
-    if (!content) return false;
-
-    sending = true;
-    refreshPage();
-
-    try {
-      const result = replyTarget
-        ? await service().replyMessage(
-            activeChatId,
-            content,
-            replyTarget.id
-          )
-        : await service().sendMessage(activeChatId, content);
-
-      if (!result?.ok) {
-        throw new Error(result.message || "सन्देश पठाउन सकिएन।");
-      }
-
-      replyTarget = null;
-
-      await loadMessages(activeChatId);
-      await service().markRead(activeChatId);
-      await loadConversations();
-
-      return true;
-    } catch (error) {
-      toast(error.message, "error");
-      return false;
-    } finally {
-      sending = false;
-      refreshPage();
-    }
-  }
-
-  async function uploadSelectedMedia(file) {
-    if (!file || !activeChatId) return false;
-
-    const result = await service().uploadMedia(
-      activeChatId,
-      file
-    );
-
-    if (!result?.ok) {
-      toast(result.message || "फाइल पठाउन सकिएन।", "error");
-      return false;
-    }
-
-    await loadMessages(activeChatId);
-    await loadConversations();
-    refreshPage();
-
-    toast(t("फाइल पठाइयो।", "File sent."), "success");
-    return true;
-  }
-
-  async function editMessage(id) {
-    const message = activeMessages.find(item => item.id === id);
-    if (!message || !message.fromMe) return false;
-
-    const next = global.prompt(
-      t("सन्देश सम्पादन गर्नुहोस्", "Edit message"),
-      message.text || ""
-    );
-
-    if (next === null) return false;
-
-    const result = await service().editMessage(id, next);
-
-    if (!result?.ok) {
-      toast(result.message || "सम्पादन गर्न सकिएन।", "error");
-      return false;
-    }
-
-    await loadMessages(activeChatId);
-    refreshPage();
-    return true;
-  }
-
-  async function deleteMessage(id) {
-    const accepted = global.confirm(
-      t("यो सन्देश सबैका लागि हटाउने?", "Delete this message for everyone?")
-    );
-
-    if (!accepted) return false;
-
-    const result = await service().deleteMessage(id, true);
-
-    if (!result?.ok) {
-      toast(result.message || "हटाउन सकिएन।", "error");
-      return false;
-    }
-
-    await loadMessages(activeChatId);
-    refreshPage();
-    return true;
-  }
-
-  async function copyMessage(id) {
-    const result = await service().copyMessage(id);
-
-    if (!result?.ok) {
-      const message = activeMessages.find(item => item.id === id);
-
-      if (message?.text && navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(message.text);
-          toast(t("Copy भयो।", "Copied."), "success");
-          return true;
-        } catch (_) {}
-      }
-
-      toast(result.message || "Copy गर्न सकिएन।", "error");
-      return false;
-    }
-
-    toast(t("Copy भयो।", "Copied."), "success");
-    return true;
-  }
-
-  function replyMessage(id) {
-    const message = activeMessages.find(item => item.id === id);
-    if (!message) return false;
-
-    replyTarget = message;
-    refreshPage();
-
-    document.querySelector('[name="message"]')?.focus();
-    return true;
-  }
-
-  async function forwardMessage(id) {
-    const options = conversations
-      .filter(chat => String(chat.id) !== String(activeChatId));
-
-    if (!options.length) {
-      toast(t("Forward गर्ने अर्को कुराकानी छैन।", "No other conversation available."), "warning");
-      return false;
-    }
-
-    const labels = options.map((chat, index) =>
-      `${index + 1}. ${getChatName(chat)}`
-    ).join("\n");
-
-    const answer = global.prompt(
-      t("कुन कुराकानीमा Forward गर्ने? नम्बर लेख्नुहोस्:\n", "Forward to which conversation? Enter number:\n") + labels
-    );
-
-    if (answer === null) return false;
-
-    const index = Number(answer) - 1;
-    const target = options[index];
-
-    if (!target) {
-      toast(t("सही विकल्प छान्नुहोस्।", "Choose a valid option."), "warning");
-      return false;
-    }
-
-    const result = await service().forwardMessage(id, target.id);
-
-    if (!result?.ok) {
-      toast(result.message || "Forward गर्न सकिएन।", "error");
-      return false;
-    }
-
-    toast(t("Forward भयो।", "Forwarded."), "success");
-    return true;
-  }
-
-  async function searchMessages() {
-    if (!activeChatId) return false;
-
-    const input = document.querySelector(
-      "[data-message-content-search]"
-    );
-
-    messageSearchQuery = String(input?.value || "").trim();
-
-    if (messageSearchQuery.length < 2) {
-      toast(t("कम्तीमा दुई अक्षर लेख्नुहोस्।", "Enter at least two characters."), "warning");
-      return false;
-    }
-
-    const result = await service().searchMessages(
-      activeChatId,
-      messageSearchQuery
-    );
-
-    if (!result?.ok) {
-      toast(result.message || "खोज्न सकिएन।", "error");
-      return false;
-    }
-
-    messageSearchResults = result.data || [];
-    refreshPage();
-
-    return true;
-  }
-
   async function addGroupMembers() {
     if (!activeChat || activeChat.type !== "group") return false;
 
     const available = friends.filter(friend =>
-      !activeChat.members?.some(member => member.id === friend.id)
+      !activeChat.members?.some(
+        member => String(member.id) === String(friend.id)
+      )
     );
 
     if (!available.length) {
@@ -1623,12 +1617,13 @@
       return false;
     }
 
-    const names = available.map((friend, index) =>
+    const labels = available.map((friend, index) =>
       `${index + 1}. ${getFriendName(friend)}`
     ).join("\n");
 
     const answer = global.prompt(
-      t("थप्ने साथीको नम्बर लेख्नुहोस्:\n", "Enter the number of the friend to add:\n") + names
+      t("थप्ने साथीको नम्बर लेख्नुहोस्:\n", "Enter the friend's number:\n") +
+      labels
     );
 
     if (answer === null) return false;
@@ -1653,7 +1648,6 @@
 
     await loadConversations();
     refreshPage();
-
     return true;
   }
 
@@ -1676,7 +1670,229 @@
 
     await loadConversations();
     refreshPage();
+    return true;
+  }
 
+  /* =======================================================
+     SEND / UPLOAD / EDIT / DELETE
+  ======================================================= */
+
+  async function sendTextMessage(form) {
+    if (sending || !activeChatId) return false;
+
+    const id = activeChatId;
+    const token = chatRequestToken;
+
+    const input = form.querySelector('[name="message"]');
+    const content = String(input?.value || "").trim();
+
+    if (!content) return false;
+
+    sending = true;
+    refreshPage();
+
+    try {
+      const result = replyTarget
+        ? await service().replyMessage(
+            id,
+            content,
+            replyTarget.id
+          )
+        : await service().sendMessage(id, content);
+
+      if (!result?.ok) {
+        throw new Error(result.message || "सन्देश पठाउन सकिएन।");
+      }
+
+      if (token !== chatRequestToken || id !== activeChatId) return true;
+
+      replyTarget = null;
+
+      await loadMessages(id, { token: messageRequestToken });
+      await loadConversations();
+
+      return true;
+    } catch (error) {
+      toast(error.message, "error");
+      return false;
+    } finally {
+      sending = false;
+      refreshPage();
+    }
+  }
+
+  async function uploadSelectedMedia(file) {
+    if (!file || !activeChatId) return false;
+
+    const id = activeChatId;
+    const token = chatRequestToken;
+
+    const result = await service().uploadMedia(id, file);
+
+    if (!result?.ok) {
+      toast(result.message || "फाइल पठाउन सकिएन।", "error");
+      return false;
+    }
+
+    if (token !== chatRequestToken || id !== activeChatId) return true;
+
+    await loadMessages(id, { token: messageRequestToken });
+    await loadConversations();
+
+    refreshPage();
+    toast(t("फाइल पठाइयो।", "File sent."), "success");
+    return true;
+  }
+
+  async function editMessage(id) {
+    const message = activeMessages.find(item => item.id === id);
+    if (!message || !message.fromMe) return false;
+
+    const next = global.prompt(
+      t("सन्देश सम्पादन गर्नुहोस्", "Edit message"),
+      message.text || ""
+    );
+
+    if (next === null) return false;
+
+    if (!String(next).trim()) {
+      toast(t("खाली सन्देश राख्न मिल्दैन।", "Message cannot be empty."), "warning");
+      return false;
+    }
+
+    const result = await service().editMessage(id, next);
+
+    if (!result?.ok) {
+      toast(result.message || "सम्पादन गर्न सकिएन।", "error");
+      return false;
+    }
+
+    await loadMessages(activeChatId);
+    refreshPage();
+    return true;
+  }
+
+  async function deleteMessage(id) {
+    if (!global.confirm(t(
+      "यो सन्देश सबैका लागि हटाउने?",
+      "Delete this message for everyone?"
+    ))) return false;
+
+    const result = await service().deleteMessage(id, true);
+
+    if (!result?.ok) {
+      toast(result.message || "हटाउन सकिएन।", "error");
+      return false;
+    }
+
+    await loadMessages(activeChatId);
+    refreshPage();
+    return true;
+  }
+
+  async function copyMessage(id) {
+    const message = activeMessages.find(item => item.id === id);
+    const result = await service().copyMessage(id);
+
+    if (result?.ok) {
+      toast(t("Copy भयो।", "Copied."), "success");
+      return true;
+    }
+
+    if (message?.text && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(message.text);
+        toast(t("Copy भयो।", "Copied."), "success");
+        return true;
+      } catch (_) {}
+    }
+
+    toast(result?.message || "Copy गर्न सकिएन।", "error");
+    return false;
+  }
+
+  function replyMessage(id) {
+    const message = activeMessages.find(item => item.id === id);
+    if (!message) return false;
+
+    replyTarget = message;
+    refreshPage();
+
+    document.querySelector('[name="message"]')?.focus();
+    return true;
+  }
+
+  async function forwardMessage(id) {
+    const options = conversations.filter(
+      chat => String(chat.id) !== String(activeChatId)
+    );
+
+    if (!options.length) {
+      toast(t(
+        "Forward गर्ने अर्को कुराकानी छैन।",
+        "No other conversation available."
+      ), "warning");
+      return false;
+    }
+
+    const labels = options.map((chat, index) =>
+      `${index + 1}. ${getChatName(chat)}`
+    ).join("\n");
+
+    const answer = global.prompt(
+      t(
+        "कुन कुराकानीमा Forward गर्ने? नम्बर लेख्नुहोस्:\n",
+        "Forward to which conversation? Enter number:\n"
+      ) + labels
+    );
+
+    if (answer === null) return false;
+
+    const target = options[Number(answer) - 1];
+
+    if (!target) {
+      toast(t("सही विकल्प छान्नुहोस्।", "Choose a valid option."), "warning");
+      return false;
+    }
+
+    const result = await service().forwardMessage(id, target.id);
+
+    if (!result?.ok) {
+      toast(result.message || "Forward गर्न सकिएन।", "error");
+      return false;
+    }
+
+    toast(t("Forward भयो।", "Forwarded."), "success");
+    return true;
+  }
+
+  /* =======================================================
+     SEARCH / BLOCK / PROFILE
+  ======================================================= */
+
+  async function searchMessages() {
+    if (!activeChatId) return false;
+
+    const input = document.querySelector("[data-message-content-search]");
+    messageSearchQuery = String(input?.value || "").trim();
+
+    if (messageSearchQuery.length < 2) {
+      toast(t("कम्तीमा दुई अक्षर लेख्नुहोस्。", "Enter at least two characters."), "warning");
+      return false;
+    }
+
+    const result = await service().searchMessages(
+      activeChatId,
+      messageSearchQuery
+    );
+
+    if (!result?.ok) {
+      toast(result.message || "खोज्न सकिएन।", "error");
+      return false;
+    }
+
+    messageSearchResults = Array.isArray(result.data) ? result.data : [];
+    refreshPage();
     return true;
   }
 
@@ -1699,7 +1915,6 @@
 
     closeChat();
     await loadConversations();
-
     return true;
   }
 
@@ -1725,6 +1940,10 @@
     return true;
   }
 
+  /* =======================================================
+     EVENT HANDLERS
+  ======================================================= */
+
   function handleClick(event) {
     const target = event.target?.closest?.("[data-action]");
     if (!target) return;
@@ -1744,30 +1963,26 @@
 
     if (action === "set-tab") {
       activeTab = target.dataset.tab || "all";
-      activeChatId = null;
-      activeChat = null;
-      activeMessages = [];
       groupFormOpen = false;
-      service().stopPresence();
       refreshPage();
       return;
     }
 
     if (action === "toggle-pin") {
-      const chat = conversations.find(x => x.id === id);
-      updatePreference(id, "pinned", !getConversationPreference(chat, "pinned"));
+      const chat = conversations.find(item => String(item.id) === id);
+      updatePreference(id, "pinned", !preference(chat, "pinned"));
       return;
     }
 
     if (action === "toggle-archive") {
-      const chat = conversations.find(x => x.id === id);
-      updatePreference(id, "archived", !getConversationPreference(chat, "archived"));
+      const chat = conversations.find(item => String(item.id) === id);
+      updatePreference(id, "archived", !preference(chat, "archived"));
       return;
     }
 
     if (action === "toggle-mute") {
-      const chat = conversations.find(x => x.id === id);
-      updatePreference(id, "muted", !getConversationPreference(chat, "muted"));
+      const chat = conversations.find(item => String(item.id) === id);
+      updatePreference(id, "muted", !preference(chat, "muted"));
       return;
     }
 
@@ -1783,30 +1998,11 @@
       return;
     }
 
-    if (action === "edit-message") {
-      editMessage(id);
-      return;
-    }
-
-    if (action === "delete-message") {
-      deleteMessage(id);
-      return;
-    }
-
-    if (action === "copy-message") {
-      copyMessage(id);
-      return;
-    }
-
-    if (action === "reply-message") {
-      replyMessage(id);
-      return;
-    }
-
-    if (action === "forward-message") {
-      forwardMessage(id);
-      return;
-    }
+    if (action === "edit-message") return void editMessage(id);
+    if (action === "delete-message") return void deleteMessage(id);
+    if (action === "copy-message") return void copyMessage(id);
+    if (action === "reply-message") return void replyMessage(id);
+    if (action === "forward-message") return void forwardMessage(id);
 
     if (action === "cancel-reply") {
       replyTarget = null;
@@ -1814,15 +2010,8 @@
       return;
     }
 
-    if (action === "search-messages") {
-      searchMessages();
-      return;
-    }
-
-    if (action === "load-older") {
-      loadOlderMessages();
-      return;
-    }
+    if (action === "search-messages") return void searchMessages();
+    if (action === "load-older") return void loadOlderMessages();
 
     if (action === "toggle-group-members") {
       groupMembersOpen = !groupMembersOpen;
@@ -1830,26 +2019,10 @@
       return;
     }
 
-    if (action === "add-group-members") {
-      addGroupMembers();
-      return;
-    }
-
-    if (action === "remove-group-member") {
-      removeGroupMember(id);
-      return;
-    }
-
-    if (action === "open-chat-profile") {
-      openProfile(id);
-      return;
-    }
-
-    if (action === "block-user") {
-      blockUser(id);
-      return;
-    }
-
+    if (action === "add-group-members") return void addGroupMembers();
+    if (action === "remove-group-member") return void removeGroupMember(id);
+    if (action === "open-chat-profile") return void openProfile(id);
+    if (action === "block-user") return void blockUser(id);
   }
 
   function handleKeyboard(event) {
@@ -1886,10 +2059,7 @@
         input?.focus();
 
         if (input) {
-          input.setSelectionRange(
-            input.value.length,
-            input.value.length
-          );
+          input.setSelectionRange(input.value.length, input.value.length);
         }
       }
 
@@ -1897,12 +2067,16 @@
     }
 
     if (target.matches('[name="message"]') && activeChatId) {
-      service().sendTyping(activeChatId, true);
+      const id = activeChatId;
+
+      service().sendTyping(id, true);
 
       global.clearTimeout(typingTimer);
 
       typingTimer = global.setTimeout(() => {
-        service().sendTyping(activeChatId, false);
+        if (activeChatId === id) {
+          service().sendTyping(id, false);
+        }
       }, 1200);
     }
   }
@@ -1910,15 +2084,19 @@
   async function handleChange(event) {
     const target = event.target;
 
-    if (target.matches("[data-media-file]")) {
-      const file = target.files?.[0];
+    if (!target.matches("[data-media-file]")) return;
 
-      if (file) {
+    const file = target.files?.[0];
+
+    if (file) {
+      try {
         await uploadSelectedMedia(file);
+      } catch (error) {
+        toast(error.message || "फाइल पठाउन सकिएन।", "error");
       }
-
-      target.value = "";
     }
+
+    target.value = "";
   }
 
   async function handleSubmit(event) {
@@ -1936,77 +2114,230 @@
 
   async function handleCloudChange(event) {
     const detail = event.detail || {};
-    if (detail.action === "typing-change" && String(detail.conversationId || "") === String(activeChatId || "")) {
-      if (detail.typing) typingUsers.add(detail.userId); else typingUsers.delete(detail.userId);
+
+    if (
+      detail.action === "typing-change" &&
+      String(detail.conversationId || "") === String(activeChatId || "")
+    ) {
+      if (detail.typing) {
+        typingUsers.add(detail.userId);
+      } else {
+        typingUsers.delete(detail.userId);
+      }
+
       const indicator = document.querySelector("[data-typing-indicator]");
-      if (indicator) indicator.textContent = typingUsers.size ? t(" · लेख्दै हुनुहुन्छ...", " · typing...") : "";
+
+      if (indicator) {
+        indicator.textContent = typingUsers.size
+          ? t(" · लेख्दै हुनुहुन्छ...", " · typing...")
+          : "";
+      }
+
       return;
     }
-    if (detail.action === "presence-sync" && String(detail.conversationId || "") === String(activeChatId || "")) {
-      presenceUsers = new Set(Object.keys(detail.state || {})); refreshPage(); return;
+
+    if (
+      detail.action === "presence-sync" &&
+      String(detail.conversationId || "") === String(activeChatId || "")
+    ) {
+      presenceUsers = new Set(Object.keys(detail.state || {}));
+      refreshPage();
+      return;
     }
-    const relevant = ["realtime-message","message-sent","message-edited","message-deleted","realtime-receipt","message-delivered","conversation-read","realtime-members","group-members-changed","chat-preferences-changed","conversation-created","group-created"];
+
+    const relevant = [
+      "realtime-message",
+      "message-sent",
+      "message-edited",
+      "message-deleted",
+      "realtime-receipt",
+      "message-delivered",
+      "conversation-read",
+      "realtime-members",
+      "group-members-changed",
+      "chat-preferences-changed",
+      "conversation-created",
+      "group-created"
+    ];
+
     if (!relevant.includes(detail.action)) return;
+
     const eventMessage = detail.message || detail.data?.message || null;
-    const eventConversationId = String(detail.conversationId || eventMessage?.conversationId || eventMessage?.conversation_id || "");
-    await loadConversations();
-    if (activeChatId && (!eventConversationId || eventConversationId === String(activeChatId))) {
-      try {
-        await loadMessages(activeChatId);
-        const isIncomingInsert = detail.action === "realtime-message" &&
-          (detail.eventType === "INSERT" || detail.type === "INSERT") &&
-          eventMessage &&
-          String(eventMessage.sender_id || eventMessage.senderId || "") !== String(currentUserId) &&
-          String(eventMessage.conversation_id || eventMessage.conversationId || "") === String(activeChatId);
-        if (isIncomingInsert && eventMessage.id) await service().markDelivered(eventMessage.id);
-        if (isPageVisible()) await service().markRead(activeChatId);
-      } catch (error) { console.warn("Realtime refresh:", error); }
+    const eventReceipt = detail.receipt || null;
+
+    const eventConversationId = String(
+      detail.conversationId ||
+      eventMessage?.conversationId ||
+      eventMessage?.conversation_id ||
+      ""
+    );
+
+    if (
+      detail.action === "realtime-receipt" &&
+      eventReceipt?.message_id
+    ) {
+      receiptCache.delete(eventReceipt.message_id);
     }
+
+    await loadConversations();
+
+    if (
+      activeChatId &&
+      (!eventConversationId ||
+        eventConversationId === String(activeChatId))
+    ) {
+      const id = activeChatId;
+      const token = messageRequestToken;
+
+      try {
+        await loadMessages(id, { token });
+
+        const isIncomingInsert =
+          detail.action === "realtime-message" &&
+          detail.eventType === "INSERT" &&
+          eventMessage &&
+          String(
+            eventMessage.sender_id || eventMessage.senderId || ""
+          ) !== String(currentUserId) &&
+          String(
+            eventMessage.conversation_id ||
+            eventMessage.conversationId ||
+            ""
+          ) === String(id);
+
+        /*
+         * Do not mark own messages as delivered.
+         * If the chat is open, markRead handles delivered + read.
+         */
+        if (isIncomingInsert && isPageVisible()) {
+          await service().markRead(id);
+        }
+
+        if (isPageVisible()) {
+          await loadConversations();
+        }
+      } catch (error) {
+        console.warn("Realtime refresh:", error);
+      }
+    }
+
     if (isPageVisible()) refreshPage();
   }
 
   function handleNavigation(event) {
     if (event.detail?.page !== "messages") {
+      global.clearTimeout(typingTimer);
+      service()?.sendTyping?.(activeChatId, false);
       service()?.stopPresence?.();
       return;
     }
-
-    if (event.detail?.options?.keepChat) return;
 
     if (!activeChatId) {
       loadConversations().then(refreshPage);
     }
   }
 
+  /* =======================================================
+     INITIALIZE
+  ======================================================= */
+
   async function initialize() {
     if (initialized) return true;
     if (initializing) return false;
-    initializing = true; ensureStyles();
+
+    initializing = true;
+    ensureStyles();
+
     try {
       const authReady = await auth()?.initialize?.();
-      if (!authReady || !auth()?.isAuthenticated?.()) throw new Error(t("पहिले आफ्नो खातामा लगइन गर्नुहोस्।","Please sign in first."));
-      currentUserId = auth()?.getUser?.()?.id || "";
-      if (!currentUserId) throw new Error(t("प्रयोगकर्ता विवरण प्राप्त भएन।","Could not load the signed-in user."));
-      const ready = await service()?.initialize?.();
-      if (!ready?.ok) throw new Error(ready?.message || "Messenger सुरु हुन सकेन।");
-      const [, conversationsReady] = await Promise.all([loadFriends(),loadConversations()]);
-      if (!conversationsReady) throw new Error(t("कुराकानी लोड गर्न सकिएन। पुनः प्रयास गर्नुहोस्।","Could not load conversations. Please retry."));
-      if (!listenersAttached) {
-        document.addEventListener("click",handleClick); document.addEventListener("keydown",handleKeyboard);
-        document.addEventListener("input",handleInput); document.addEventListener("change",handleChange);
-        document.addEventListener("submit",handleSubmit);
-        global.addEventListener("ksk:messages-cloud-change",handleCloudChange);
-        global.addEventListener("ksk:navigate",handleNavigation); listenersAttached=true;
+
+      if (!authReady || !auth()?.isAuthenticated?.()) {
+        throw new Error(t(
+          "पहिले आफ्नो खातामा लगइन गर्नुहोस्।",
+          "Please sign in first."
+        ));
       }
+
+      currentUserId = auth()?.getUser?.()?.id || "";
+
+      if (!currentUserId) {
+        throw new Error(t(
+          "प्रयोगकर्ता विवरण प्राप्त भएन।",
+          "Could not load the signed-in user."
+        ));
+      }
+
+      const ready = await service()?.initialize?.();
+
+      if (!ready?.ok) {
+        throw new Error(ready?.message || "Messenger सुरु हुन सकेन।");
+      }
+
+      const [, conversationsReady] = await Promise.all([
+        loadFriends(),
+        loadConversations()
+      ]);
+
+      if (!conversationsReady) {
+        throw new Error(t(
+          "कुराकानी लोड गर्न सकिएन। पुनः प्रयास गर्नुहोस्।",
+          "Could not load conversations. Please retry."
+        ));
+      }
+
+      if (!listenersAttached) {
+        document.addEventListener("click", handleClick);
+        document.addEventListener("keydown", handleKeyboard);
+        document.addEventListener("input", handleInput);
+        document.addEventListener("change", handleChange);
+        document.addEventListener("submit", handleSubmit);
+
+        global.addEventListener(
+          "ksk:messages-cloud-change",
+          handleCloudChange
+        );
+
+        global.addEventListener("ksk:navigate", handleNavigation);
+
+        listenersAttached = true;
+      }
+
       const realtimeReady = await service().startRealtime();
-      if (realtimeReady === false || realtimeReady?.ok === false) throw new Error(realtimeReady?.message || t("Realtime जडान हुन सकेन। पुनः प्रयास गर्नुहोस्।","Realtime connection failed. Please retry."));
-      initialized=true; refreshPage(); return true;
-    } catch(error) {
-      console.error("Messenger initialization:",error);
-      toast(error.message || t("Messenger सुरु गर्न सकिएन।","Messenger could not initialize."),"error");
+
+      if (
+        realtimeReady === false ||
+        realtimeReady?.ok === false
+      ) {
+        throw new Error(
+          realtimeReady?.message ||
+          t(
+            "Realtime जडान हुन सकेन। पुनः प्रयास गर्नुहोस्।",
+            "Realtime connection failed. Please retry."
+          )
+        );
+      }
+
+      initialized = true;
+      refreshPage();
+      return true;
+    } catch (error) {
+      console.error("Messenger initialization:", error);
+
+      toast(
+        error.message ||
+        t("Messenger सुरु गर्न सकिएन।", "Messenger could not initialize."),
+        "error"
+      );
+
       return false;
-    } finally { initializing=false; }
+    } finally {
+      initializing = false;
+    }
   }
+
+  /* =======================================================
+     PUBLIC API — KEEP EXISTING APP CONNECTIONS
+  ======================================================= */
 
   global.KSKMessagesPage = Object.freeze({
     initialize,
@@ -2026,7 +2357,8 @@
       await loadFriends();
 
       if (activeChatId) {
-        await loadMessages(activeChatId);
+        const token = messageRequestToken;
+        await loadMessages(activeChatId, { token });
       }
 
       refreshPage();
