@@ -2,15 +2,9 @@
 "use strict";
 
 /*
- * MERO SANSAR — MESSENGER UI LAYER
- *
- * Design:
- * - Progressive Disclosure
- * - Minimalist / Clean UI
- * - Mobile-first responsive layout
- *
- * Keeps the existing Supabase Messenger API intact.
- * Does not add or modify audio/video calling or recording.
+ * MERO SANSAR — MESSENGER CLEAN UI
+ * Progressive Disclosure + Minimalist UI
+ * Mobile-first. Existing Messenger APIs remain unchanged.
  */
 
 (function (global) {
@@ -21,6 +15,7 @@
   if (!API || API.__cleanUILayerInstalled) return;
 
   const STYLE_ID = "ksk-messenger-clean-ui";
+  let observer = null;
 
   function addStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -114,7 +109,7 @@
         border: 1px solid var(--color-border, #e2e8f0);
         border-radius: 14px;
         background: var(--color-surface, #fff);
-        transition: border-color .15s ease, background .15s ease;
+        transition: border-color .15s ease;
       }
 
       .ksk-msg-row:focus-within {
@@ -145,7 +140,6 @@
         height: 43px;
       }
 
-      /* Progressive disclosure */
       .ksk-msg-disclosure {
         min-width: 0;
         margin: 7px 0;
@@ -453,42 +447,41 @@
   function decorate(html) {
     if (typeof html !== "string" || !html) return html;
 
+    // Prevent wrapping already-enhanced HTML.
+    if (html.includes("ksk-msg-disclosure")) return html;
+
     let output = html;
 
-    // Hide per-conversation actions until requested.
     output = output.replace(
       /<div class="ksk-msg-actions">([\s\S]*?)<\/div>/g,
-      (match) => wrapDisclosure(
+      match => wrapDisclosure(
         match,
         "ksk-msg-conversation-options",
         "⋯ विकल्प"
       )
     );
 
-    // Hide message actions until the user opens them.
     output = output.replace(
       /<div class="ksk-msg-bubble-actions">([\s\S]*?)<\/div>/g,
-      (match) => wrapDisclosure(
+      match => wrapDisclosure(
         match,
         "ksk-msg-message-options",
         "थप"
       )
     );
 
-    // Keep conversation filters available, but collapsed by default.
     output = output.replace(
       /<div class="ksk-msg-tabs">([\s\S]*?)<\/div>/g,
-      (match) => wrapDisclosure(
+      match => wrapDisclosure(
         match,
         "ksk-msg-filter-disclosure",
         "कुराकानी फिल्टर"
       )
     );
 
-    // Search inside a chat is an optional advanced action.
     output = output.replace(
       /<div class="ksk-msg-toolbar">\s*(<input[\s\S]*?data-message-content-search[\s\S]*?<\/button>)\s*<\/div>/g,
-      (match) => wrapDisclosure(
+      match => wrapDisclosure(
         match,
         "ksk-msg-search-disclosure",
         "यस कुराकानीमा खोज्नुहोस्"
@@ -496,6 +489,43 @@
     );
 
     return output;
+  }
+
+  /*
+   * The original page has internal refresh functions which use
+   * their own local render() function. Observe the page container
+   * so those updates receive the same UI treatment too.
+   */
+  function enhanceMountedPage() {
+    const root = document.getElementById("otherPageText");
+    if (!root) return;
+
+    const page = root.querySelector(".ksk-msg-page");
+    if (!page) return;
+
+    if (page.querySelector(".ksk-msg-disclosure")) return;
+
+    const before = root.innerHTML;
+    const after = decorate(before);
+
+    if (after !== before) {
+      root.innerHTML = after;
+    }
+  }
+
+  function installObserver() {
+    if (observer || !global.MutationObserver) return;
+
+    observer = new MutationObserver(() => {
+      enhanceMountedPage();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    enhanceMountedPage();
   }
 
   function wrappedRender() {
@@ -526,6 +556,19 @@
 
   global.KSKMessagesPage = Object.freeze(enhanced);
 
-  addStyles();
+  function initializeLayer() {
+    addStyles();
+    installObserver();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      initializeLayer,
+      { once: true }
+    );
+  } else {
+    initializeLayer();
+  }
 
 })(window);
