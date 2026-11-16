@@ -1,4 +1,3 @@
-
 "use strict";
 
 /* =========================================================
@@ -747,7 +746,13 @@
       activeMessages = rows;
     }
 
-    oldestCursor = activeMessages[0]?.createdAt || null;
+    oldestCursor = activeMessages.length
+      ? {
+          createdAt: activeMessages[0].createdAt,
+          id: activeMessages[0].id
+        }
+      : null;
+
     hasOlderMessages = rows.length >= (options.limit || PAGE_SIZE);
 
     await loadReceipts(rows);
@@ -1877,7 +1882,7 @@
     messageSearchQuery = String(input?.value || "").trim();
 
     if (messageSearchQuery.length < 2) {
-      toast(t("कम्तीमा दुई अक्षर लेख्नुहोस्。", "Enter at least two characters."), "warning");
+      toast(t("कम्तीमा दुई अक्षर लेख्नुहोस्।", "Enter at least two characters."), "warning");
       return false;
     }
 
@@ -2232,9 +2237,11 @@
       return;
     }
 
-    if (!activeChatId) {
-      loadConversations().then(refreshPage);
+    if (activeChatId) {
+      service()?.startPresence?.(activeChatId);
     }
+
+    loadConversations().then(refreshPage);
   }
 
   /* =======================================================
