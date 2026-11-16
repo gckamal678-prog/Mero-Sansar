@@ -1201,7 +1201,7 @@
 
     const children = expanded
       ? items.map(item => `
-          <div class="ksk-notif-group-item">
+          <div class="ksk-notif-group-item" data-notification-card="${escapeHTML(getItemId(item))}">
             <p>${escapeHTML(item.text || "")}</p>
             <small class="ksk-notif-meta">
               ${escapeHTML(formatDate(item))}
@@ -1702,6 +1702,65 @@
   }
 
   /* =========================================
+     NOTIFICATION TARGET NAVIGATION
+  ========================================= */
+
+  async function openNotificationTarget(item) {
+    if (!item) return false;
+
+    const type = classifyNotification(item);
+    const actorId = String(item.actorId || "").trim();
+    const entityId = String(item.entityId || "").trim();
+    const navigation = global.KSKNavigation;
+
+    if (!isRead(item)) {
+      await markOneAsRead(item.id);
+    }
+
+    if (type === "friend_request") {
+      return Boolean(navigation?.navigate?.("friends"));
+    }
+
+    if (type === "friend_accepted" || type === "follower") {
+      return Boolean(
+        global.KSKProfilePage?.openUserProfile?.(actorId || entityId)
+      );
+    }
+
+    if (
+      type === "post_like" ||
+      type === "post_comment" ||
+      type === "post_reaction"
+    ) {
+      if (!entityId) return false;
+      const opened = navigation?.navigate?.("home");
+      if (!opened) return false;
+      global.setTimeout(() => {
+        global.KSKHomePage?.focusPost?.(entityId);
+      }, 100);
+      return true;
+    }
+
+    if (type === "message") {
+      if (!entityId) return false;
+      const messenger = global.KSKMessagesPage;
+      if (!messenger) return false;
+      navigation?.navigate?.("messages");
+      const ready = await messenger.initialize?.();
+      if (ready === false) return false;
+      return Boolean(await messenger.openChat?.(entityId));
+    }
+
+    if (actorId) {
+      return Boolean(
+        global.KSKProfilePage?.openUserProfile?.(actorId)
+      );
+    }
+
+    return false;
+  }
+
+  /* =========================================
      EVENT HANDLERS
   ========================================= */
 
@@ -1755,7 +1814,18 @@
       "[data-notification-action]"
     );
 
-    if (!button) return;
+    if (!button) {
+      const card = target?.closest?.("[data-notification-card]");
+      if (!card) return;
+
+      const id = String(card.dataset.notificationCard || "").trim();
+      const item = notificationCache.find(
+        row => String(row.id) === id
+      );
+
+      if (item) openNotificationTarget(item);
+      return;
+    }
 
     switch (button.dataset.notificationAction) {
       case "settings":
