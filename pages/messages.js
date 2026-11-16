@@ -31,6 +31,8 @@
   const MAX_MESSAGE = 5000;
 
   let initialized = false;
+  let initializing = false;
+  let listenersAttached = false;
   let loading = false;
   let sending = false;
   let loadingOlder = false;
@@ -57,9 +59,6 @@
   let currentUserId = "";
   let oldestCursor = null;
   let hasOlderMessages = false;
-  let voiceRecorder = null;
-  let voiceChunks = [];
-  let voiceStream = null;
 
   const service = () => global.KSKSupabaseMessages;
   const friendsAPI = () => global.KSKSupabaseFriends;
@@ -397,23 +396,6 @@
         margin-top:5px;
         font-size:10px;
         opacity:.7;
-      }
-
-      .ksk-msg-bubble-actions {
-        display:flex;
-        flex-wrap:wrap;
-        gap:4px;
-        margin-top:7px;
-      }
-
-      .ksk-msg-bubble-actions button {
-        border:0;
-        padding:4px 6px;
-        border-radius:6px;
-        background:rgba(0,0,0,.06);
-        color:inherit;
-        font-size:11px;
-        cursor:pointer;
       }
 
       .ksk-msg-send-form {
@@ -981,15 +963,6 @@
       `;
     }
 
-    if (message.type === "voice") {
-      return `
-        <audio class="ksk-msg-media"
-               controls
-               preload="metadata"
-               src="${escapeHTML(url)}"></audio>
-      `;
-    }
-
     return `
       <a href="${escapeHTML(url)}"
          target="_blank"
@@ -1255,17 +1228,6 @@
                        accept="image/*,video/*,audio/*,.pdf,.doc,.docx">
               </label>
 
-              <button type="button"
-                      data-action="start-voice">
-                🎙 ${escapeHTML(t("Voice", "Voice"))}
-              </button>
-
-              <button type="button"
-                      data-action="stop-voice"
-                      class="ksk-msg-hidden">
-                ■ ${escapeHTML(t("रोक्नुहोस्", "Stop"))}
-              </button>
-
               <button class="ksk-msg-primary"
                       type="submit"
                       ${sending ? "disabled" : ""}>
@@ -1504,84 +1466,6 @@
 
     toast(t("फाइल पठाइयो।", "File sent."), "success");
     return true;
-  }
-
-  async function startVoiceRecording() {
-    if (!navigator.mediaDevices?.getUserMedia ||
-        typeof global.MediaRecorder === "undefined") {
-      toast(
-        t("यो Browser मा Voice Recording उपलब्ध छैन।", "Voice recording is unavailable in this browser."),
-        "warning"
-      );
-      return false;
-    }
-
-    try {
-      voiceStream = await navigator.mediaDevices.getUserMedia({
-        audio: true
-      });
-
-      voiceChunks = [];
-      voiceRecorder = new MediaRecorder(voiceStream);
-
-      voiceRecorder.ondataavailable = event => {
-        if (event.data?.size) voiceChunks.push(event.data);
-      };
-
-      voiceRecorder.onstop = async () => {
-        const blob = new Blob(voiceChunks, {
-          type: voiceRecorder?.mimeType || "audio/webm"
-        });
-
-        voiceStream?.getTracks?.().forEach(track => track.stop());
-        voiceStream = null;
-
-        if (blob.size) {
-          const file = new File(
-            [blob],
-            "voice-message.webm",
-            { type: blob.type }
-          );
-
-          await uploadSelectedMedia(file);
-        }
-
-        voiceRecorder = null;
-        voiceChunks = [];
-        refreshPage();
-      };
-
-      voiceRecorder.start();
-
-      const stopButton = document.querySelector(
-        '[data-action="stop-voice"]'
-      );
-
-      stopButton?.classList.remove("ksk-msg-hidden");
-
-      toast(t("Voice Recording सुरु भयो।", "Voice recording started."), "success");
-      return true;
-    } catch (error) {
-      voiceStream?.getTracks?.().forEach(track => track.stop());
-      voiceStream = null;
-
-      toast(
-        t("Microphone अनुमति वा पहुँच उपलब्ध भएन।", "Microphone access was unavailable."),
-        "error"
-      );
-
-      return false;
-    }
-  }
-
-  function stopVoiceRecording() {
-    if (voiceRecorder?.state === "recording") {
-      voiceRecorder.stop();
-    }
-
-    document.querySelector(
-      '[data-action="stop-voice"]'
-    )?.classList.add("ksk-msg-hidden");
   }
 
   async function editMessage(id) {
@@ -1966,14 +1850,6 @@
       return;
     }
 
-    if (action === "start-voice") {
-      startVoiceRecording();
-      return;
-    }
-
-    if (action === "stop-voice") {
-      stopVoiceRecording();
-    }
   }
 
   function handleKeyboard(event) {
@@ -2060,71 +1936,31 @@
 
   async function handleCloudChange(event) {
     const detail = event.detail || {};
-
-    if (detail.action === "typing-change" &&
-        detail.conversationId === activeChatId) {
-      if (detail.typing) {
-        typingUsers.add(detail.userId);
-      } else {
-        typingUsers.delete(detail.userId);
-      }
-
-      const indicator = document.querySelector(
-        "[data-typing-indicator]"
-      );
-
-      if (indicator) {
-        indicator.textContent = typingUsers.size
-          ? t(" · लेख्दै हुनुहुन्छ...", " · typing...")
-          : "";
-      }
-
+    if (detail.action === "typing-change" && String(detail.conversationId || "") === String(activeChatId || "")) {
+      if (detail.typing) typingUsers.add(detail.userId); else typingUsers.delete(detail.userId);
+      const indicator = document.querySelector("[data-typing-indicator]");
+      if (indicator) indicator.textContent = typingUsers.size ? t(" · लेख्दै हुनुहुन्छ...", " · typing...") : "";
       return;
     }
-
-    if (detail.action === "presence-sync" &&
-        detail.conversationId === activeChatId) {
-      const state = detail.state || {};
-      presenceUsers = new Set(Object.keys(state));
-      refreshPage();
-      return;
+    if (detail.action === "presence-sync" && String(detail.conversationId || "") === String(activeChatId || "")) {
+      presenceUsers = new Set(Object.keys(detail.state || {})); refreshPage(); return;
     }
-
-    const relevant = [
-      "realtime-message",
-      "message-sent",
-      "message-edited",
-      "message-deleted",
-      "realtime-receipt",
-      "message-delivered",
-      "conversation-read",
-      "realtime-members",
-      "group-members-changed",
-      "chat-preferences-changed",
-      "conversation-created",
-      "group-created"
-    ];
-
+    const relevant = ["realtime-message","message-sent","message-edited","message-deleted","realtime-receipt","message-delivered","conversation-read","realtime-members","group-members-changed","chat-preferences-changed","conversation-created","group-created"];
     if (!relevant.includes(detail.action)) return;
-
+    const eventMessage = detail.message || detail.data?.message || null;
+    const eventConversationId = String(detail.conversationId || eventMessage?.conversationId || eventMessage?.conversation_id || "");
     await loadConversations();
-
-    if (activeChatId) {
+    if (activeChatId && (!eventConversationId || eventConversationId === String(activeChatId))) {
       try {
         await loadMessages(activeChatId);
-
-        const incoming = activeMessages.filter(
-          message => !message.fromMe
-        );
-
-        for (const message of incoming) {
-          service().markDelivered(message.id);
-        }
-      } catch (error) {
-        console.warn("Realtime refresh:", error);
-      }
+        const isIncomingInsert = detail.action === "realtime-message" &&
+          (detail.eventType === "INSERT" || detail.type === "INSERT") &&
+          eventMessage && !eventMessage.fromMe &&
+          String(eventMessage.conversationId || eventMessage.conversation_id || "") === String(activeChatId);
+        if (isIncomingInsert && eventMessage.id) await service().markDelivered(eventMessage.id);
+        if (isPageVisible()) await service().markRead(activeChatId);
+      } catch (error) { console.warn("Realtime refresh:", error); }
     }
-
     if (isPageVisible()) refreshPage();
   }
 
@@ -2143,66 +1979,32 @@
 
   async function initialize() {
     if (initialized) return true;
-
-    initialized = true;
-    ensureStyles();
-
-    document.addEventListener("click", handleClick);
-    document.addEventListener("keydown", handleKeyboard);
-    document.addEventListener("input", handleInput);
-    document.addEventListener("change", handleChange);
-    document.addEventListener("submit", handleSubmit);
-
-    global.addEventListener(
-      "ksk:messages-cloud-change",
-      handleCloudChange
-    );
-
-    global.addEventListener(
-      "ksk:navigate",
-      handleNavigation
-    );
-
+    if (initializing) return false;
+    initializing = true; ensureStyles();
     try {
       const authReady = await auth()?.initialize?.();
-
-      if (!authReady || !auth()?.isAuthenticated?.()) {
-        throw new Error(t(
-          "पहिले आफ्नो खातामा लगइन गर्नुहोस्।",
-          "Please sign in first."
-        ));
-      }
-
+      if (!authReady || !auth()?.isAuthenticated?.()) throw new Error(t("पहिले आफ्नो खातामा लगइन गर्नुहोस्।","Please sign in first."));
       currentUserId = auth()?.getUser?.()?.id || "";
-
+      if (!currentUserId) throw new Error(t("प्रयोगकर्ता विवरण प्राप्त भएन।","Could not load the signed-in user."));
       const ready = await service()?.initialize?.();
-
-      if (!ready?.ok) {
-        throw new Error(ready?.message || "Messenger सुरु हुन सकेन।");
+      if (!ready?.ok) throw new Error(ready?.message || "Messenger सुरु हुन सकेन।");
+      const [, conversationsReady] = await Promise.all([loadFriends(),loadConversations()]);
+      if (!conversationsReady) throw new Error(t("कुराकानी लोड गर्न सकिएन। पुनः प्रयास गर्नुहोस्।","Could not load conversations. Please retry."));
+      if (!listenersAttached) {
+        document.addEventListener("click",handleClick); document.addEventListener("keydown",handleKeyboard);
+        document.addEventListener("input",handleInput); document.addEventListener("change",handleChange);
+        document.addEventListener("submit",handleSubmit);
+        global.addEventListener("ksk:messages-cloud-change",handleCloudChange);
+        global.addEventListener("ksk:navigate",handleNavigation); listenersAttached=true;
       }
-
-      await Promise.all([
-        loadFriends(),
-        loadConversations()
-      ]);
-
-      await service().startRealtime();
-
-      refreshPage();
-      return true;
-    } catch (error) {
-      console.error("Messenger initialization:", error);
-
-      toast(
-        error.message || t(
-          "Messenger सुरु गर्न सकिएन।",
-          "Messenger could not initialize."
-        ),
-        "error"
-      );
-
+      const realtimeReady = await service().startRealtime();
+      if (realtimeReady === false || realtimeReady?.ok === false) throw new Error(realtimeReady?.message || t("Realtime जडान हुन सकेन। पुनः प्रयास गर्नुहोस्।","Realtime connection failed. Please retry."));
+      initialized=true; refreshPage(); return true;
+    } catch(error) {
+      console.error("Messenger initialization:",error);
+      toast(error.message || t("Messenger सुरु गर्न सकिएन।","Messenger could not initialize."),"error");
       return false;
-    }
+    } finally { initializing=false; }
   }
 
   global.KSKMessagesPage = Object.freeze({
