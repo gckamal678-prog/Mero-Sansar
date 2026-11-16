@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -545,9 +544,22 @@
 
       } finally {
         if (loadPromise === requestPromise) {
+          const wasInvalidated =
+            requestGeneration !== loadGeneration;
+
           loading = false;
           loadPromise = null;
           refresh();
+
+          // Realtime घटना हुँदा पुरानो अनुरोध रद्द भयो भने
+          // ताजा सूची फेरि लोड गर्नुहोस्।
+          if (wasInvalidated) {
+            global.setTimeout(() => {
+              if (!loading) {
+                loadCloudNotifications({ silent: true });
+              }
+            }, 0);
+          }
         }
       }
     })();
@@ -558,6 +570,11 @@
   }
 
   function handleCloudChange(event) {
+    // Realtime परिवर्तन आएपछि पुरानो Load Load Response लागू हुन नदिनुहोस्।
+    if (loading && loadPromise) {
+      loadGeneration += 1;
+    }
+
     const detail = event?.detail || {};
 
     if (detail.collection !== "user_notifications") {
