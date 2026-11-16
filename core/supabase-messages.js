@@ -3,23 +3,12 @@
 
 /*
  * MERO SANSAR — SUPABASE MESSENGER SERVICE
- * Complete service layer:
  * conversations, history, pagination, messages,
  * receipts, groups, preferences, media, search,
  * realtime, typing and presence.
  *
  * Requires:
  *   core/supabase-auth.js
- *
- * Database:
- *   conversations
- *   conversation_members
- *   messages
- *   message_receipts
- *   chat_preferences
- *   chat_presence
- *   profiles
- *   Storage bucket: chat-media
  */
 
 (function (global) {
@@ -46,6 +35,7 @@
   let realtimeUserId = "";
   let startingRealtime = false;
   let presenceChannel = null;
+  let presenceReady = null;
   let activePresenceConversation = "";
   let typingTimers = new Map();
   let typingUsers = new Set();
@@ -205,8 +195,12 @@
         return result(true, "CONVERSATIONS_LOADED", []);
       }
 
-      const [conversationResult, memberResult, messageResult,
-        preferenceResult] = await Promise.all([
+      const [
+        conversationResult,
+        memberResult,
+        messageResult,
+        preferenceResult
+      ] = await Promise.all([
         client.from(TABLE.conversations)
           .select("id,type,title,created_by,created_at,updated_at,last_message_at")
           .in("id", ids)
@@ -244,6 +238,7 @@
       );
 
       const latest = {};
+
       messages.forEach(message => {
         if (!latest[message.conversation_id]) {
           latest[message.conversation_id] =
@@ -252,11 +247,13 @@
       });
 
       const membershipMap = {};
+
       memberships.forEach(item => {
         membershipMap[item.conversation_id] = item;
       });
 
       const preferenceMap = {};
+
       preferences.forEach(item => {
         preferenceMap[item.conversation_id] = item;
       });
@@ -307,8 +304,12 @@
       return result(true, "CONVERSATIONS_LOADED", output);
     } catch (error) {
       console.error("Messenger conversations:", error);
-      return result(false, "CONVERSATIONS_LOAD_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "CONVERSATIONS_LOAD_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -321,7 +322,9 @@
       const { client, user } = await getContext();
       const id = String(conversationId || "").trim();
 
-      if (!id) throw new Error("Conversation ID उपलब्ध छैन।");
+      if (!id) {
+        throw new Error("Conversation ID उपलब्ध छैन।");
+      }
 
       const limit = Math.min(
         100,
@@ -336,29 +339,62 @@
         .order("id", { ascending: false })
         .limit(limit);
 
-      if (options.before) {
-        query = query.lt("created_at", options.before);
+      const cursor = options.before;
+
+      if (cursor && typeof cursor === "object") {
+        const createdAt = String(
+          cursor.createdAt || cursor.created_at || ""
+        );
+
+        const messageId = String(cursor.id || "");
+
+        if (
+          !createdAt ||
+          !/^[0-9a-f-]{36}$/i.test(messageId)
+        ) {
+          throw new Error("पुरानो सन्देशको Cursor मान्य छैन।");
+        }
+
+        query = query.or(
+          "created_at.lt." + createdAt +
+          ",and(created_at.eq." + createdAt + ",id.lt." + messageId + ")"
+        );
+      } else if (cursor) {
+        // पुरानो timestamp-only caller का लागि Compatibility
+        query = query.lt("created_at", String(cursor));
       }
 
       const { data, error } = await query;
+
       if (error) throw error;
 
-      const rows = data || [];
-      const messages = rows
+      const messages = (data || [])
         .map(row => normalizeMessage(row, user.id))
         .reverse();
 
       return result(true, "MESSAGES_LOADED", messages);
     } catch (error) {
-      return result(false, "MESSAGES_LOAD_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MESSAGES_LOAD_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
-  async function getOlderMessages(conversationId, before, limit = PAGE_SIZE) {
+  async function getOlderMessages(
+    conversationId,
+    before,
+    limit = PAGE_SIZE
+  ) {
     if (!before) {
-      return result(false, "CURSOR_REQUIRED", null,
-        "पुराना सन्देश लोड गर्न समय Cursor आवश्यक छ।");
+      return result(
+        false,
+        "CURSOR_REQUIRED",
+        null,
+        "पुरानो सन्देशको Cursor आवश्यक छ।"
+      );
     }
 
     return getMessages(conversationId, { before, limit });
@@ -388,12 +424,18 @@
 
       if (error) throw error;
 
-      notify("conversation-created", { conversationId: data });
+      notify("conversation-created", {
+        conversationId: data
+      });
 
       return result(true, "DIRECT_CHAT_CREATED", data);
     } catch (error) {
-      return result(false, "DIRECT_CHAT_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "DIRECT_CHAT_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -406,7 +448,10 @@
 
       const name = String(title || "").trim().slice(0, 60);
 
-      if (!name) throw new Error("Group को नाम लेख्नुहोस्।");
+      if (!name) {
+        throw new Error("Group को नाम लेख्नुहोस्।");
+      }
+
       if (ids.length < 2) {
         throw new Error("कम्तीमा दुई जना साथी छान्नुहोस्।");
       }
@@ -422,20 +467,36 @@
 
       if (error) throw error;
 
-      notify("group-created", { conversationId: data });
+      notify("group-created", {
+        conversationId: data
+      });
 
       return result(true, "GROUP_CREATED", data);
     } catch (error) {
-      return result(false, "GROUP_CREATE_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "GROUP_CREATE_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
-  async function manageGroupMember(conversationId, action, memberId) {
+  async function manageGroupMember(
+    conversationId,
+    action,
+    memberId
+  ) {
     try {
       const { client } = await getContext();
 
-      const allowed = ["add", "remove", "promote", "demote"];
+      const allowed = [
+        "add",
+        "remove",
+        "promote",
+        "demote"
+      ];
+
       if (!allowed.includes(action)) {
         throw new Error("अमान्य Group कार्य।");
       }
@@ -459,8 +520,12 @@
 
       return result(true, "GROUP_MEMBER_UPDATED", data);
     } catch (error) {
-      return result(false, "GROUP_MEMBER_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "GROUP_MEMBER_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -500,15 +565,25 @@
     return message;
   }
 
-  async function sendMessage(conversationId, content, options = {}) {
+  async function sendMessage(
+    conversationId,
+    content,
+    options = {}
+  ) {
     try {
       const { client, user } = await getContext();
 
       const text = String(content || "").trim();
       const id = String(conversationId || "").trim();
 
-      if (!id) throw new Error("कुराकानी छान्नुहोस्।");
-      if (!text) throw new Error("सन्देश लेख्नुहोस्।");
+      if (!id) {
+        throw new Error("कुराकानी छान्नुहोस्।");
+      }
+
+      if (!text) {
+        throw new Error("सन्देश लेख्नुहोस्।");
+      }
+
       if (text.length > MAX_MESSAGE) {
         throw new Error("सन्देश बढीमा 5000 अक्षरको हुनुपर्छ।");
       }
@@ -521,10 +596,19 @@
         forwardedFromId: options.forwardedFromId || null
       });
 
-      return result(true, "MESSAGE_SENT", message, "सन्देश पठाइयो।");
+      return result(
+        true,
+        "MESSAGE_SENT",
+        message,
+        "सन्देश पठाइयो।"
+      );
     } catch (error) {
-      return result(false, "MESSAGE_SEND_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MESSAGE_SEND_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -551,20 +635,30 @@
       if (error) throw error;
 
       const message = normalizeMessage(data, user.id);
+
       notify("message-edited", { message });
 
       return result(true, "MESSAGE_EDITED", message);
     } catch (error) {
-      return result(false, "MESSAGE_EDIT_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MESSAGE_EDIT_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
-  async function deleteMessage(messageId, forEveryone = true) {
+  async function deleteMessage(
+    messageId,
+    forEveryone = true
+  ) {
     try {
       const { client, user } = await getContext();
 
-      if (!messageId) throw new Error("Message ID उपलब्ध छैन।");
+      if (!messageId) {
+        throw new Error("Message ID उपलब्ध छैन।");
+      }
 
       if (forEveryone) {
         const { data, error } = await client
@@ -596,23 +690,46 @@
 
       notify("message-deleted", { messageId });
 
-      return result(true, "MESSAGE_DELETED", { id: messageId });
+      return result(
+        true,
+        "MESSAGE_DELETED",
+        { id: messageId }
+      );
     } catch (error) {
-      return result(false, "MESSAGE_DELETE_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MESSAGE_DELETE_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
-  async function replyMessage(conversationId, content, replyToId) {
+  async function replyMessage(
+    conversationId,
+    content,
+    replyToId
+  ) {
     if (!replyToId) {
-      return result(false, "REPLY_TARGET_REQUIRED", null,
-        "जवाफ दिने सन्देश छान्नुहोस्।");
+      return result(
+        false,
+        "REPLY_TARGET_REQUIRED",
+        null,
+        "जवाफ दिने सन्देश छान्नुहोस्।"
+      );
     }
 
-    return sendMessage(conversationId, content, { replyToId });
+    return sendMessage(
+      conversationId,
+      content,
+      { replyToId }
+    );
   }
 
-  async function forwardMessage(messageId, targetConversationId) {
+  async function forwardMessage(
+    messageId,
+    targetConversationId
+  ) {
     try {
       const { client, user } = await getContext();
 
@@ -639,10 +756,18 @@
         forwardedFromId: original.id
       });
 
-      return result(true, "MESSAGE_FORWARDED", message);
+      return result(
+        true,
+        "MESSAGE_FORWARDED",
+        message
+      );
     } catch (error) {
-      return result(false, "MESSAGE_FORWARD_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MESSAGE_FORWARD_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -657,6 +782,7 @@
         .single();
 
       if (error) throw error;
+
       if (data.deleted_for_everyone) {
         throw new Error("यो सन्देश उपलब्ध छैन।");
       }
@@ -665,12 +791,18 @@
         throw new Error("यो उपकरणमा Copy सुविधा उपलब्ध छैन।");
       }
 
-      await global.navigator.clipboard.writeText(data.content || "");
+      await global.navigator.clipboard.writeText(
+        data.content || ""
+      );
 
       return result(true, "MESSAGE_COPIED", true);
     } catch (error) {
-      return result(false, "MESSAGE_COPY_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MESSAGE_COPY_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -682,81 +814,155 @@
     try {
       const { client, user } = await getContext();
 
+      if (!messageId) {
+        throw new Error("Message ID उपलब्ध छैन।");
+      }
+
+      const { data: existing, error: readError } = await client
+        .from(TABLE.receipts)
+        .select("read_at")
+        .eq("message_id", messageId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (readError) throw readError;
+
+      const now = new Date().toISOString();
+
       const { error } = await client
         .from(TABLE.receipts)
         .upsert({
           message_id: messageId,
           user_id: user.id,
-          delivered_at: new Date().toISOString()
+          delivered_at: now,
+          read_at: existing?.read_at || null
         }, {
           onConflict: "message_id,user_id"
         });
 
       if (error) throw error;
 
-      notify("message-delivered", { messageId, userId: user.id });
+      notify("message-delivered", {
+        messageId,
+        userId: user.id
+      });
 
       return result(true, "MESSAGE_DELIVERED");
     } catch (error) {
-      return result(false, "DELIVERY_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "DELIVERY_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
   async function markRead(conversationId) {
     try {
       const { client, user } = await getContext();
+      const id = String(conversationId || "").trim();
+
+      if (!id) {
+        throw new Error("Conversation ID उपलब्ध छैन।");
+      }
 
       const now = new Date().toISOString();
+      const batchSize = 500;
 
-      const { data: messages, error: messageError } = await client
-        .from(TABLE.messages)
-        .select("id")
-        .eq("conversation_id", conversationId)
-        .neq("sender_id", user.id)
-        .is("deleted_for_everyone", false)
-        .limit(200);
+      let offset = 0;
+      let totalMarked = 0;
 
-      if (messageError) throw messageError;
+      while (true) {
+        const { data: messages, error: messageError } = await client
+          .from(TABLE.messages)
+          .select("id")
+          .eq("conversation_id", id)
+          .neq("sender_id", user.id)
+          .eq("deleted_for_everyone", false)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(offset, offset + batchSize - 1);
 
-      const ids = (messages || []).map(item => item.id);
+        if (messageError) throw messageError;
 
-      if (ids.length) {
-        const rows = ids.map(messageId => ({
-          message_id: messageId,
-          user_id: user.id,
-          delivered_at: now,
-          read_at: now
-        }));
+        const ids = (messages || [])
+          .map(item => item.id)
+          .filter(Boolean);
 
-        const { error } = await client
+        if (!ids.length) break;
+
+        const {
+          data: existingRows,
+          error: receiptReadError
+        } = await client
           .from(TABLE.receipts)
-          .upsert(rows, { onConflict: "message_id,user_id" });
+          .select("message_id,delivered_at,read_at")
+          .eq("user_id", user.id)
+          .in("message_id", ids);
 
-        if (error) throw error;
+        if (receiptReadError) throw receiptReadError;
+
+        const existingMap = new Map(
+          (existingRows || []).map(row => [
+            row.message_id,
+            row
+          ])
+        );
+
+        const rows = ids.map(messageId => {
+          const old = existingMap.get(messageId);
+
+          return {
+            message_id: messageId,
+            user_id: user.id,
+            delivered_at: old?.delivered_at || now,
+            read_at: old?.read_at || now
+          };
+        });
+
+        const { error: receiptError } = await client
+          .from(TABLE.receipts)
+          .upsert(rows, {
+            onConflict: "message_id,user_id"
+          });
+
+        if (receiptError) throw receiptError;
+
+        totalMarked += ids.length;
+
+        if (ids.length < batchSize) break;
+
+        offset += batchSize;
       }
 
       const { error: memberError } = await client
         .from(TABLE.members)
         .update({ last_read_at: now })
-        .eq("conversation_id", conversationId)
+        .eq("conversation_id", id)
         .eq("user_id", user.id);
 
       if (memberError) throw memberError;
 
       notify("conversation-read", {
-        conversationId,
+        conversationId: id,
         userId: user.id,
-        readAt: now
+        readAt: now,
+        count: totalMarked
       });
 
       return result(true, "CONVERSATION_READ", {
-        conversationId,
-        readAt: now
+        conversationId: id,
+        readAt: now,
+        count: totalMarked
       });
     } catch (error) {
-      return result(false, "MARK_READ_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MARK_READ_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -771,10 +977,18 @@
 
       if (error) throw error;
 
-      return result(true, "RECEIPTS_LOADED", data || []);
+      return result(
+        true,
+        "RECEIPTS_LOADED",
+        data || []
+      );
     } catch (error) {
-      return result(false, "RECEIPTS_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "RECEIPTS_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -782,7 +996,10 @@
      CHAT PREFERENCES
   ========================================= */
 
-  async function updateChatPreferences(conversationId, changes = {}) {
+  async function updateChatPreferences(
+    conversationId,
+    changes = {}
+  ) {
     try {
       const { client, user } = await getContext();
 
@@ -792,7 +1009,11 @@
         updated_at: new Date().toISOString()
       };
 
-      ["is_pinned", "is_archived", "is_muted"].forEach(key => {
+      [
+        "is_pinned",
+        "is_archived",
+        "is_muted"
+      ].forEach(key => {
         if (typeof changes[key] === "boolean") {
           row[key] = changes[key];
         }
@@ -800,7 +1021,9 @@
 
       const { data, error } = await client
         .from(TABLE.preferences)
-        .upsert(row, { onConflict: "user_id,conversation_id" })
+        .upsert(row, {
+          onConflict: "user_id,conversation_id"
+        })
         .select()
         .single();
 
@@ -811,19 +1034,29 @@
         preferences: data
       });
 
-      return result(true, "PREFERENCES_UPDATED", data);
+      return result(
+        true,
+        "PREFERENCES_UPDATED",
+        data
+      );
     } catch (error) {
-      return result(false, "PREFERENCES_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "PREFERENCES_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
   /* =========================================
-     MEDIA / FILE / VOICE
+     MEDIA / FILE
   ========================================= */
 
   function validateFile(file) {
-    if (!file) throw new Error("फाइल छान्नुहोस्।");
+    if (!file) {
+      throw new Error("फाइल छान्नुहोस्।");
+    }
 
     if (file.size > MAX_FILE_SIZE) {
       throw new Error("फाइल 50 MB भन्दा सानो हुनुपर्छ।");
@@ -843,7 +1076,11 @@
     }
   }
 
-  async function uploadMedia(conversationId, file, type) {
+  async function uploadMedia(
+    conversationId,
+    file,
+    type
+  ) {
     try {
       const { client, user } = await getContext();
 
@@ -859,7 +1096,10 @@
         Date.now() + "_" + safeName
       ].join("/");
 
-      const { data: upload, error: uploadError } = await client
+      const {
+        data: upload,
+        error: uploadError
+      } = await client
         .storage
         .from(BUCKET)
         .upload(path, file, {
@@ -887,8 +1127,12 @@
 
       return result(true, "MEDIA_SENT", message);
     } catch (error) {
-      return result(false, "MEDIA_SEND_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MEDIA_SEND_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -896,7 +1140,9 @@
     try {
       const { client } = await getContext();
 
-      if (!path) throw new Error("Media path उपलब्ध छैन।");
+      if (!path) {
+        throw new Error("Media path उपलब्ध छैन।");
+      }
 
       const { data, error } = await client
         .storage
@@ -905,10 +1151,18 @@
 
       if (error) throw error;
 
-      return result(true, "MEDIA_URL_READY", data?.signedUrl || "");
+      return result(
+        true,
+        "MEDIA_URL_READY",
+        data?.signedUrl || ""
+      );
     } catch (error) {
-      return result(false, "MEDIA_URL_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MEDIA_URL_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -916,7 +1170,9 @@
     try {
       const { client } = await getContext();
 
-      if (!path) throw new Error("Media path उपलब्ध छैन।");
+      if (!path) {
+        throw new Error("Media path उपलब्ध छैन।");
+      }
 
       const { error } = await client
         .storage
@@ -927,8 +1183,12 @@
 
       return result(true, "MEDIA_DELETED", true);
     } catch (error) {
-      return result(false, "MEDIA_DELETE_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MEDIA_DELETE_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -936,7 +1196,11 @@
      MESSAGE / CONVERSATION SEARCH
   ========================================= */
 
-  async function searchMessages(conversationId, term, limit = 50) {
+  async function searchMessages(
+    conversationId,
+    term,
+    limit = 50
+  ) {
     try {
       const { client, user } = await getContext();
       const query = String(term || "").trim();
@@ -948,23 +1212,39 @@
       let request = client
         .from(TABLE.messages)
         .select(messageColumns())
-        .ilike("content", "%" + query.replace(/[%_]/g, "") + "%")
+        .ilike(
+          "content",
+          "%" + query.replace(/[%_]/g, "") + "%"
+        )
         .eq("deleted_for_everyone", false)
         .order("created_at", { ascending: false })
         .limit(Math.min(100, Math.max(1, limit)));
 
       if (conversationId) {
-        request = request.eq("conversation_id", conversationId);
+        request = request.eq(
+          "conversation_id",
+          conversationId
+        );
       }
 
       const { data, error } = await request;
+
       if (error) throw error;
 
-      return result(true, "MESSAGES_SEARCHED",
-        (data || []).map(row => normalizeMessage(row, user.id)));
+      return result(
+        true,
+        "MESSAGES_SEARCHED",
+        (data || []).map(row =>
+          normalizeMessage(row, user.id)
+        )
+      );
     } catch (error) {
-      return result(false, "MESSAGE_SEARCH_FAILED", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MESSAGE_SEARCH_FAILED",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
@@ -977,18 +1257,25 @@
       const { client, user } = await getContext();
       const now = Date.now();
 
-      if (now - lastPresenceWrite < 60000) return true;
-      lastPresenceWrite = now;
+      if (now - lastPresenceWrite < 60000) {
+        return true;
+      }
+
+      const iso = new Date(now).toISOString();
 
       const { error } = await client
         .from(TABLE.presence)
         .upsert({
           user_id: user.id,
-          last_seen_at: new Date(now).toISOString(),
-          updated_at: new Date(now).toISOString()
-        }, { onConflict: "user_id" });
+          last_seen_at: iso,
+          updated_at: iso
+        }, {
+          onConflict: "user_id"
+        });
 
       if (error) throw error;
+
+      lastPresenceWrite = now;
 
       return true;
     } catch (error) {
@@ -999,17 +1286,26 @@
 
   async function startPresence(conversationId) {
     try {
+      const id = String(conversationId || "").trim();
+
+      if (!id) {
+        throw new Error("Conversation ID उपलब्ध छैन।");
+      }
+
       const { client, user } = await getContext();
 
-      if (presenceChannel &&
-          activePresenceConversation === conversationId) {
-        return true;
+      if (
+        presenceChannel &&
+        activePresenceConversation === id &&
+        presenceReady
+      ) {
+        return await presenceReady;
       }
 
       await stopPresence();
 
       const channel = client.channel(
-        "ksk-chat-presence-" + conversationId,
+        "ksk-chat-presence-" + id,
         {
           config: {
             presence: { key: user.id }
@@ -1019,38 +1315,71 @@
 
       channel
         .on("presence", { event: "sync" }, () => {
-          const state = channel.presenceState();
           notify("presence-sync", {
-            conversationId,
-            state
+            conversationId: id,
+            state: channel.presenceState()
           });
         })
         .on("broadcast", { event: "typing" }, payload => {
           const detail = payload?.payload || {};
-          if (detail.userId === user.id) return;
+
+          if (!detail.userId || detail.userId === user.id) {
+            return;
+          }
 
           notify("typing-change", {
-            conversationId,
+            conversationId: id,
             userId: detail.userId,
             typing: Boolean(detail.typing)
           });
         });
 
       presenceChannel = channel;
-      activePresenceConversation = conversationId;
+      activePresenceConversation = id;
 
-      channel.subscribe(async status => {
-        if (status === "SUBSCRIBED") {
-          await channel.track({
-            userId: user.id,
-            onlineAt: new Date().toISOString()
-          });
+      presenceReady = new Promise(resolve => {
+        let settled = false;
 
-          await updateLastSeen();
-        }
+        const finish = value => {
+          if (!settled) {
+            settled = true;
+            resolve(value);
+          }
+        };
+
+        channel.subscribe(async status => {
+          if (status === "SUBSCRIBED") {
+            try {
+              const tracked = await channel.track({
+                userId: user.id,
+                onlineAt: new Date().toISOString()
+              });
+
+              await updateLastSeen();
+
+              finish(
+                tracked === "ok" ||
+                tracked === undefined
+              );
+            } catch (error) {
+              console.warn("Presence track:", error);
+              finish(false);
+            }
+          } else if (
+            ["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)
+          ) {
+            finish(false);
+          }
+        });
       });
 
-      return true;
+      const ready = await presenceReady;
+
+      if (!ready && presenceChannel === channel) {
+        await stopPresence();
+      }
+
+      return ready;
     } catch (error) {
       console.warn("Presence channel:", error);
       return false;
@@ -1058,12 +1387,12 @@
   }
 
   async function stopPresence() {
-    const auth = getAuth();
-    const client = auth?.getClient?.();
+    const client = getAuth()?.getClient?.();
     const old = presenceChannel;
 
     presenceChannel = null;
     activePresenceConversation = "";
+    presenceReady = null;
 
     if (old && client?.removeChannel) {
       try {
@@ -1074,18 +1403,41 @@
     return true;
   }
 
-  async function sendTyping(conversationId, typing = true) {
+  async function sendTyping(
+    conversationId,
+    typing = true
+  ) {
     try {
-      if (!presenceChannel ||
-          activePresenceConversation !== conversationId) {
-        await startPresence(conversationId);
+      const id = String(conversationId || "").trim();
+
+      if (!id) return false;
+
+      if (
+        !presenceChannel ||
+        activePresenceConversation !== id
+      ) {
+        if (!(await startPresence(id))) {
+          return false;
+        }
+      } else if (
+        presenceReady &&
+        !(await presenceReady)
+      ) {
+        return false;
       }
 
-      if (!presenceChannel) return false;
+      const channel = presenceChannel;
+
+      if (
+        !channel ||
+        activePresenceConversation !== id
+      ) {
+        return false;
+      }
 
       const { user } = await getContext();
 
-      await presenceChannel.send({
+      const response = await channel.send({
         type: "broadcast",
         event: "typing",
         payload: {
@@ -1095,7 +1447,10 @@
         }
       });
 
-      return true;
+      return (
+        response === "ok" ||
+        response === undefined
+      );
     } catch (error) {
       console.warn("Typing event:", error);
       return false;
@@ -1123,6 +1478,7 @@
     }
 
     await stopPresence();
+
     return true;
   }
 
@@ -1140,7 +1496,10 @@
 
     const { client, user } = context;
 
-    if (realtimeChannel && realtimeUserId === user.id) {
+    if (
+      realtimeChannel &&
+      realtimeUserId === user.id
+    ) {
       return true;
     }
 
@@ -1186,13 +1545,18 @@
       realtimeUserId = user.id;
 
       channel.subscribe(status => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT"
+        ) {
           console.warn("Messenger Realtime:", status);
           notify("realtime-error", { status });
         }
 
         if (status === "SUBSCRIBED") {
-          notify("realtime-connected", { userId: user.id });
+          notify("realtime-connected", {
+            userId: user.id
+          });
         }
       });
 
@@ -1201,8 +1565,10 @@
       return true;
     } catch (error) {
       console.error("Messenger Realtime:", error);
+
       realtimeChannel = null;
       realtimeUserId = "";
+
       return false;
     } finally {
       startingRealtime = false;
@@ -1224,8 +1590,12 @@
         userId: user.id
       });
     } catch (error) {
-      return result(false, "MESSAGES_NOT_READY", null,
-        errorMessage(error));
+      return result(
+        false,
+        "MESSAGES_NOT_READY",
+        null,
+        errorMessage(error)
+      );
     }
   }
 
