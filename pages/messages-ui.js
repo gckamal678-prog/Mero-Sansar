@@ -1,15 +1,16 @@
 "use strict";
 
 /*
- * MERO SANSAR — WHATSAPP-LIKE MESSENGER PRESENTATION
+ * MERO SANSAR — WHATSAPP-LIKE MESSENGER PRESENTATION (FIXED)
  * Full replacement: pages/messages-ui.js
  * UI-only: preserves KSKMessagesPage, Supabase and realtime handlers.
  */
 (function () {
   "use strict";
 
-  const STYLE_ID = "ksk-messenger-ui-v3";
+  const STYLE_ID = "ksk-messenger-ui-v4";
   const OLD_STYLE_IDS = [
+    "ksk-messenger-ui-v3",
     "ksk-wa-messenger-final-style",
     "ksk-messenger-repair-v2"
   ];
@@ -93,7 +94,7 @@
         white-space: nowrap !important;
       }
 
-      /* WHATSAPP STYLE TABS (All, Unread, Favorites, Groups, etc.) */
+      /* WHATSAPP STYLE TABS */
       #otherPageText .ksk-msg-tabs {
         display: flex !important;
         flex-wrap: nowrap !important;
@@ -298,26 +299,29 @@
         background: #182229 !important;
       }
 
-      /* CHAT DETAIL PAGE */
+      /* CHAT DETAIL PAGE & OVERLAP FIX */
       #otherPageText .ksk-wa-chat-page {
-        display: block !important;
+        display: flex !important;
+        flex-direction: column !important;
         width: 100% !important;
+        height: calc(100vh - 120px) !important;
+        min-height: 450px !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #0b141a !important;
+        position: relative !important;
       }
 
       #otherPageText .ksk-wa-chat-page > .ksk-msg-detail {
         display: flex !important;
         flex-direction: column !important;
         width: 100% !important;
-        height: 100dvh !important;
-        max-height: 100dvh !important;
+        height: 100% !important;
         background: #0b141a !important;
         border: 0 !important;
       }
 
-      /* CHAT HEADER */
+      /* CHAT HEADER (FIXED OVERLAPS) */
       #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header {
         display: flex !important;
         align-items: center !important;
@@ -327,6 +331,8 @@
         padding: 8px 12px !important;
         background: #202c33 !important;
         border-bottom: 1px solid #222d34 !important;
+        position: relative !important;
+        z-index: 10 !important;
       }
 
       #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header > [data-action="back"] {
@@ -349,6 +355,7 @@
         overflow: hidden !important;
         border: 0 !important;
         padding: 0 !important;
+        flex: 0 0 40px !important;
       }
 
       #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header-main {
@@ -374,12 +381,12 @@
         text-overflow: ellipsis !important;
       }
 
-      /* MESSAGE HISTORY (CHAT BODY) */
+      /* MESSAGE HISTORY & PROPER BUBBLE WIDTH FIX */
       #otherPageText .ksk-wa-chat-page .ksk-msg-history {
         display: flex !important;
         flex: 1 1 auto !important;
         flex-direction: column !important;
-        gap: 6px !important;
+        gap: 8px !important;
         width: 100% !important;
         padding: 12px 16px !important;
         overflow-y: auto !important;
@@ -389,9 +396,12 @@
       }
 
       #otherPageText .ksk-wa-chat-page .ksk-msg-history-item {
-        display: block !important;
+        display: flex !important;
+        flex-direction: column !important;
         position: relative !important;
-        max-width: 80% !important;
+        width: fit-content !important;
+        max-width: 75% !important;
+        min-width: 80px !important;
         padding: 8px 12px 6px !important;
         border-radius: 8px !important;
         font-size: 14.5px !important;
@@ -415,15 +425,15 @@
       }
 
       #otherPageText .ksk-wa-chat-page .ksk-msg-history-time {
-        display: inline-flex !important;
-        float: right !important;
+        display: flex !important;
+        align-self: flex-end !important;
         align-items: center !important;
         gap: 3px !important;
-        margin-left: 8px !important;
         margin-top: 4px !important;
         font-size: 11px !important;
         color: rgba(255, 255, 255, 0.6) !important;
         line-height: 15px !important;
+        white-space: nowrap !important;
       }
 
       /* CHAT INPUT / COMPOSER */
