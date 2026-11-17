@@ -3,9 +3,10 @@
 
 /*
  * MERO SANSAR — SUPABASE FRIENDS
- * Version: 2.2.0
+ * Version: 2.3.0
  *
- * Friends, requests, follows, blocks and relationship states.
+ * Friends, requests, follows, blocks, suggestions
+ * and relationship states.
  */
 
 (function (global) {
@@ -141,6 +142,10 @@
     }));
   }
 
+  /* =======================================================
+     SEARCH USERS
+  ======================================================= */
+
   async function searchUsers(searchText, options = {}) {
     const term = cleanTerm(searchText);
 
@@ -223,9 +228,10 @@
     }
   }
 
-  /*
-   * प्रत्येक खोजिएको प्रयोगकर्तासँगको वास्तविक सम्बन्ध।
-   */
+  /* =======================================================
+     RELATIONSHIP STATUS
+  ======================================================= */
+
   async function getRelationshipStatuses(targetIds) {
     const session = await ready();
     if (!session.ok) return session;
@@ -323,6 +329,65 @@
       return handleError(error);
     }
   }
+
+  /* =======================================================
+     SUGGESTED USERS
+  ======================================================= */
+
+  async function getSuggestedUsers(limit = 8) {
+    const session = await ready();
+    if (!session.ok) return session;
+
+    const { client: c, userId } = session.data;
+    const take = Math.min(12, Math.max(1, Number(limit) || 8));
+
+    try {
+      const { data, error } = await c
+        .from(TABLE.profiles)
+        .select("id,name,first_name,last_name,avatar_url")
+        .neq("id", userId)
+        .order("name", { ascending: true })
+        .limit(Math.max(30, take * 4));
+
+      if (error) throw error;
+
+      const candidates = (data || [])
+        .filter(p => normalizeId(p.id) && p.id !== userId)
+        .map(p => ({
+          id: p.id,
+          userId: p.id,
+          name: p.name ||
+            [p.first_name, p.last_name].filter(Boolean).join(" ") ||
+            "Mero Sansar User",
+          avatarUrl: p.avatar_url || null
+        }));
+
+      if (!candidates.length) {
+        return result(true, "SUGGESTIONS_LOADED", []);
+      }
+
+      const statusResponse = await getRelationshipStatuses(
+        candidates.map(user => user.id)
+      );
+
+      if (!statusResponse?.ok) return statusResponse;
+
+      const statuses = statusResponse.data || {};
+
+      const suggestions = candidates.filter(user => {
+        const state = statuses[user.id] || {};
+        return state.state === "none" && !state.blocked;
+      }).slice(0, take);
+
+      return result(true, "SUGGESTIONS_LOADED", suggestions);
+    } catch (error) {
+      return handleError(error);
+    }
+  }
+
+  /* =======================================================
+     FRIENDS DASHBOARD
+  ======================================================= */
 
   async function getDashboard() {
     const session = await ready();
@@ -428,6 +493,10 @@
     }
   }
 
+  /* =======================================================
+     SEND FRIEND REQUEST
+  ======================================================= */
+
   async function sendFriendRequest(receiverId) {
     const target = normalizeId(receiverId);
     if (!target) return fail("INVALID_USER_ID", "प्रयोगकर्ता ID मान्य छैन।");
@@ -460,6 +529,10 @@
       return handleError(error);
     }
   }
+
+  /* =======================================================
+     ACCEPT / REJECT REQUEST
+  ======================================================= */
 
   async function respondToFriendRequest(requestId, status) {
     const id = normalizeId(requestId);
@@ -502,6 +575,10 @@
     }
   }
 
+  /* =======================================================
+     CANCEL REQUEST
+  ======================================================= */
+
   async function cancelFriendRequest(requestId) {
     const id = normalizeId(requestId);
     if (!id) return fail("INVALID_REQUEST_ID", "Request ID मान्य छैन।");
@@ -534,6 +611,10 @@
     }
   }
 
+  /* =======================================================
+     REMOVE FRIEND
+  ======================================================= */
+
   async function removeFriend(friendId) {
     const target = normalizeId(friendId);
     if (!target) return fail("INVALID_USER_ID", "प्रयोगकर्ता ID मान्य छैन।");
@@ -561,6 +642,10 @@
       return handleError(error);
     }
   }
+
+  /* =======================================================
+     FOLLOW
+  ======================================================= */
 
   async function followUser(targetId) {
     const target = normalizeId(targetId);
@@ -614,6 +699,10 @@
     }
   }
 
+  /* =======================================================
+     BLOCK
+  ======================================================= */
+
   async function blockUser(targetId) {
     const target = normalizeId(targetId);
     if (!target) return fail("INVALID_USER_ID", "प्रयोगकर्ता ID मान्य छैन।");
@@ -666,19 +755,28 @@
     }
   }
 
+  /* =======================================================
+     PUBLIC API
+  ======================================================= */
+
   global.KSKSupabaseFriends = Object.freeze({
     initialize: ready,
     isInitialized: () => initialized,
     getCurrentUserId: currentUserId,
+
     searchUsers,
+    getSuggestedUsers,
     getRelationshipStatuses,
     getDashboard,
+
     sendFriendRequest,
     respondToFriendRequest,
     cancelFriendRequest,
     removeFriend,
+
     followUser,
     unfollowUser,
+
     blockUser,
     unblockUser
   });
