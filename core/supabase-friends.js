@@ -3,10 +3,9 @@
 
 /*
  * MERO SANSAR — SUPABASE FRIENDS
- * Version: 2.0.0
+ * Version: 2.2.0
  *
- * Real Supabase Auth UUID based social system.
- * Search, requests, friendships, follows and blocks.
+ * Friends, requests, follows, blocks and relationship states.
  */
 
 (function (global) {
@@ -28,7 +27,7 @@
     return { ok, code, data, message };
   }
 
-  function fail(code, message) {
+  function fail(code, message = "अनुरोध पूरा हुन सकेन।") {
     return result(false, code, null, message);
   }
 
@@ -73,28 +72,33 @@
     }
 
     const c = client();
-    const uid = currentUserId();
+    const userId = currentUserId();
 
-    if (!c || !uid) {
+    if (!c || !userId) {
       return fail("NOT_AUTHENTICATED", "पहिले आफ्नो खातामा लगइन गर्नुहोस्।");
     }
 
     initialized = true;
 
-    return result(true, "READY", { client: c, userId: uid });
+    return result(true, "READY", { client: c, userId });
   }
 
   function handleError(error) {
     const code = error?.code || "SUPABASE_ERROR";
+    const message = String(error?.message || "");
 
     const messages = {
-      "23505": "यो सम्बन्ध वा Request पहिल्यै रहेको छ।",
+      "23505": "यो Request वा सम्बन्ध पहिले नै रहेको छ।",
       "23503": "प्रयोगकर्ता भेटिएन।",
       "42501": "यो कार्य गर्ने अनुमति छैन।",
-      "PGRST116": "रेकर्ड भेटिएन।"
+      "PGRST116": "रेकर्ड भेटिएन।",
+      "P0001": message || "यो Friend Request स्वीकार गर्न मिलेन।"
     };
 
-    return fail(code, messages[code] || error?.message || "अनुरोध पूरा हुन सकेन।");
+    return fail(
+      code,
+      messages[code] || message || "अनुरोध पूरा हुन सकेन।"
+    );
   }
 
   function notify(type) {
@@ -114,7 +118,9 @@
   }
 
   async function profilesByIds(c, ids) {
-    const unique = [...new Set((ids || []).map(normalizeId).filter(Boolean))];
+    const unique = [...new Set(
+      (ids || []).map(normalizeId).filter(Boolean)
+    )];
 
     if (!unique.length) return [];
 
@@ -128,7 +134,9 @@
     return (data || []).map(p => ({
       id: p.id,
       userId: p.id,
-      name: p.name || [p.first_name, p.last_name].filter(Boolean).join(" ") || "Mero Sansar User",
+      name: p.name ||
+        [p.first_name, p.last_name].filter(Boolean).join(" ") ||
+        "Mero Sansar User",
       avatarUrl: p.avatar_url || null
     }));
   }
@@ -191,7 +199,9 @@
 
       responses.forEach(response => {
         (response.data || []).forEach(profile => {
-          if (normalizeId(profile.id)) map.set(profile.id, profile);
+          if (normalizeId(profile.id)) {
+            map.set(profile.id, profile);
+          }
         });
       });
 
@@ -199,13 +209,116 @@
         .map(p => ({
           id: p.id,
           userId: p.id,
-          name: p.name || [p.first_name, p.last_name].filter(Boolean).join(" ") || "Mero Sansar User",
+          name: p.name ||
+            [p.first_name, p.last_name].filter(Boolean).join(" ") ||
+            "Mero Sansar User",
           avatarUrl: p.avatar_url || null
         }))
         .sort((a, b) => a.name.localeCompare(b.name))
         .slice(0, limit);
 
       return result(true, "USERS_SEARCHED", users);
+    } catch (error) {
+      return handleError(error);
+    }
+  }
+
+  /*
+   * प्रत्येक खोजिएको प्रयोगकर्तासँगको वास्तविक सम्बन्ध।
+   */
+  async function getRelationshipStatuses(targetIds) {
+    const session = await ready();
+    if (!session.ok) return session;
+
+    const { client: c, userId } = session.data;
+
+    const ids = [...new Set(
+      (targetIds || [])
+        .map(normalizeId)
+        .filter(id => id && id !== userId)
+    )];
+
+    if (!ids.length) {
+      return result(true, "RELATIONSHIPS_LOADED", {});
+    }
+
+    try {
+      const [requests, friendships, following, blocks] = await Promise.all([
+        c.from(TABLE.requests)
+          .select("id,sender_id,receiver_id,status")
+          .eq("status", "pending")
+          .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+          .in("sender_id", [userId, ...ids]),
+
+        c.from(TABLE.friendships)
+          .select("user_a_id,user_b_id")
+          .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`),
+
+        c.from(TABLE.follows)
+          .select("follower_id,following_id")
+          .eq("follower_id", userId)
+          .in("following_id", ids),
+
+        c.from(TABLE.blocks)
+          .select("blocker_id,blocked_id")
+          .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`)
+      ]);
+
+      for (const response of [requests, friendships, following, blocks]) {
+        if (response.error) throw response.error;
+      }
+
+      const map = {};
+
+      ids.forEach(id => {
+        map[id] = {
+          state: "none",
+          requestId: null,
+          following: false,
+          blocked: false
+        };
+      });
+
+      (friendships.data || []).forEach(row => {
+        const other = row.user_a_id === userId
+          ? row.user_b_id
+          : row.user_a_id;
+
+        if (map[other]) map[other].state = "friend";
+      });
+
+      (requests.data || []).forEach(row => {
+        const other = row.sender_id === userId
+          ? row.receiver_id
+          : row.sender_id;
+
+        if (!map[other] || map[other].state === "friend") return;
+
+        map[other].state = row.sender_id === userId
+          ? "pending_sent"
+          : "pending_received";
+
+        map[other].requestId = row.id;
+      });
+
+      (following.data || []).forEach(row => {
+        if (map[row.following_id]) {
+          map[row.following_id].following = true;
+        }
+      });
+
+      (blocks.data || []).forEach(row => {
+        const other = row.blocker_id === userId
+          ? row.blocked_id
+          : row.blocker_id;
+
+        if (map[other]) {
+          map[other].blocked = true;
+          map[other].state = "blocked";
+        }
+      });
+
+      return result(true, "RELATIONSHIPS_LOADED", map);
     } catch (error) {
       return handleError(error);
     }
@@ -264,7 +377,9 @@
       const ids = [
         ...incoming.map(x => x.sender_id),
         ...outgoing.map(x => x.receiver_id),
-        ...friendships.map(x => x.user_a_id === userId ? x.user_b_id : x.user_a_id),
+        ...friendships.map(x =>
+          x.user_a_id === userId ? x.user_b_id : x.user_a_id
+        ),
         ...followers.map(x => x.follower_id),
         ...following.map(x => x.following_id),
         ...blocks.map(x => x.blocked_id)
@@ -350,7 +465,7 @@
     const id = normalizeId(requestId);
 
     if (!id || !["accepted", "rejected"].includes(status)) {
-      return fail("INVALID_REQUEST");
+      return fail("INVALID_REQUEST", "Request मान्य छैन।");
     }
 
     const session = await ready();
@@ -372,7 +487,13 @@
         .maybeSingle();
 
       if (error) throw error;
-      if (!data) return fail("REQUEST_NOT_FOUND", "Request भेटिएन वा पहिले नै पूरा भयो।");
+
+      if (!data) {
+        return fail(
+          "REQUEST_NOT_FOUND",
+          "Request भेटिएन वा पहिले नै पूरा भयो।"
+        );
+      }
 
       notify("FRIEND_REQUEST_" + status.toUpperCase());
       return result(true, "REQUEST_UPDATED", data);
@@ -383,7 +504,7 @@
 
   async function cancelFriendRequest(requestId) {
     const id = normalizeId(requestId);
-    if (!id) return fail("INVALID_REQUEST_ID");
+    if (!id) return fail("INVALID_REQUEST_ID", "Request ID मान्य छैन।");
 
     const session = await ready();
     if (!session.ok) return session;
@@ -404,7 +525,7 @@
         .maybeSingle();
 
       if (error) throw error;
-      if (!data) return fail("REQUEST_NOT_FOUND");
+      if (!data) return fail("REQUEST_NOT_FOUND", "रद्द गर्न मिल्ने Request भेटिएन।");
 
       notify("FRIEND_REQUEST_CANCELLED");
       return result(true, "REQUEST_CANCELLED", data);
@@ -415,7 +536,7 @@
 
   async function removeFriend(friendId) {
     const target = normalizeId(friendId);
-    if (!target) return fail("INVALID_USER_ID");
+    if (!target) return fail("INVALID_USER_ID", "प्रयोगकर्ता ID मान्य छैन।");
 
     const session = await ready();
     if (!session.ok) return session;
@@ -432,7 +553,7 @@
         .select("user_a_id");
 
       if (error) throw error;
-      if (!data?.length) return fail("FRIENDSHIP_NOT_FOUND");
+      if (!data?.length) return fail("FRIENDSHIP_NOT_FOUND", "साथीको सम्बन्ध भेटिएन।");
 
       notify("FRIEND_REMOVED");
       return result(true, "FRIEND_REMOVED", data);
@@ -443,7 +564,7 @@
 
   async function followUser(targetId) {
     const target = normalizeId(targetId);
-    if (!target) return fail("INVALID_USER_ID");
+    if (!target) return fail("INVALID_USER_ID", "प्रयोगकर्ता ID मान्य छैन।");
 
     const session = await ready();
     if (!session.ok) return session;
@@ -468,7 +589,7 @@
 
   async function unfollowUser(targetId) {
     const target = normalizeId(targetId);
-    if (!target) return fail("INVALID_USER_ID");
+    if (!target) return fail("INVALID_USER_ID", "प्रयोगकर्ता ID मान्य छैन।");
 
     const session = await ready();
     if (!session.ok) return session;
@@ -484,7 +605,7 @@
         .select("follower_id");
 
       if (error) throw error;
-      if (!data?.length) return fail("NOT_FOLLOWING");
+      if (!data?.length) return fail("NOT_FOLLOWING", "Follow सम्बन्ध भेटिएन।");
 
       notify("USER_UNFOLLOWED");
       return result(true, "USER_UNFOLLOWED");
@@ -495,7 +616,7 @@
 
   async function blockUser(targetId) {
     const target = normalizeId(targetId);
-    if (!target) return fail("INVALID_USER_ID");
+    if (!target) return fail("INVALID_USER_ID", "प्रयोगकर्ता ID मान्य छैन।");
 
     const session = await ready();
     if (!session.ok) return session;
@@ -520,7 +641,7 @@
 
   async function unblockUser(targetId) {
     const target = normalizeId(targetId);
-    if (!target) return fail("INVALID_USER_ID");
+    if (!target) return fail("INVALID_USER_ID", "प्रयोगकर्ता ID मान्य छैन।");
 
     const session = await ready();
     if (!session.ok) return session;
@@ -536,7 +657,7 @@
         .select("blocker_id");
 
       if (error) throw error;
-      if (!data?.length) return fail("BLOCK_NOT_FOUND");
+      if (!data?.length) return fail("BLOCK_NOT_FOUND", "Block सूचीमा भेटिएन।");
 
       notify("USER_UNBLOCKED");
       return result(true, "USER_UNBLOCKED");
@@ -550,6 +671,7 @@
     isInitialized: () => initialized,
     getCurrentUserId: currentUserId,
     searchUsers,
+    getRelationshipStatuses,
     getDashboard,
     sendFriendRequest,
     respondToFriendRequest,
