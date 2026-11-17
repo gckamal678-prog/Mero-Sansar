@@ -2,10 +2,10 @@
 "use strict";
 
 /*
- * MERO SANSAR — CONNECTED FRIENDS PAGE
- * Version: 2.1.0
+ * MERO SANSAR — FRIENDS & CONNECTIONS
+ * Version: 3.0.0
  *
- * Connected with:
+ * Uses:
  *   core/supabase-friends.js
  *   pages/messages.js
  *   pages/profile.js
@@ -22,6 +22,7 @@
 
   let searchVersion = 0;
   let dashboardVersion = 0;
+  let lastSearchTerm = "";
 
   function english() {
     return LANG()?.getLanguage?.() === "en";
@@ -60,18 +61,22 @@
       return `<img src="${esc(person.avatarUrl)}" alt="" loading="lazy">`;
     }
 
-    const initial = String(person?.name || "?").trim().charAt(0).toUpperCase();
+    const initial = String(person?.name || "?")
+      .trim()
+      .charAt(0)
+      .toUpperCase();
 
     return `<span>${esc(initial || "?")}</span>`;
   }
 
-  function button(action, id, label, kind = "secondary") {
+  function button(action, id, label, kind = "secondary", disabled = false) {
     return `
       <button
         type="button"
         class="ksf-btn ksf-${kind}"
         data-friends-action="${esc(action)}"
         data-user-id="${esc(id || "")}"
+        ${disabled ? "disabled" : ""}
       >${label}</button>
     `;
   }
@@ -81,10 +86,16 @@
 
     return `
       <article class="ksf-person">
-        <div class="ksf-avatar">${avatar(p)}</div>
+        <button
+          type="button"
+          class="ksf-avatar ksf-avatar-button"
+          data-friends-action="profile"
+          data-user-id="${esc(p.id || "")}"
+          aria-label="${esc(t("प्रोफाइल खोल्नुहोस्", "Open profile"))}"
+        >${avatar(p)}</button>
 
         <div class="ksf-person-info">
-          <strong>${esc(p.name || "प्रोफाइल उपलब्ध छैन")}</strong>
+          <strong>${esc(p.name || t("प्रोफाइल उपलब्ध छैन", "Profile unavailable"))}</strong>
           <small>${esc(subtitle || "")}</small>
         </div>
 
@@ -190,7 +201,10 @@
         cursor:pointer;
       }
 
-      .ksf-btn:disabled { opacity:.5; }
+      .ksf-btn:disabled {
+        opacity:.55;
+        cursor:not-allowed;
+      }
 
       .ksf-primary {
         color:white;
@@ -246,6 +260,13 @@
         border-radius:50%;
         background:var(--color-surface-secondary,#eee);
         font-weight:800;
+      }
+
+      .ksf-avatar-button {
+        padding:0;
+        border:0;
+        color:inherit;
+        cursor:pointer;
       }
 
       .ksf-avatar img {
@@ -371,12 +392,13 @@
 
     return `
       <section class="page-section ksf-page" id="ksfFriendsRoot">
+
         <header class="ksf-heading">
           <div>
             <h2>${t("साथीहरू", "Friends")}</h2>
             <p>${t(
-              "साथी खोज्नुहोस् र सम्बन्ध व्यवस्थापन गर्नुहोस्।",
-              "Find people and manage your connections."
+              "साथी खोज्नुहोस् र आफ्नो सामाजिक सम्बन्ध व्यवस्थापन गर्नुहोस्।",
+              "Find people and manage your social connections."
             )}</p>
           </div>
         </header>
@@ -398,9 +420,7 @@
               class="ksf-btn ksf-primary ksf-search-button"
               type="button"
               data-friends-search
-            >
-              ${t("खोज्नुहोस्", "Search")}
-            </button>
+            >${t("खोज्नुहोस्", "Search")}</button>
           </div>
 
           <div
@@ -411,8 +431,8 @@
 
           <p class="ksf-note">
             ${t(
-              "खोजीमा सार्वजनिक प्रोफाइलको नाम मात्र देखिन्छ। Request स्वीकार भएपछि मात्र साथी सूचीमा जोडिन्छ।",
-              "Search shows public profile names only. A person becomes your friend after accepting your request."
+              "साथी बनेपछि मात्र Direct Message गर्न सकिन्छ। Request स्वीकार भएपछि दुवै खातामा साथी देखिन्छन्।",
+              "Direct messaging is available after becoming friends. Accepted requests appear in both friends lists."
             )}
           </p>
         </section>
@@ -422,6 +442,7 @@
             ${t("साथीहरूको विवरण लोड हुँदैछ...", "Loading your connections...")}
           </div>
         </div>
+
       </section>
     `;
   }
@@ -450,17 +471,24 @@
     if (version !== dashboardVersion) return;
     if (!document.getElementById("ksfDashboard")) return;
 
-    if (!response.ok) {
+    if (!response?.ok) {
       root.innerHTML = empty(
-        response.message || t("डाटा लोड हुन सकेन।", "Could not load data.")
+        response?.message || t("डाटा लोड हुन सकेन।", "Could not load data.")
       );
       return;
     }
 
-    const d = response.data;
+    const d = response.data || {};
 
-    const incoming = d.incoming.length
-      ? d.incoming.map(x => person(
+    const incomingList = d.incoming || [];
+    const outgoingList = d.outgoing || [];
+    const friendsList = d.friends || [];
+    const followersList = d.followers || [];
+    const followingList = d.following || [];
+    const blockedList = d.blocked || [];
+
+    const incoming = incomingList.length
+      ? incomingList.map(x => person(
           x.person,
           t("तपाईंलाई साथी बन्न अनुरोध गर्नुभयो", "Sent you a friend request"),
           button("accept", x.id, t("स्वीकार", "Accept"), "primary") +
@@ -468,16 +496,16 @@
         )).join("")
       : empty(t("नयाँ Request छैन।", "No incoming requests."), "📩");
 
-    const outgoing = d.outgoing.length
-      ? d.outgoing.map(x => person(
+    const outgoing = outgoingList.length
+      ? outgoingList.map(x => person(
           x.person,
           t("स्वीकृतिको प्रतीक्षामा", "Waiting for acceptance"),
           button("cancel", x.id, t("रद्द", "Cancel"), "danger")
         )).join("")
       : empty(t("तपाईंले Request पठाउनुभएको छैन।", "No outgoing requests."), "📤");
 
-    const friends = d.friends.length
-      ? d.friends.map(p => person(
+    const friends = friendsList.length
+      ? friendsList.map(p => person(
           p,
           t("तपाईंको साथी", "Your friend"),
           button("profile", p.id, t("प्रोफाइल", "Profile")) +
@@ -492,17 +520,19 @@
           )
         );
 
-    const followers = d.followers.length
-      ? d.followers.map(p => person(
+    const followers = followersList.length
+      ? followersList.map(p => person(
           p,
-          t("तपाईंलाई Follow गर्नुहुन्छ", "Follows you")
+          t("तपाईंलाई Follow गर्नुहुन्छ", "Follows you"),
+          button("profile", p.id, t("प्रोफाइल", "Profile"))
         )).join("")
       : empty(t("अहिलेसम्म Followers छैनन्।", "No followers yet."), "🌱");
 
-    const following = d.following.length
-      ? d.following.map(p => person(
+    const following = followingList.length
+      ? followingList.map(p => person(
           p,
           t("तपाईंले Follow गर्नुभएको छ", "You follow this person"),
+          button("profile", p.id, t("प्रोफाइल", "Profile")) +
           button("unfollow", p.id, "Unfollow", "danger") +
           button("block", p.id, "Block", "danger")
         )).join("")
@@ -511,8 +541,8 @@
           "↗️"
         );
 
-    const blocked = d.blocked.length
-      ? d.blocked.map(p => person(
+    const blocked = blockedList.length
+      ? blockedList.map(p => person(
           p,
           t("Block गरिएको प्रयोगकर्ता", "Blocked user"),
           button("unblock", p.id, "Unblock", "primary")
@@ -523,37 +553,107 @@
       ${section(
         t("आएका Friend Request", "Incoming requests"),
         "📩",
-        d.incoming.length,
+        incomingList.length,
         incoming,
-        d.incoming.length > 0
+        incomingList.length > 0
       )}
 
       ${section(
         t("पठाएका Request", "Sent requests"),
         "📤",
-        d.outgoing.length,
+        outgoingList.length,
         outgoing
       )}
 
       ${section(
         t("तपाईंका साथीहरू", "Your friends"),
         "👥",
-        d.friends.length,
+        friendsList.length,
         friends,
         true
       )}
 
-      ${section("Followers", "↙️", d.followers.length, followers)}
+      ${section("Followers", "↙️", followersList.length, followers)}
 
-      ${section("Following", "↗️", d.following.length, following)}
+      ${section("Following", "↗️", followingList.length, following)}
 
       ${section(
         t("Block सूची", "Blocked users"),
         "🛡️",
-        d.blocked.length,
+        blockedList.length,
         blocked
       )}
     `;
+  }
+
+  function relationshipActions(personData, state) {
+    const id = personData.id;
+
+    if (state?.blocked) {
+      return button(
+        "unblock",
+        id,
+        t("Block हटाउनुहोस्", "Unblock"),
+        "primary"
+      );
+    }
+
+    switch (state?.state || "none") {
+      case "friend":
+        return (
+          button("message", id, t("मेसेज", "Message"), "primary") +
+          button("profile", id, t("प्रोफाइल", "Profile")) +
+          button("unfriend", id, t("साथी हटाउनुहोस्", "Unfriend"), "danger")
+        );
+
+      case "pending_sent":
+        return (
+          button(
+            "pending",
+            id,
+            t("Request पठाइएको", "Request sent"),
+            "secondary",
+            true
+          ) +
+          button("cancel", state.requestId, t("रद्द", "Cancel"), "danger")
+        );
+
+      case "pending_received":
+        return (
+          button("accept", state.requestId, t("स्वीकार", "Accept"), "primary") +
+          button("reject", state.requestId, t("अस्वीकार", "Decline"), "danger")
+        );
+
+      default:
+        return (
+          button("add", id, t("साथी बनाउनुहोस्", "Add friend"), "primary") +
+          button(
+            state?.following ? "unfollow" : "follow",
+            id,
+            state?.following ? "Unfollow" : "Follow"
+          ) +
+          button("profile", id, t("प्रोफाइल", "Profile"))
+        );
+    }
+  }
+
+  function relationshipSubtitle(state) {
+    if (state?.blocked) {
+      return t("Block गरिएको", "Blocked");
+    }
+
+    switch (state?.state) {
+      case "friend":
+        return t("तपाईंको साथी", "Your friend");
+      case "pending_sent":
+        return t("Request स्वीकृतिको प्रतीक्षामा", "Request awaiting acceptance");
+      case "pending_received":
+        return t("तपाईंलाई Friend Request आएको छ", "Sent you a friend request");
+      default:
+        return state?.following
+          ? t("तपाईंले Follow गर्नुभएको छ", "You are following")
+          : t("Mero Sansar प्रयोगकर्ता", "Mero Sansar user");
+    }
   }
 
   async function searchUsers() {
@@ -564,6 +664,8 @@
     if (!box) return;
 
     if (term.length < 2) {
+      ++searchVersion;
+      lastSearchTerm = "";
       box.innerHTML = empty(
         t("कम्तीमा २ अक्षर लेख्नुहोस्।", "Enter at least 2 characters."),
         "🔎"
@@ -572,18 +674,26 @@
     }
 
     const version = ++searchVersion;
+    lastSearchTerm = term;
 
     box.innerHTML = `
       <div class="ksf-loading">${t("खोज्दैछ...", "Searching...")}</div>
     `;
 
-    const response = await API().searchUsers(term);
+    const api = API();
+
+    if (!api) {
+      box.innerHTML = empty(t("Friends सेवा उपलब्ध छैन।", "Friends service unavailable."));
+      return;
+    }
+
+    const response = await api.searchUsers(term);
 
     if (version !== searchVersion) return;
 
-    if (!response.ok) {
+    if (!response?.ok) {
       box.innerHTML = empty(
-        response.message || t("खोजी असफल भयो।", "Search failed.")
+        response?.message || t("खोजी असफल भयो।", "Search failed.")
       );
       return;
     }
@@ -598,18 +708,42 @@
       return;
     }
 
+    let statuses = {};
+
+    if (typeof api.getRelationshipStatuses === "function") {
+      const statusResponse = await api.getRelationshipStatuses(
+        users.map(user => user.id)
+      );
+
+      if (version !== searchVersion) return;
+
+      if (!statusResponse?.ok) {
+        box.innerHTML = empty(
+          statusResponse?.message ||
+          t("सम्बन्धको विवरण लोड हुन सकेन।", "Could not load relationship status.")
+        );
+        return;
+      }
+
+      statuses = statusResponse.data || {};
+    }
+
+    if (version !== searchVersion) return;
+
     box.innerHTML = `
       <div class="ksf-result-heading">
         ${t("खोजी नतिजा", "Search results")} · ${users.length}
       </div>
 
-      ${users.map(p => person(
-        p,
-        t("Mero Sansar प्रयोगकर्ता", "Mero Sansar user"),
-        button("profile", p.id, t("प्रोफाइल", "Profile")) +
-        button("add", p.id, t("Request पठाउनुहोस्", "Add friend"), "primary") +
-        button("follow", p.id, "Follow")
-      )).join("")}
+      ${users.map(p => {
+        const state = statuses[p.id] || { state: "none" };
+
+        return person(
+          p,
+          relationshipSubtitle(state),
+          relationshipActions(p, state)
+        );
+      }).join("")}
     `;
   }
 
@@ -620,7 +754,7 @@
     const profile = global.KSKProfilePage;
 
     if (typeof profile?.openUserProfile === "function") {
-      return Boolean(profile.openUserProfile(id));
+      return Boolean(await profile.openUserProfile(id));
     }
 
     return Boolean(global.KSKNavigation?.navigate?.("profile", {
@@ -684,6 +818,8 @@
   async function performAction(action, id, element) {
     if (!id) return;
 
+    if (action === "pending") return;
+
     if (action === "profile") {
       await openFriendProfile(id);
       return;
@@ -708,53 +844,61 @@
 
     let response;
 
-    switch (action) {
-      case "add":
-        response = await api.sendFriendRequest(id);
-        break;
+    try {
+      switch (action) {
+        case "add":
+          response = await api.sendFriendRequest(id);
+          break;
 
-      case "follow":
-        response = await api.followUser(id);
-        break;
+        case "follow":
+          response = await api.followUser(id);
+          break;
 
-      case "accept":
-        response = await api.respondToFriendRequest(id, "accepted");
-        break;
+        case "accept":
+          response = await api.respondToFriendRequest(id, "accepted");
+          break;
 
-      case "reject":
-        response = await api.respondToFriendRequest(id, "rejected");
-        break;
+        case "reject":
+          response = await api.respondToFriendRequest(id, "rejected");
+          break;
 
-      case "cancel":
-        response = await api.cancelFriendRequest(id);
-        break;
+        case "cancel":
+          response = await api.cancelFriendRequest(id);
+          break;
 
-      case "unfriend":
-        response = await api.removeFriend(id);
-        break;
+        case "unfriend":
+          response = await api.removeFriend(id);
+          break;
 
-      case "unfollow":
-        response = await api.unfollowUser(id);
-        break;
+        case "unfollow":
+          response = await api.unfollowUser(id);
+          break;
 
-      case "block":
-        if (!global.confirm(t(
-          "यो प्रयोगकर्तालाई Block गर्ने?",
-          "Block this user?"
-        ))) {
+        case "block":
+          if (!global.confirm(t(
+            "यो प्रयोगकर्तालाई Block गर्ने?",
+            "Block this user?"
+          ))) {
+            if (element) element.disabled = false;
+            return;
+          }
+
+          response = await api.blockUser(id);
+          break;
+
+        case "unblock":
+          response = await api.unblockUser(id);
+          break;
+
+        default:
           if (element) element.disabled = false;
           return;
-        }
-
-        response = await api.blockUser(id);
-        break;
-
-      case "unblock":
-        response = await api.unblockUser(id);
-        break;
-
-      default:
-        return;
+      }
+    } catch (error) {
+      response = {
+        ok: false,
+        message: error?.message || t("कार्य पूरा हुन सकेन।", "Action failed.")
+      };
     }
 
     if (!response?.ok) {
@@ -783,13 +927,23 @@
 
     await loadDashboard();
 
-    if (action === "add" || action === "follow") {
-      searchUsers();
+    const input = document.getElementById("ksfUserSearch");
+
+    if (
+      input &&
+      input.value.trim().length >= 2 &&
+      lastSearchTerm
+    ) {
+      await searchUsers();
     }
   }
 
   function handleClick(event) {
-    const searchButton = event.target.closest("[data-friends-search]");
+    const target = event.target;
+
+    if (!target?.closest) return;
+
+    const searchButton = target.closest("[data-friends-search]");
 
     if (searchButton) {
       event.preventDefault();
@@ -797,9 +951,9 @@
       return;
     }
 
-    const actionButton = event.target.closest("[data-friends-action]");
+    const actionButton = target.closest("[data-friends-action]");
 
-    if (!actionButton) return;
+    if (!actionButton || actionButton.disabled) return;
 
     event.preventDefault();
 
@@ -826,6 +980,12 @@
   global.addEventListener("ksk:friends-cloud-change", () => {
     if (global.KSKNavigation?.getCurrentPage?.() === "friends") {
       loadDashboard();
+
+      const input = document.getElementById("ksfUserSearch");
+
+      if (input?.value?.trim().length >= 2) {
+        searchUsers();
+      }
     }
   });
 
