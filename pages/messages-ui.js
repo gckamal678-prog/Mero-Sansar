@@ -1,1055 +1,830 @@
+/* =========================================================
+   MERO SANSAR — WHATSAPP CHAT UI
+   File: pages/messages-ui.js
 
-"use strict";
-
-/*
- * MERO SANSAR — WHATSAPP-LIKE MESSENGER UI
- * FULL REPLACEMENT: pages/messages-ui.js
- *
- * FIXES:
- * 1. Chat header overlap
- * 2. Conversation title behind chat
- * 3. Message bubble excessive height
- * 4. Left/right message alignment
- * 5. File and Send horizontal layout
- * 6. Mobile chat height and scrolling
- *
- * UI ONLY:
- * Supabase, realtime, messaging and event handlers untouched.
- */
+   Existing Supabase messaging, send, edit, delete, reply,
+   forward and media-upload functions remain untouched.
+========================================================= */
 
 (function () {
   "use strict";
 
-  const STYLE_ID = "ksk-messenger-ui-v5";
+  if (window.__MERO_SANSAR_WA_CHAT_UI__) return;
+  window.__MERO_SANSAR_WA_CHAT_UI__ = true;
 
-  const OLD_STYLE_IDS = [
-    "ksk-messenger-ui-v3",
-    "ksk-messenger-ui-v4",
-    "ksk-wa-messenger-final-style",
-    "ksk-messenger-repair-v2"
+  const STYLE_ID = "mero-sansar-wa-chat-style";
+  const EMOJIS = [
+    "😀","😃","😄","😁","😆","😂","🤣","😊",
+    "😉","😍","🥰","😘","😎","😭","😢","😅",
+    "🤔","😮","😴","🙏","👍","👏","❤️","💕",
+    "🔥","🎉","🌹","💐","👌","🤗","😋","💯"
   ];
 
+  let holdTimer = null;
+  let heldBubble = null;
   let observer = null;
-  let repairing = false;
 
-  /* =========================================
-     1. INSTALL STYLES
-  ========================================= */
-
-  function installStyles() {
-    OLD_STYLE_IDS.forEach(id => {
-      document.getElementById(id)?.remove();
-    });
-
+  function addStyles() {
     if (document.getElementById(STYLE_ID)) return;
 
     const style = document.createElement("style");
     style.id = STYLE_ID;
 
     style.textContent = `
-
-    /* =====================================
-       GLOBAL MESSENGER
-    ===================================== */
-
-    #otherPageText .ksk-msg-page {
-      box-sizing: border-box !important;
-      width: 100% !important;
-      max-width: 850px !important;
-      min-width: 0 !important;
-      margin: 0 auto !important;
-      padding: 0 !important;
-      background: #0b141a !important;
-      color: #e9edef !important;
-    }
-
-    #otherPageText .ksk-msg-page *,
-    #otherPageText .ksk-msg-page *::before,
-    #otherPageText .ksk-msg-page *::after {
-      box-sizing: border-box !important;
-    }
-
-
-    /* =====================================
-       HIDE OLD CONVERSATION PAGE
-       WHEN CHAT IS OPEN
-    ===================================== */
-
-    #otherPageText.ksk-chat-active > .ksk-msg-page:not(.ksk-wa-chat-page) {
-      display: none !important;
-    }
-
-    #otherPageText.ksk-chat-active > h3 {
-      display: none !important;
-    }
-
-
-    /* =====================================
-       CONVERSATION TITLE
-    ===================================== */
-
-    #otherPageText .ksk-msg-page:not(.ksk-wa-chat-page) > h3 {
-      margin: 12px 16px 10px !important;
-      font-size: 22px !important;
-      font-weight: 700 !important;
-      color: #e9edef !important;
-    }
-
-
-    /* =====================================
-       SEARCH TOOLBAR
-    ===================================== */
-
-    #otherPageText .ksk-msg-toolbar {
-      display: flex !important;
-      flex-direction: row !important;
-      flex-wrap: nowrap !important;
-      align-items: center !important;
-      gap: 8px !important;
-      width: 100% !important;
-      margin: 0 0 10px !important;
-      padding: 0 12px !important;
-    }
-
-    #otherPageText .ksk-msg-toolbar .ksk-msg-search {
-      flex: 1 1 0 !important;
-      width: 1% !important;
-      min-width: 0 !important;
-      min-height: 40px !important;
-      padding: 8px 16px !important;
-      border: 0 !important;
-      border-radius: 20px !important;
-      background: #111b21 !important;
-      color: #e9edef !important;
-      font-size: 14px !important;
-    }
-
-    #otherPageText .ksk-msg-toolbar [data-action="open-group-form"] {
-      display: inline-flex !important;
-      flex: 0 0 auto !important;
-      align-items: center !important;
-      justify-content: center !important;
-      min-height: 40px !important;
-      padding: 6px 14px !important;
-      border: 0 !important;
-      border-radius: 20px !important;
-      background: #00a884 !important;
-      color: #111b21 !important;
-      font-weight: 600 !important;
-    }
-
-
-    /* =====================================
-       TABS
-    ===================================== */
-
-    #otherPageText .ksk-msg-tabs {
-      display: flex !important;
-      flex-direction: row !important;
-      gap: 8px !important;
-      overflow-x: auto !important;
-      padding: 0 12px 10px !important;
-      scrollbar-width: none !important;
-    }
-
-    #otherPageText .ksk-msg-tabs::-webkit-scrollbar {
-      display: none !important;
-    }
-
-    #otherPageText .ksk-msg-tab {
-      flex: 0 0 auto !important;
-      min-height: 32px !important;
-      padding: 6px 12px !important;
-      border: 0 !important;
-      border-radius: 16px !important;
-      background: #111b21 !important;
-      color: #8696a0 !important;
-      font-size: 13px !important;
-    }
-
-    #otherPageText .ksk-msg-tab.active,
-    #otherPageText .ksk-msg-tab:hover {
-      background: #005c4b !important;
-      color: #e9edef !important;
-    }
-
-
-    /* =====================================
-       CONVERSATION LIST
-    ===================================== */
-
-    #otherPageText .ksk-msg-list {
-      display: flex !important;
-      flex-direction: column !important;
-      width: 100% !important;
-      background: #0b141a !important;
-    }
-
-    #otherPageText .ksk-msg-row {
-      display: grid !important;
-      grid-template-columns: 48px minmax(0, 1fr) 36px !important;
-      align-items: center !important;
-      gap: 12px !important;
-      width: 100% !important;
-      min-height: 70px !important;
-      padding: 8px 12px !important;
-      border-bottom: 1px solid #222d34 !important;
-      background: transparent !important;
-    }
-
-    #otherPageText .ksk-msg-row:hover {
-      background: #202c33 !important;
-    }
-
-    #otherPageText .ksk-msg-avatar {
-      display: inline-flex !important;
-      width: 48px !important;
-      height: 48px !important;
-      border-radius: 50% !important;
-      overflow: hidden !important;
-    }
-
-    #otherPageText .ksk-msg-avatar img {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-    }
-
-    #otherPageText .ksk-msg-row-main {
-      min-width: 0 !important;
-      overflow: hidden !important;
-      cursor: pointer !important;
-    }
-
-    #otherPageText .ksk-msg-row-title {
-      font-size: 15px !important;
-      font-weight: 500 !important;
-      color: #e9edef !important;
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-    }
-
-    #otherPageText .ksk-msg-row-subtitle {
-      margin-top: 2px !important;
-      font-size: 13px !important;
-      color: #8696a0 !important;
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-    }
-
-
-    /* =====================================
-       THREE DOT MENUS
-    ===================================== */
-
-    #otherPageText .ksk-msg-row > .ksk-msg-actions {
-      display: none !important;
-    }
-
-    #otherPageText .ksk-msg-options,
-    #otherPageText .ksk-wa-chat-menu {
-      position: relative !important;
-      width: 36px !important;
-      flex: 0 0 auto !important;
-    }
-
-    #otherPageText .ksk-msg-options > summary,
-    #otherPageText .ksk-wa-chat-menu > summary {
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      width: 36px !important;
-      height: 36px !important;
-      cursor: pointer !important;
-      list-style: none !important;
-      font-size: 20px !important;
-      color: #8696a0 !important;
-      border-radius: 50% !important;
-    }
-
-    #otherPageText .ksk-msg-options > summary::-webkit-details-marker,
-    #otherPageText .ksk-wa-chat-menu > summary::-webkit-details-marker {
-      display: none !important;
-    }
-
-    #otherPageText .ksk-msg-options > summary::before,
-    #otherPageText .ksk-wa-chat-menu > summary::before {
-      content: "⋮";
-    }
-
-    #otherPageText .ksk-msg-options-panel,
-    #otherPageText .ksk-wa-chat-menu-panel {
-      position: absolute !important;
-      top: 36px !important;
-      right: 0 !important;
-      z-index: 999 !important;
-      display: flex !important;
-      flex-direction: column !important;
-      gap: 2px !important;
-      width: 150px !important;
-      padding: 6px !important;
-      border: 1px solid #222d34 !important;
-      border-radius: 8px !important;
-      background: #233138 !important;
-      box-shadow: 0 8px 24px rgba(0,0,0,.4) !important;
-    }
-
-    #otherPageText .ksk-msg-options-panel button,
-    #otherPageText .ksk-wa-chat-menu-panel button {
-      width: 100% !important;
-      padding: 8px 10px !important;
-      border: 0 !important;
-      border-radius: 4px !important;
-      background: transparent !important;
-      color: #e9edef !important;
-      text-align: left !important;
-      font-size: 13px !important;
-    }
-
-
-    /* =====================================
-       CHAT PAGE — MAIN LAYOUT
-    ===================================== */
-
-    #otherPageText .ksk-wa-chat-page {
-      position: relative !important;
-      isolation: isolate !important;
-      z-index: 2 !important;
-
-      display: flex !important;
-      flex-direction: column !important;
-
-      width: 100% !important;
-      height: calc(100dvh - 150px) !important;
-      min-height: 0 !important;
-      max-height: calc(100dvh - 150px) !important;
-
-      margin: 0 !important;
-      padding: 0 !important;
-
-      overflow: hidden !important;
-
-      background: #0b141a !important;
-      color: #e9edef !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page > .ksk-msg-detail {
-      position: relative !important;
-      isolation: isolate !important;
-      z-index: 2 !important;
-
-      display: flex !important;
-      flex-direction: column !important;
-
-      width: 100% !important;
-      height: 100% !important;
-      min-height: 0 !important;
-      flex: 1 1 auto !important;
-
-      overflow: hidden !important;
-
-      background: #0b141a !important;
-      border: 0 !important;
-    }
-
-
-    /* =====================================
-       CHAT HEADER — OVERLAP FIX
-    ===================================== */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header {
-      position: relative !important;
-      isolation: isolate !important;
-      z-index: 20 !important;
-
-      display: flex !important;
-      flex-direction: row !important;
-      flex-wrap: nowrap !important;
-      align-items: center !important;
-
-      gap: 10px !important;
-
-      width: 100% !important;
-      min-width: 0 !important;
-      min-height: 60px !important;
-      height: 60px !important;
-      flex: 0 0 60px !important;
-
-      margin: 0 !important;
-      padding: 8px 12px !important;
-
-      overflow: visible !important;
-
-      background: #202c33 !important;
-      border-bottom: 1px solid #222d34 !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header > [data-action="back"] {
-      position: relative !important;
-      z-index: 2 !important;
-
-      display: inline-flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-
-      width: 36px !important;
-      height: 36px !important;
-      min-width: 36px !important;
-
-      flex: 0 0 36px !important;
-
-      border: 0 !important;
-      background: transparent !important;
-      color: #aebac1 !important;
-      font-size: 22px !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header > button[data-action="open-chat-profile"] {
-      display: inline-flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-
-      width: 40px !important;
-      height: 40px !important;
-      min-width: 40px !important;
-
-      flex: 0 0 40px !important;
-
-      border-radius: 50% !important;
-      overflow: hidden !important;
-      border: 0 !important;
-      padding: 0 !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header-main {
-      position: relative !important;
-      flex: 1 1 auto !important;
-      min-width: 0 !important;
-      overflow: hidden !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header-main strong {
-      display: block !important;
-      font-size: 16px !important;
-      color: #e9edef !important;
-      font-weight: 500 !important;
-
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-chat-status {
-      font-size: 12px !important;
-      color: #8696a0 !important;
-
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-    }
-
-
-    /* =====================================
-       CHAT SEARCH TOOLBAR
-    ===================================== */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-detail > .ksk-msg-toolbar {
-      position: relative !important;
-      z-index: 5 !important;
-
-      display: flex !important;
-      flex-direction: row !important;
-      align-items: center !important;
-
-      flex: 0 0 auto !important;
-      min-height: 52px !important;
-
-      margin: 0 !important;
-      padding: 6px 12px !important;
-
-      background: #111b21 !important;
-      border-bottom: 1px solid #222d34 !important;
-    }
-
-
-    /* =====================================
-       MESSAGE HISTORY
-    ===================================== */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history {
-      position: relative !important;
-      z-index: 1 !important;
-
-      display: flex !important;
-      flex: 1 1 auto !important;
-
-      flex-direction: column !important;
-      align-items: stretch !important;
-
-      gap: 8px !important;
-
-      width: 100% !important;
-      min-width: 0 !important;
-      min-height: 0 !important;
-
-      padding: 12px 16px !important;
-
-      overflow-x: hidden !important;
-      overflow-y: auto !important;
-
-      overscroll-behavior: contain !important;
-      -webkit-overflow-scrolling: touch !important;
-
-      background-color: #0b141a !important;
-    }
-
-
-    /* =====================================
-       MESSAGE BUBBLES — HEIGHT FIX
-    ===================================== */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-item {
-      position: relative !important;
-
-      display: block !important;
-
-      width: fit-content !important;
-      max-width: min(75%, 520px) !important;
-      min-width: 0 !important;
-
-      height: auto !important;
-      min-height: 0 !important;
-      max-height: none !important;
-
-      flex: 0 0 auto !important;
-
-      margin: 0 !important;
-      padding: 8px 12px 6px !important;
-
-      border-radius: 8px !important;
-
-      font-size: 14px !important;
-      line-height: 1.4 !important;
-
-      word-break: break-word !important;
-      overflow-wrap: anywhere !important;
-      white-space: pre-wrap !important;
-    }
-
-    /* RECEIVED MESSAGES */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-item:not(.from-me),
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-item.from-them {
-      align-self: flex-start !important;
-
-      background: #202c33 !important;
-      color: #e9edef !important;
-
-      border-top-left-radius: 0 !important;
-    }
-
-    /* SENT MESSAGES */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-item.from-me {
-      align-self: flex-end !important;
-
-      background: #005c4b !important;
-      color: #e9edef !important;
-
-      border-top-right-radius: 0 !important;
-    }
-
-    /* MESSAGE CONTENT */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-item > p {
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-item img {
-      display: block !important;
-      max-width: 100% !important;
-      height: auto !important;
-      object-fit: contain !important;
-      border-radius: 6px !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-item audio,
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-item video {
-      display: block !important;
-      max-width: 100% !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-item iframe {
-      max-width: 100% !important;
-    }
-
-
-    /* =====================================
-       MESSAGE TIME
-    ===================================== */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-history-time {
-      display: inline-flex !important;
-      float: right !important;
-      align-items: center !important;
-
-      gap: 3px !important;
-
-      margin-left: 8px !important;
-      margin-top: 4px !important;
-
-      font-size: 11px !important;
-      color: rgba(255,255,255,.6) !important;
-    }
-
-
-    /* =====================================
-       MESSAGE OPTIONS
-    ===================================== */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-bubble-menu {
-      position: absolute !important;
-      top: 4px !important;
-      right: 4px !important;
-      z-index: 30 !important;
-    }
-
-
-    /* =====================================
-       COMPOSER — MAIN FIX
-    ===================================== */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-send-form {
-      position: relative !important;
-      z-index: 10 !important;
-
-      display: flex !important;
-      flex-direction: row !important;
-      flex-wrap: nowrap !important;
-      align-items: center !important;
-
-      gap: 8px !important;
-
-      width: 100% !important;
-      min-width: 0 !important;
-
-      min-height: 64px !important;
-      height: auto !important;
-
-      flex: 0 0 auto !important;
-
-      margin: 0 !important;
-      padding: 8px 12px !important;
-
-      background: #202c33 !important;
-      border-top: 1px solid #222d34 !important;
-    }
-
-
-    /* MESSAGE INPUT */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-compose {
-      display: block !important;
-
-      flex: 1 1 0 !important;
-
-      width: 1% !important;
-      min-width: 0 !important;
-
-      min-height: 44px !important;
-      max-height: 100px !important;
-
-      margin: 0 !important;
-      padding: 10px 14px !important;
-
-      border: 0 !important;
-      border-radius: 8px !important;
-
-      background: #2a3942 !important;
-      color: #e9edef !important;
-
-      font-size: 14px !important;
-      line-height: 1.4 !important;
-
-      resize: none !important;
-    }
-
-
-    /* FILE + SEND CONTAINER */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions {
-      display: flex !important;
-
-      flex-direction: row !important;
-      flex-wrap: nowrap !important;
-      align-items: center !important;
-      justify-content: center !important;
-
-      gap: 6px !important;
-
-      width: auto !important;
-      min-width: 0 !important;
-
-      flex: 0 0 auto !important;
-
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-
-
-    /* FILE BUTTON */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions label {
-      display: inline-flex !important;
-
-      flex-direction: column !important;
-      align-items: center !important;
-      justify-content: center !important;
-
-      flex: 0 0 40px !important;
-
-      width: 40px !important;
-      min-width: 40px !important;
-      height: 42px !important;
-
-      margin: 0 !important;
-      padding: 2px !important;
-
-      cursor: pointer !important;
-
-      color: #8696a0 !important;
-      font-size: 13px !important;
-      text-align: center !important;
-    }
-
-
-    /* SEND BUTTON */
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary {
-      display: inline-flex !important;
-
-      flex-direction: row !important;
-      align-items: center !important;
-      justify-content: center !important;
-
-      flex: 0 0 auto !important;
-
-      min-width: 48px !important;
-      width: auto !important;
-      height: 42px !important;
-
-      margin: 0 !important;
-      padding: 0 12px !important;
-
-      border: 0 !important;
-      border-radius: 22px !important;
-
-      background: #00a884 !important;
-      color: #111b21 !important;
-
-      font-weight: 600 !important;
-      font-size: 14px !important;
-
-      white-space: nowrap !important;
-      cursor: pointer !important;
-    }
-
-    #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary:active {
-      opacity: .8 !important;
-    }
-
-
-    /* =====================================
-       MOBILE RESPONSIVE
-    ===================================== */
-
-    @media (max-width: 480px) {
-
-      #otherPageText .ksk-wa-chat-page {
-        width: 100% !important;
-        max-width: 100% !important;
+      /* Remove the duplicate Conversations heading behind chat */
+      #otherPageText:has(.ksk-msg-detail) > h1,
+      #otherPageText:has(.ksk-msg-detail) > h2,
+      #otherPageText:has(.ksk-msg-detail) > h3 {
+        display:none!important;
       }
 
-      #otherPageText .ksk-wa-chat-page .ksk-msg-history {
-        padding: 10px 12px !important;
+      #otherPageText:has(.ksk-msg-detail) {
+        min-width:0!important;
+        overflow-x:hidden!important;
       }
 
-      #otherPageText .ksk-wa-chat-page .ksk-msg-history-item {
-        max-width: 82% !important;
+      .ksk-msg-page:has(.ksk-msg-detail) {
+        width:100%!important;
+        max-width:100%!important;
+        min-width:0!important;
+        margin:0!important;
+        padding:0!important;
       }
 
-      #otherPageText .ksk-wa-chat-page .ksk-msg-send-form {
-        gap: 5px !important;
-        padding: 8px 8px !important;
+      .ksk-msg-page:has(.ksk-msg-detail) > .ksk-msg-detail {
+        display:flex!important;
+        flex-direction:column!important;
+        width:100%!important;
+        height:calc(100dvh - 155px)!important;
+        min-height:350px!important;
+        max-height:calc(100dvh - 155px)!important;
+        min-width:0!important;
+        margin:0!important;
+        padding:0!important;
+        overflow:hidden!important;
+        border:1px solid #26343c!important;
+        border-radius:14px!important;
+        background:#0b141a!important;
+        color:#e9edef!important;
       }
 
-      #otherPageText .ksk-wa-chat-page .ksk-msg-compose {
-        min-width: 0 !important;
-        padding: 10px !important;
+      .ksk-msg-detail,
+      .ksk-msg-detail * {
+        box-sizing:border-box!important;
       }
 
-      #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions {
-        gap: 3px !important;
+      /* Chat header */
+      .ksk-msg-detail > .ksk-msg-chat-header {
+        position:relative!important;
+        z-index:3!important;
+        display:flex!important;
+        flex:0 0 65px!important;
+        align-items:center!important;
+        gap:10px!important;
+        width:100%!important;
+        min-height:65px!important;
+        margin:0!important;
+        padding:8px 12px!important;
+        background:#202c33!important;
+        border:0!important;
+        border-bottom:1px solid #34434b!important;
       }
 
-      #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions label {
-        width: 34px !important;
-        min-width: 34px !important;
-        flex-basis: 34px !important;
+      .ksk-msg-chat-header > button[data-action="open-chat-profile"] {
+        flex:0 0 46px!important;
+        width:46px!important;
+        min-width:46px!important;
+        height:46px!important;
+        padding:0!important;
+        overflow:hidden!important;
+        border:0!important;
+        border-radius:50%!important;
+        background:transparent!important;
       }
 
-      #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary {
-        min-width: 42px !important;
-        padding: 0 9px !important;
-        font-size: 13px !important;
+      .ksk-msg-chat-header .ksk-msg-avatar {
+        width:46px!important;
+        height:46px!important;
+        min-width:46px!important;
       }
-    }
 
+      .ksk-msg-chat-header-main {
+        flex:1 1 auto!important;
+        min-width:0!important;
+      }
+
+      .ksk-msg-chat-header-main strong {
+        display:block!important;
+        overflow:hidden!important;
+        color:#e9edef!important;
+        font-size:16px!important;
+        white-space:nowrap!important;
+        text-overflow:ellipsis!important;
+      }
+
+      .ksk-msg-chat-status {
+        color:#aebac1!important;
+        font-size:12px!important;
+      }
+
+      /* Keep Block in a small menu */
+      .ksk-wa-chat-options {
+        position:relative!important;
+        flex:0 0 38px!important;
+        margin-left:auto!important;
+      }
+
+      .ksk-wa-chat-options > summary {
+        display:flex!important;
+        align-items:center!important;
+        justify-content:center!important;
+        width:38px!important;
+        height:38px!important;
+        list-style:none!important;
+        color:#e9edef!important;
+        font-size:23px!important;
+        cursor:pointer!important;
+      }
+
+      .ksk-wa-chat-options > summary::-webkit-details-marker {
+        display:none!important;
+      }
+
+      .ksk-wa-chat-options-panel {
+        position:absolute!important;
+        top:42px!important;
+        right:0!important;
+        z-index:20!important;
+        min-width:125px!important;
+        padding:7px!important;
+        border:1px solid #34434b!important;
+        border-radius:10px!important;
+        background:#202c33!important;
+        box-shadow:0 8px 24px #0008!important;
+      }
+
+      .ksk-wa-chat-options-panel button {
+        width:100%!important;
+        min-height:38px!important;
+        border:0!important;
+        background:transparent!important;
+        color:#e9edef!important;
+        text-align:left!important;
+      }
+
+      /* Search area */
+      .ksk-msg-detail > .ksk-msg-toolbar {
+        display:flex!important;
+        flex:0 0 auto!important;
+        align-items:center!important;
+        gap:7px!important;
+        margin:0!important;
+        padding:7px 9px!important;
+        background:#111b21!important;
+        border:0!important;
+        border-bottom:1px solid #26343c!important;
+      }
+
+      .ksk-msg-detail .ksk-msg-search {
+        flex:1 1 auto!important;
+        width:1%!important;
+        min-width:0!important;
+        min-height:40px!important;
+        margin:0!important;
+        padding:9px 13px!important;
+        border:1px solid #34434b!important;
+        border-radius:22px!important;
+        background:#202c33!important;
+        color:#e9edef!important;
+        font-size:13px!important;
+      }
+
+      .ksk-msg-detail > [data-action="load-older"] {
+        flex:0 0 auto!important;
+        width:100%!important;
+        min-height:42px!important;
+        margin:0!important;
+        padding:8px!important;
+        border:0!important;
+        border-bottom:1px solid #26343c!important;
+        border-radius:0!important;
+        background:#111b21!important;
+        color:#aebac1!important;
+      }
+
+      /* Message history takes remaining space */
+      .ksk-msg-detail > .ksk-msg-history {
+        display:flex!important;
+        flex:1 1 0!important;
+        flex-direction:column!important;
+        align-items:stretch!important;
+        gap:7px!important;
+        width:100%!important;
+        min-width:0!important;
+        min-height:0!important;
+        margin:0!important;
+        padding:12px 10px!important;
+        overflow-x:hidden!important;
+        overflow-y:auto!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch!important;
+        background:#0b141a!important;
+      }
+
+      .ksk-msg-history-item {
+        position:relative!important;
+        display:block!important;
+        flex:0 0 auto!important;
+        width:fit-content!important;
+        max-width:min(82%,520px)!important;
+        min-width:65px!important;
+        height:auto!important;
+        min-height:0!important;
+        margin:0!important;
+        padding:8px 11px 6px!important;
+        overflow-wrap:anywhere!important;
+        border:0!important;
+        border-radius:9px!important;
+        font-size:14px!important;
+        line-height:1.45!important;
+        user-select:none!important;
+        -webkit-user-select:none!important;
+      }
+
+      .ksk-msg-history-item.from-me {
+        align-self:flex-end!important;
+        background:#005c4b!important;
+        color:#e9edef!important;
+        border-top-right-radius:2px!important;
+      }
+
+      .ksk-msg-history-item.from-them {
+        align-self:flex-start!important;
+        background:#202c33!important;
+        color:#e9edef!important;
+        border-top-left-radius:2px!important;
+      }
+
+      .ksk-msg-history-item.deleted {
+        opacity:.75!important;
+      }
+
+      .ksk-msg-history-time {
+        display:block!important;
+        margin-top:5px!important;
+        color:#b5c4c9!important;
+        font-size:10px!important;
+        text-align:right!important;
+      }
+
+      .ksk-msg-media {
+        display:block!important;
+        max-width:100%!important;
+        max-height:280px!important;
+        height:auto!important;
+        margin-top:6px!important;
+        object-fit:contain!important;
+        border-radius:8px!important;
+      }
+
+      /* Message actions appear only after long press */
+      .ksk-msg-bubble-actions {
+        display:none!important;
+        flex-wrap:wrap!important;
+        gap:5px!important;
+        margin-top:9px!important;
+        padding-top:7px!important;
+        border-top:1px solid #ffffff30!important;
+      }
+
+      .ksk-msg-history-item.ksk-wa-actions-open
+      .ksk-msg-bubble-actions {
+        display:flex!important;
+      }
+
+      .ksk-msg-bubble-actions button {
+        flex:1 1 auto!important;
+        min-height:34px!important;
+        padding:6px 9px!important;
+        border:1px solid #ffffff30!important;
+        border-radius:8px!important;
+        background:#ffffff12!important;
+        color:#e9edef!important;
+        font-size:12px!important;
+      }
+
+      /* Reply preview */
+      .ksk-msg-detail > .ksk-msg-reply-preview {
+        flex:0 0 auto!important;
+        margin:5px 9px 0!important;
+        padding:8px 10px!important;
+        border-left:3px solid #00a884!important;
+        border-radius:7px!important;
+        background:#202c33!important;
+        color:#e9edef!important;
+      }
+
+      /* WhatsApp-style composer */
+      .ksk-msg-detail > .ksk-msg-send-form {
+        position:relative!important;
+        z-index:5!important;
+        display:flex!important;
+        flex:0 0 auto!important;
+        align-items:flex-end!important;
+        gap:7px!important;
+        width:100%!important;
+        min-width:0!important;
+        min-height:64px!important;
+        margin:0!important;
+        padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))!important;
+        background:#0b141a!important;
+        border:0!important;
+        border-top:1px solid #26343c!important;
+      }
+
+      .ksk-wa-composer {
+        display:flex!important;
+        flex:1 1 auto!important;
+        align-items:flex-end!important;
+        gap:3px!important;
+        min-width:0!important;
+        min-height:48px!important;
+        padding:4px 5px!important;
+        border:1px solid #34434b!important;
+        border-radius:25px!important;
+        background:#202c33!important;
+      }
+
+      .ksk-wa-tool {
+        display:inline-flex!important;
+        flex:0 0 34px!important;
+        align-items:center!important;
+        justify-content:center!important;
+        width:34px!important;
+        min-width:34px!important;
+        height:38px!important;
+        margin:0!important;
+        padding:0!important;
+        border:0!important;
+        border-radius:50%!important;
+        background:transparent!important;
+        color:#aebac1!important;
+        font-size:22px!important;
+        cursor:pointer!important;
+      }
+
+      .ksk-msg-detail .ksk-msg-compose {
+        display:block!important;
+        flex:1 1 auto!important;
+        width:1%!important;
+        min-width:0!important;
+        min-height:38px!important;
+        height:38px!important;
+        max-height:110px!important;
+        margin:0!important;
+        padding:9px 3px!important;
+        resize:none!important;
+        overflow-y:auto!important;
+        border:0!important;
+        outline:0!important;
+        box-shadow:none!important;
+        border-radius:0!important;
+        background:transparent!important;
+        color:#e9edef!important;
+        font-size:14px!important;
+        line-height:20px!important;
+      }
+
+      .ksk-msg-detail .ksk-msg-compose:focus {
+        border:0!important;
+        outline:0!important;
+        box-shadow:none!important;
+      }
+
+      .ksk-msg-compose-actions {
+        display:flex!important;
+        flex:0 0 auto!important;
+        align-items:center!important;
+        gap:2px!important;
+        width:auto!important;
+        min-width:0!important;
+        margin:0!important;
+        padding:0!important;
+      }
+
+      .ksk-wa-send {
+        display:inline-flex!important;
+        flex:0 0 45px!important;
+        align-items:center!important;
+        justify-content:center!important;
+        width:45px!important;
+        min-width:45px!important;
+        height:45px!important;
+        margin:0!important;
+        padding:0!important;
+        border:0!important;
+        border-radius:50%!important;
+        background:#00a884!important;
+        color:#062d26!important;
+        font-size:22px!important;
+        font-weight:800!important;
+      }
+
+      .ksk-wa-send[hidden],
+      .ksk-wa-emoji-panel[hidden] {
+        display:none!important;
+      }
+
+      .ksk-wa-file-input {
+        display:none!important;
+      }
+
+      .ksk-wa-emoji-panel {
+        position:absolute!important;
+        left:8px!important;
+        bottom:calc(100% + 7px)!important;
+        z-index:30!important;
+        display:grid!important;
+        grid-template-columns:repeat(8,1fr)!important;
+        gap:3px!important;
+        width:min(300px,calc(100vw - 30px))!important;
+        max-height:220px!important;
+        overflow-y:auto!important;
+        padding:8px!important;
+        border:1px solid #34434b!important;
+        border-radius:13px!important;
+        background:#202c33!important;
+        box-shadow:0 8px 25px #0008!important;
+      }
+
+      .ksk-wa-emoji-panel button {
+        min-height:34px!important;
+        border:0!important;
+        border-radius:6px!important;
+        background:transparent!important;
+        color:white!important;
+        font-size:21px!important;
+      }
+
+      @media(max-width:520px) {
+        .ksk-msg-page:has(.ksk-msg-detail) > .ksk-msg-detail {
+          height:calc(100dvh - 148px)!important;
+          max-height:calc(100dvh - 148px)!important;
+          border-radius:0!important;
+        }
+
+        .ksk-msg-detail > .ksk-msg-history {
+          padding:9px!important;
+        }
+
+        .ksk-msg-history-item {
+          max-width:84%!important;
+        }
+
+        .ksk-msg-detail > .ksk-msg-send-form {
+          gap:5px!important;
+          padding-left:6px!important;
+          padding-right:6px!important;
+        }
+
+        .ksk-wa-composer {
+          gap:1px!important;
+          padding-left:3px!important;
+          padding-right:3px!important;
+        }
+
+        .ksk-wa-tool {
+          flex-basis:30px!important;
+          width:30px!important;
+          min-width:30px!important;
+          font-size:20px!important;
+        }
+
+        .ksk-wa-send {
+          flex-basis:43px!important;
+          width:43px!important;
+          min-width:43px!important;
+          height:43px!important;
+        }
+      }
     `;
 
     document.head.appendChild(style);
   }
 
+  function resizeComposer(form) {
+    const area = form.querySelector(".ksk-msg-compose");
+    const send = form.querySelector(".ksk-wa-send");
 
-  /* =========================================
-     2. CREATE OPTIONS MENU
-  ========================================= */
+    if (!area || !send) return;
 
-  function createMenu(container, className, label) {
+    area.style.height = "38px";
+    area.style.height = Math.min(area.scrollHeight, 110) + "px";
 
-    const details = document.createElement("details");
-    details.className = className;
-
-    const summary = document.createElement("summary");
-    summary.setAttribute("aria-label", label);
-
-    const panel = document.createElement("div");
-    panel.className = className + "-panel";
-
-    details.append(summary, panel);
-    container.appendChild(details);
-
-    return panel;
+    send.hidden = !area.value.trim();
   }
 
+  function buildComposer(form) {
+    if (form.dataset.waReady === "yes") return;
 
-  /* =========================================
-     3. REPAIR CONVERSATION ROWS
-  ========================================= */
+    const area = form.querySelector(".ksk-msg-compose");
+    const oldActions = form.querySelector(".ksk-msg-compose-actions");
+    const send = oldActions?.querySelector('[type="submit"]');
 
-  function repairConversationRows(root) {
+    if (!area || !oldActions || !send) return;
 
-    root.querySelectorAll(".ksk-msg-row").forEach(row => {
+    form.dataset.waReady = "yes";
 
-      if (row.querySelector(":scope > .ksk-msg-options")) {
-        return;
-      }
+    const shell = document.createElement("div");
+    shell.className = "ksk-wa-composer";
 
-      const actions = row.querySelector(
-        ":scope > .ksk-msg-actions"
-      );
+    const emojiButton = document.createElement("button");
+    emojiButton.type = "button";
+    emojiButton.className = "ksk-wa-tool";
+    emojiButton.dataset.waEmojiToggle = "yes";
+    emojiButton.setAttribute("aria-label", "Emoji");
+    emojiButton.title = "Emoji";
+    emojiButton.textContent = "☺";
 
-      if (!actions) return;
+    const emojiPanel = document.createElement("div");
+    emojiPanel.className = "ksk-wa-emoji-panel";
+    emojiPanel.hidden = true;
 
-      const panel = createMenu(
-        row,
-        "ksk-msg-options",
-        "Conversation options"
-      );
-
-      while (actions.firstChild) {
-        panel.appendChild(actions.firstChild);
-      }
-
-      actions.remove();
+    EMOJIS.forEach(emoji => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.waEmoji = emoji;
+      button.textContent = emoji;
+      emojiPanel.appendChild(button);
     });
+
+    const galleryInput = document.createElement("input");
+    galleryInput.type = "file";
+    galleryInput.accept = "image/*,video/*,.pdf,.doc,.docx";
+    galleryInput.dataset.mediaFile = "";
+    galleryInput.className = "ksk-wa-file-input";
+    galleryInput.setAttribute("aria-label", "Choose from gallery");
+
+    const cameraInput = document.createElement("input");
+    cameraInput.type = "file";
+    cameraInput.accept = "image/*";
+    cameraInput.capture = "environment";
+    cameraInput.dataset.mediaFile = "";
+    cameraInput.className = "ksk-wa-file-input";
+    cameraInput.setAttribute("aria-label", "Take a photo");
+
+    const galleryButton = document.createElement("button");
+    galleryButton.type = "button";
+    galleryButton.className = "ksk-wa-tool";
+    galleryButton.dataset.waGallery = "yes";
+    galleryButton.title = "Gallery";
+    galleryButton.setAttribute("aria-label", "Gallery");
+    galleryButton.textContent = "▧";
+
+    const cameraButton = document.createElement("button");
+    cameraButton.type = "button";
+    cameraButton.className = "ksk-wa-tool";
+    cameraButton.dataset.waCamera = "yes";
+    cameraButton.title = "Camera";
+    cameraButton.setAttribute("aria-label", "Camera");
+    cameraButton.textContent = "◎";
+
+    area.placeholder = "Message";
+    area.setAttribute("aria-label", "Write a message");
+    area.rows = 1;
+
+    send.className = "ksk-wa-send";
+    send.textContent = "➤";
+    send.setAttribute("aria-label", "Send message");
+
+    shell.append(
+      emojiButton,
+      area,
+      galleryButton,
+      cameraButton
+    );
+
+    oldActions.replaceChildren(
+      galleryInput,
+      cameraInput,
+      send
+    );
+
+    form.replaceChildren(
+      emojiPanel,
+      shell,
+      oldActions
+    );
+
+    resizeComposer(form);
   }
 
+  function repairChat() {
+    addStyles();
 
-  /* =========================================
-     4. REPAIR CHAT PAGES
-  ========================================= */
-
-  function repairChatPages(root) {
-
-    const pages = root.querySelectorAll(".ksk-msg-page");
-
-    const activeChat = Array.from(pages).some(page => {
-      return Boolean(
-        page.querySelector(":scope > .ksk-msg-detail")
-      );
-    });
-
-    if (root.id === "otherPageText") {
-      root.classList.toggle("ksk-chat-active", activeChat);
-    }
-
-    pages.forEach(page => {
-
-      const detail = page.querySelector(
-        ":scope > .ksk-msg-detail"
-      );
-
-      page.classList.toggle(
-        "ksk-wa-chat-page",
-        Boolean(detail)
-      );
-
-      if (!detail) return;
-
-      /* Move back button into header */
-
+    document.querySelectorAll(".ksk-msg-detail").forEach(detail => {
       const header = detail.querySelector(
         ":scope > .ksk-msg-chat-header"
       );
 
-      if (!header) return;
+      if (header) {
+        const block = header.querySelector(
+          ':scope > [data-action="block-user"]'
+        );
 
-      const back = page.querySelector(
-        ':scope > [data-action="back"]'
-      );
+        if (block && !header.querySelector(".ksk-wa-chat-options")) {
+          const menu = document.createElement("details");
+          menu.className = "ksk-wa-chat-options";
 
-      if (back && back.parentElement !== header) {
-        header.prepend(back);
+          const summary = document.createElement("summary");
+          summary.textContent = "⋮";
+          summary.setAttribute("aria-label", "Chat options");
+
+          const panel = document.createElement("div");
+          panel.className = "ksk-wa-chat-options-panel";
+
+          block.textContent = "Block";
+          panel.appendChild(block);
+          menu.append(summary, panel);
+          header.appendChild(menu);
+        }
       }
 
-      /* Block menu */
-
-      const block = header.querySelector(
-        ':scope > [data-action="block-user"]'
+      const form = detail.querySelector(
+        ":scope > form[data-send-form]"
       );
 
-      if (
-        block &&
-        !header.querySelector(":scope > .ksk-wa-chat-menu")
-      ) {
-
-        const panel = createMenu(
-          header,
-          "ksk-wa-chat-menu",
-          "Chat options"
-        );
-
-        block.textContent = "Block";
-        panel.appendChild(block);
-      }
-
-      /* Message menus */
-
-      detail.querySelectorAll(
-        ".ksk-msg-history-item"
-      ).forEach(bubble => {
-
-        const actions = bubble.querySelector(
-          ":scope > .ksk-msg-bubble-actions"
-        );
-
-        if (
-          !actions ||
-          bubble.querySelector(":scope > .ksk-msg-bubble-menu")
-        ) {
-          return;
-        }
-
-        const panel = createMenu(
-          bubble,
-          "ksk-msg-bubble-menu",
-          "Message options"
-        );
-
-        while (actions.firstChild) {
-          panel.appendChild(actions.firstChild);
-        }
-
-        actions.remove();
-      });
-
+      if (form) buildComposer(form);
     });
   }
 
-
-  /* =========================================
-     5. REPAIR APPLICATION
-  ========================================= */
-
-  function repair() {
-
-    if (repairing) return;
-
-    repairing = true;
-
-    try {
-
-      installStyles();
-
-      const root =
-        document.getElementById("otherPageText") ||
-        document;
-
-      repairConversationRows(root);
-      repairChatPages(root);
-
-    } catch (error) {
-
-      console.error(
-        "[KSK Messenger UI] Repair error:",
-        error
-      );
-
-    } finally {
-
-      repairing = false;
-
-    }
-  }
-
-
-  /* =========================================
-     6. START OBSERVER
-  ========================================= */
-
-  function start() {
-
-    repair();
-
-    if (
-      !document.body ||
-      !window.MutationObserver ||
-      observer
-    ) {
+  function showMessageActions(bubble) {
+    if (!bubble || !bubble.querySelector(".ksk-msg-bubble-actions")) {
       return;
     }
 
-    observer = new MutationObserver(() => {
-      repair();
+    document.querySelectorAll(
+      ".ksk-msg-history-item.ksk-wa-actions-open"
+    ).forEach(item => {
+      if (item !== bubble) item.classList.remove("ksk-wa-actions-open");
     });
 
+    bubble.classList.add("ksk-wa-actions-open");
+  }
+
+  function stopHold() {
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+    heldBubble = null;
+  }
+
+  document.addEventListener("pointerdown", event => {
+    const bubble = event.target.closest(".ksk-msg-history-item");
+
+    if (!bubble || event.target.closest("button,a,input,video")) return;
+
+    stopHold();
+    heldBubble = bubble;
+
+    holdTimer = setTimeout(() => {
+      if (heldBubble === bubble) {
+        showMessageActions(bubble);
+        if (navigator.vibrate) navigator.vibrate(25);
+      }
+    }, 480);
+  }, { passive: true });
+
+  document.addEventListener("pointerup", stopHold, { passive: true });
+  document.addEventListener("pointercancel", stopHold, { passive: true });
+  document.addEventListener("pointermove", stopHold, { passive: true });
+
+  document.addEventListener("contextmenu", event => {
+    const bubble = event.target.closest(".ksk-msg-history-item");
+    if (!bubble) return;
+
+    event.preventDefault();
+    showMessageActions(bubble);
+  });
+
+  document.addEventListener("click", event => {
+    const gallery = event.target.closest("[data-wa-gallery]");
+    if (gallery) {
+      gallery.closest("[data-send-form]")
+        ?.querySelector('input[data-media-file]:not([capture])')
+        ?.click();
+      return;
+    }
+
+    const camera = event.target.closest("[data-wa-camera]");
+    if (camera) {
+      camera.closest("[data-send-form]")
+        ?.querySelector('input[data-media-file][capture]')
+        ?.click();
+      return;
+    }
+
+    const emojiToggle = event.target.closest("[data-wa-emoji-toggle]");
+    if (emojiToggle) {
+      const panel = emojiToggle.closest("[data-send-form]")
+        ?.querySelector(".ksk-wa-emoji-panel");
+
+      if (panel) panel.hidden = !panel.hidden;
+      return;
+    }
+
+    const emojiButton = event.target.closest("[data-wa-emoji]");
+    if (emojiButton) {
+      const form = emojiButton.closest("[data-send-form]");
+      const area = form?.querySelector(".ksk-msg-compose");
+
+      if (!area) return;
+
+      const start = area.selectionStart ?? area.value.length;
+      const end = area.selectionEnd ?? start;
+      const emoji = emojiButton.dataset.waEmoji || "";
+
+      area.value =
+        area.value.slice(0, start) +
+        emoji +
+        area.value.slice(end);
+
+      area.focus();
+      area.setSelectionRange(
+        start + emoji.length,
+        start + emoji.length
+      );
+
+      resizeComposer(form);
+      area.dispatchEvent(new Event("input", { bubbles: true }));
+
+      const panel = form.querySelector(".ksk-wa-emoji-panel");
+      if (panel) panel.hidden = true;
+      return;
+    }
+
+    if (event.target.closest(".ksk-msg-bubble-actions")) {
+      const bubble = event.target.closest(".ksk-msg-history-item");
+      if (bubble) {
+        setTimeout(() => bubble.classList.remove("ksk-wa-actions-open"), 150);
+      }
+      return;
+    }
+
+    if (!event.target.closest(".ksk-msg-history-item")) {
+      document.querySelectorAll(
+        ".ksk-msg-history-item.ksk-wa-actions-open"
+      ).forEach(item => item.classList.remove("ksk-wa-actions-open"));
+    }
+  });
+
+  document.addEventListener("input", event => {
+    if (!event.target.matches(".ksk-msg-compose")) return;
+
+    const form = event.target.closest("[data-send-form]");
+    if (form) resizeComposer(form);
+  });
+
+  document.addEventListener("change", event => {
+    if (!event.target.matches(".ksk-wa-file-input")) return;
+
+    const form = event.target.closest("[data-send-form]");
+    const send = form?.querySelector(".ksk-wa-send");
+
+    if (send && event.target.files?.length) {
+      send.hidden = false;
+    }
+  });
+
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      document.querySelectorAll(".ksk-wa-emoji-panel").forEach(panel => {
+        panel.hidden = true;
+      });
+
+      document.querySelectorAll(
+        ".ksk-msg-history-item.ksk-wa-actions-open"
+      ).forEach(item => item.classList.remove("ksk-wa-actions-open"));
+    }
+  });
+
+  function start() {
+    repairChat();
+
+    if (observer || !document.body) return;
+
+    observer = new MutationObserver(() => repairChat());
     observer.observe(document.body, {
       childList: true,
       subtree: true
     });
   }
 
-
-  /* =========================================
-     7. INITIALIZE
-  ========================================= */
-
   if (document.readyState === "loading") {
-
-    document.addEventListener(
-      "DOMContentLoaded",
-      start,
-      { once: true }
-    );
-
+    document.addEventListener("DOMContentLoaded", start, { once: true });
   } else {
-
     start();
-
   }
 
 })();
