@@ -3,710 +3,625 @@
 
 /*
  * MERO SANSAR — WHATSAPP STYLE MESSENGER UI
- * UI-only layer. Existing Messenger and Supabase APIs remain unchanged.
+ * Complete replacement: pages/messages-ui.js
+ *
+ * Keeps the existing KSKMessagesPage and Supabase APIs.
+ * Does not change message sending, realtime, receipts or storage.
  */
 
 (function (global) {
   "use strict";
 
-  const API = global.KSKMessagesPage;
+  const Original = global.KSKMessagesPage;
 
-  if (!API || API.__whatsappUILayerInstalled) return;
+  if (!Original || Original.__waMessengerUI) return;
 
-  const STYLE_ID = "ksk-messenger-whatsapp-ui";
+  const STYLE_ID = "ksk-wa-messenger-final-style";
   let observer = null;
 
-  function addStyles() {
-    if (document.getElementById(STYLE_ID)) return;
+  function installStyles() {
+    let style = document.getElementById(STYLE_ID);
+    if (style) return;
 
-    const style = document.createElement("style");
+    style = document.createElement("style");
     style.id = STYLE_ID;
 
     style.textContent = `
-      /* =========================================
-         SHARED
-      ========================================= */
+      /* ======================================
+         GENERAL MESSENGER
+      ====================================== */
 
-      .ksk-msg-page {
+      #otherPageText .ksk-msg-page {
         width: 100%;
-        max-width: 100%;
+        max-width: 850px;
         min-width: 0;
         margin: 0 auto;
-        padding: 4px 0 20px;
-        color: var(--color-text, #172033);
-        font-family: inherit;
+        padding: 8px 0 16px;
+        color: var(--color-text, #e5e7eb);
       }
 
-      .ksk-msg-page *,
-      .ksk-msg-page *::before,
-      .ksk-msg-page *::after {
+      #otherPageText .ksk-msg-page *,
+      #otherPageText .ksk-msg-page *::before,
+      #otherPageText .ksk-msg-page *::after {
         box-sizing: border-box;
       }
 
-      .ksk-msg-page h3 {
-        margin: 8px 0 16px;
-        font-size: 20px;
+      #otherPageText .ksk-msg-page h3 {
+        margin: 8px 0 18px;
+        font-size: 22px;
         font-weight: 800;
       }
 
-      .ksk-msg-page button,
-      .ksk-msg-page input,
-      .ksk-msg-page textarea {
-        font-family: inherit;
-      }
+      /* ======================================
+         CONVERSATION LIST
+      ====================================== */
 
-      .ksk-msg-page button:focus-visible,
-      .ksk-msg-page [role="button"]:focus-visible {
-        outline: 2px solid var(--color-primary, #2563eb);
-        outline-offset: 3px;
-      }
-
-      .ksk-msg-search,
-      .ksk-msg-compose,
-      .ksk-msg-input {
-        min-width: 0;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 13px;
-        background: var(--color-surface, #fff);
-        color: var(--color-text, #172033);
-        box-shadow: none;
-        font: inherit;
-      }
-
-      .ksk-msg-search {
-        flex: 1;
-        min-height: 44px;
-        padding: 10px 14px;
-      }
-
-      .ksk-msg-primary {
-        min-height: 42px;
-        padding: 9px 15px;
-        border: 0;
-        border-radius: 12px;
-        background: var(--color-primary, #2563eb);
-        color: #fff;
-        font-size: 13px;
-        font-weight: 700;
-        cursor: pointer;
-      }
-
-      .ksk-msg-secondary,
-      .ksk-msg-action {
-        min-height: 36px;
-        padding: 7px 11px;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 10px;
-        background: var(--color-surface, #fff);
-        color: var(--color-text, #172033);
-        font-size: 12px;
-        cursor: pointer;
-      }
-
-      .ksk-msg-toolbar {
+      #otherPageText .ksk-msg-list {
         display: flex;
-        align-items: center;
-        gap: 8px;
-        min-width: 0;
-        margin: 12px 0;
-      }
-
-      .ksk-msg-empty {
-        padding: 26px 16px;
-        border: 1px dashed var(--color-border, #e2e8f0);
-        border-radius: 15px;
-        color: var(--color-muted, #64748b);
-        text-align: center;
-      }
-
-      /* =========================================
-         CHAT LIST — WHATSAPP STYLE
-      ========================================= */
-
-      .ksk-wa-list-page {
-        max-width: 850px;
-      }
-
-      .ksk-wa-list-page h3 {
-        margin: 8px 0 16px;
-        font-size: 21px;
-        font-weight: 800;
-      }
-
-      .ksk-wa-list-page .ksk-msg-toolbar {
-        margin: 12px 0;
-      }
-
-      .ksk-wa-list-page .ksk-msg-tabs {
-        display: flex;
-        gap: 7px;
-        overflow-x: auto;
-        padding: 4px 1px 12px;
-        scrollbar-width: thin;
-      }
-
-      .ksk-wa-list-page .ksk-msg-tab {
-        flex: 0 0 auto;
-        min-height: 36px;
-        padding: 7px 14px;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 30px;
-        background: var(--color-surface, #fff);
-        color: var(--color-text, #172033);
-        font-size: 12px;
-        font-weight: 650;
-        white-space: nowrap;
-      }
-
-      .ksk-wa-list-page .ksk-msg-tab.is-active {
-        border-color: #128c7e;
-        background: #128c7e;
-        color: #fff;
-      }
-
-      .ksk-wa-list-page .ksk-msg-list {
-        display: grid;
+        flex-direction: column;
         gap: 0;
-        overflow: visible;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 16px;
-        background: var(--color-surface, #fff);
+        overflow: hidden;
+        border: 1px solid var(--color-border, #29384d);
+        border-radius: 17px;
+        background: var(--color-surface, #111e30);
       }
 
-      .ksk-wa-list-page .ksk-msg-row {
+      #otherPageText .ksk-msg-row {
         display: flex;
-        flex-wrap: nowrap;
         align-items: center;
+        flex-wrap: nowrap;
         gap: 12px;
         min-width: 0;
         min-height: 76px;
         padding: 11px 13px;
         border: 0;
-        border-bottom: 1px solid var(--color-border, #e2e8f0);
+        border-bottom: 1px solid var(--color-border, #29384d);
         border-radius: 0;
         background: transparent;
-        transition: background .15s ease;
       }
 
-      .ksk-wa-list-page .ksk-msg-row:last-child {
+      #otherPageText .ksk-msg-row:last-child {
         border-bottom: 0;
       }
 
-      .ksk-wa-list-page .ksk-msg-row:active {
-        background: var(--color-surface-hover, #f1f5f9);
-      }
-
-      .ksk-wa-list-page .ksk-msg-avatar {
-        flex: 0 0 52px;
-        width: 52px;
-        height: 52px;
-        min-width: 52px;
+      #otherPageText .ksk-msg-avatar {
+        flex: 0 0 50px;
+        width: 50px;
+        height: 50px;
+        min-width: 50px;
+        overflow: hidden;
         border-radius: 50%;
       }
 
-      .ksk-wa-list-page .ksk-msg-row-main {
-        flex: 1;
+      #otherPageText .ksk-msg-avatar img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      #otherPageText .ksk-msg-row-main {
+        flex: 1 1 auto;
         min-width: 0;
+        overflow: hidden;
         cursor: pointer;
       }
 
-      .ksk-wa-list-page .ksk-msg-row-title {
-        display: block;
+      #otherPageText .ksk-msg-row-title {
         overflow: hidden;
-        color: var(--color-text, #172033);
-        font-size: 14px;
+        font-size: 15px;
         font-weight: 750;
-        line-height: 1.5;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      .ksk-wa-list-page .ksk-msg-row-subtitle {
-        display: -webkit-box;
+      #otherPageText .ksk-msg-row-subtitle {
         overflow: hidden;
-        margin-top: 3px;
-        color: var(--color-muted, #64748b);
-        font-size: 12px;
-        line-height: 1.45;
-        overflow-wrap: anywhere;
-        -webkit-line-clamp: 1;
-        -webkit-box-orient: vertical;
+        margin-top: 5px;
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--color-muted, #94a3b8);
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
-      .ksk-wa-list-page .ksk-msg-unread {
+      #otherPageText .ksk-msg-row .ksk-msg-actions {
+        display: flex;
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+        gap: 4px;
+      }
+
+      #otherPageText .ksk-msg-row .ksk-msg-action {
+        min-height: 34px;
+        padding: 5px 8px;
+        font-size: 11px;
+      }
+
+      #otherPageText .ksk-msg-unread {
         display: inline-flex;
         width: 9px;
-        min-width: 9px;
         height: 9px;
+        min-width: 9px;
         margin-left: 5px;
-        padding: 0;
         border-radius: 50%;
-        background: #25a56a;
-        color: transparent;
+        background: #25d366;
         font-size: 0;
-        vertical-align: middle;
+        color: transparent;
       }
 
-      .ksk-msg-disclosure {
-        position: relative;
-        min-width: 0;
-        margin: 0;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 11px;
-        background: var(--color-surface, #fff);
-      }
+      /* ======================================
+         SEARCH AND TABS
+      ====================================== */
 
-      .ksk-msg-disclosure > summary {
+      #otherPageText .ksk-msg-toolbar {
         display: flex;
         align-items: center;
-        justify-content: center;
-        gap: 6px;
-        min-height: 36px;
-        padding: 6px 10px;
-        color: var(--color-muted, #64748b);
-        font-size: 12px;
-        font-weight: 650;
-        cursor: pointer;
-        list-style: none;
-        user-select: none;
+        flex-wrap: nowrap;
+        gap: 8px;
+        min-width: 0;
+        margin: 12px 0;
       }
 
-      .ksk-msg-disclosure > summary::-webkit-details-marker {
-        display: none;
+      #otherPageText .ksk-msg-search {
+        flex: 1 1 auto;
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        padding: 10px 14px;
+        border: 1px solid var(--color-border, #29384d);
+        border-radius: 24px;
+        background: var(--color-surface-secondary, #18263a);
+        color: var(--color-text, #e5e7eb);
+        font-size: 13px;
       }
 
-      .ksk-msg-disclosure > summary:focus-visible {
-        outline: 2px solid var(--color-primary, #2563eb);
-        outline-offset: 2px;
+      #otherPageText .ksk-msg-tabs {
+        display: flex;
+        gap: 7px;
+        overflow-x: auto;
+        padding: 4px 0 10px;
+        scrollbar-width: thin;
       }
 
-      .ksk-msg-disclosure-body {
-        padding: 8px;
-        border-top: 1px solid var(--color-border, #e2e8f0);
-      }
-
-      .ksk-msg-conversation-options {
+      #otherPageText .ksk-msg-tab {
         flex: 0 0 auto;
-        width: 42px;
-        border: 0;
-        background: transparent;
+        min-height: 37px;
+        padding: 7px 14px;
+        border-radius: 25px;
+        font-size: 12px;
       }
 
-      .ksk-msg-conversation-options > summary {
-        min-height: 38px;
-        padding: 4px;
-        font-size: 0;
-      }
+      /* ======================================
+         CHAT WINDOW
+      ====================================== */
 
-      .ksk-msg-conversation-options > summary::before {
-        content: "⋮";
-        color: var(--color-muted, #64748b);
-        font-size: 25px;
-        line-height: 1;
-      }
-
-      .ksk-msg-conversation-options > summary::after {
-        display: none;
-      }
-
-      .ksk-msg-conversation-options .ksk-msg-disclosure-body {
-        position: absolute;
-        top: 40px;
-        right: 0;
-        z-index: 20;
-        width: 145px;
-        padding: 7px;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 12px;
-        background: var(--color-surface, #fff);
-        box-shadow: 0 8px 24px rgba(15, 23, 42, .16);
-      }
-
-      .ksk-msg-conversation-options .ksk-msg-actions {
-        display: grid;
-        gap: 5px;
-      }
-
-      .ksk-msg-conversation-options .ksk-msg-action {
+      #otherPageText .ksk-wa-chat-page {
+        display: block;
         width: 100%;
-        text-align: left;
-      }
-
-      /* =========================================
-         CHAT SCREEN
-      ========================================= */
-
-      .ksk-wa-chat-page {
-        width: 100%;
-        max-width: 900px;
-        margin-inline: auto;
+        max-width: 850px;
         padding: 0;
+        margin: 0 auto;
       }
 
-      .ksk-wa-chat-page .ksk-msg-detail {
+      #otherPageText .ksk-wa-chat-page > .ksk-msg-detail {
         display: flex;
         flex-direction: column;
+        width: 100%;
+        height: min(740px, calc(100dvh - 210px));
+        min-height: 390px;
         min-width: 0;
-        height: min(76dvh, 820px);
-        min-height: 430px;
         overflow: hidden;
         padding: 0;
         margin: 0;
-        border: 1px solid var(--color-border, #e2e8f0);
+        border: 1px solid var(--color-border, #29384d);
         border-radius: 16px;
-        background: var(--color-surface, #fff);
-        box-shadow: 0 3px 15px rgba(15, 23, 42, .05);
+        background: var(--color-surface, #111e30);
       }
 
-      .ksk-wa-chat-page .ksk-msg-chat-header {
+      /* ======================================
+         CHAT HEADER
+      ====================================== */
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header {
+        position: relative;
+        z-index: 3;
         display: flex;
-        flex: 0 0 auto;
+        flex: 0 0 66px;
         align-items: center;
         gap: 10px;
+        width: 100%;
         min-width: 0;
-        min-height: 65px;
-        padding: 9px 12px;
+        min-height: 66px;
+        padding: 8px 12px;
         border: 0;
-        border-bottom: 1px solid var(--color-border, #e2e8f0);
-        background: var(--color-surface, #fff);
+        border-bottom: 1px solid var(--color-border, #29384d);
+        background: var(--color-surface, #111e30);
       }
 
-      .ksk-wa-chat-page .ksk-wa-back {
-        flex: 0 0 38px;
-        width: 38px;
-        min-width: 38px;
-        min-height: 38px;
+      #otherPageText .ksk-wa-chat-page .ksk-wa-back {
+        display: inline-flex;
+        flex: 0 0 36px;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        min-width: 36px;
+        height: 40px;
+        min-height: 40px;
         padding: 0;
         border: 0;
         border-radius: 50%;
         background: transparent;
-        color: var(--color-text, #172033);
-        font-size: 20px;
+        color: var(--color-text, #e5e7eb);
+        font-size: 0;
       }
 
-      .ksk-wa-chat-page .ksk-msg-chat-header > button:not(.ksk-wa-back) {
+      #otherPageText .ksk-wa-chat-page .ksk-wa-back::before {
+        content: "←";
+        font-size: 23px;
+      }
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header > button[data-action="open-chat-profile"] {
+        display: inline-flex;
         flex: 0 0 44px;
+        align-items: center;
+        justify-content: center;
         width: 44px;
         min-width: 44px;
+        height: 44px;
         min-height: 44px;
         padding: 0;
+        overflow: hidden;
         border: 0;
+        border-radius: 50%;
         background: transparent;
       }
 
-      .ksk-wa-chat-page .ksk-msg-chat-header .ksk-msg-avatar {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header > button[data-action="open-chat-profile"] .ksk-msg-avatar {
         width: 44px;
         height: 44px;
         min-width: 44px;
       }
 
-      .ksk-wa-chat-page .ksk-msg-chat-header-main {
-        flex: 1;
+      #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header-main {
+        flex: 1 1 auto;
         min-width: 0;
+        overflow: hidden;
       }
 
-      .ksk-wa-chat-page .ksk-msg-chat-header-main strong {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header-main strong {
         display: block;
         overflow: hidden;
-        font-size: 14px;
+        font-size: 15px;
         font-weight: 750;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      .ksk-wa-chat-page .ksk-msg-chat-status {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-chat-status {
         overflow: hidden;
-        margin-top: 2px;
-        color: var(--color-muted, #64748b);
+        margin-top: 3px;
+        color: var(--color-muted, #94a3b8);
         font-size: 11px;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      .ksk-wa-chat-page .ksk-msg-chat-status:has(span:not(:empty)) {
-        color: #128c7e;
+      /* ======================================
+         HEADER MORE MENU
+      ====================================== */
+
+      #otherPageText .ksk-wa-chat-page .ksk-wa-more {
+        position: relative;
+        flex: 0 0 40px;
+        width: 40px;
       }
 
-      .ksk-wa-chat-page .ksk-msg-chat-header > button[data-action="block-user"] {
+      #otherPageText .ksk-wa-chat-page .ksk-wa-more > summary {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        color: var(--color-text, #e5e7eb);
+        cursor: pointer;
+        font-size: 25px;
+        list-style: none;
+      }
+
+      #otherPageText .ksk-wa-chat-page .ksk-wa-more > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      #otherPageText .ksk-wa-chat-page .ksk-wa-more > summary::before {
+        content: "⋮";
+      }
+
+      #otherPageText .ksk-wa-chat-page .ksk-wa-more-panel {
+        position: absolute;
+        top: 43px;
+        right: 0;
+        z-index: 20;
+        min-width: 135px;
+        padding: 7px;
+        border: 1px solid var(--color-border, #29384d);
+        border-radius: 12px;
+        background: var(--color-surface, #111e30);
+        box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      }
+
+      #otherPageText .ksk-wa-chat-page .ksk-wa-more-panel button {
+        width: 100%;
+        min-height: 38px;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--color-text, #e5e7eb);
+        text-align: left;
+        font-size: 13px;
+      }
+
+      /* ======================================
+         GROUP CONTROLS
+      ====================================== */
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-detail > .ksk-msg-toolbar {
         flex: 0 0 auto;
-        width: auto;
-        min-width: 0;
+        margin: 0;
+        padding: 7px 10px;
+        border-bottom: 1px solid var(--color-border, #29384d);
+      }
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-detail > .ksk-msg-toolbar:has([data-action="toggle-group-members"]) {
+        flex-wrap: wrap;
+      }
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-detail > .ksk-msg-toolbar .ksk-msg-secondary {
         min-height: 34px;
-        padding: 6px 9px;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 9px;
+        padding: 6px 10px;
         font-size: 11px;
       }
 
-      .ksk-wa-chat-page .ksk-msg-history {
+      /* ======================================
+         MESSAGE HISTORY
+      ====================================== */
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-history {
         display: flex;
         flex: 1 1 auto;
         flex-direction: column;
-        gap: 9px;
+        align-items: stretch;
+        gap: 8px;
+        width: 100%;
         min-width: 0;
-        min-height: 100px;
+        min-height: 0;
         max-height: none;
         overflow-x: hidden;
         overflow-y: auto;
         overscroll-behavior: contain;
-        padding: 15px 12px;
+        padding: 14px 11px;
         margin: 0;
-        background-color: #efeae2;
-        background-image:
-          radial-gradient(rgba(15, 23, 42, .045) .7px, transparent .7px);
-        background-size: 18px 18px;
+        background: #0b141a;
         scrollbar-width: thin;
       }
 
-      .ksk-wa-chat-page .ksk-msg-history-item {
-        position: relative;
+      #otherPageText .ksk-wa-chat-page .ksk-msg-history > .ksk-msg-empty {
+        align-self: center;
+        width: 100%;
+        margin: auto 0;
+        border: 0;
+        background: transparent;
+      }
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-history-item {
+        display: block;
+        flex: 0 0 auto;
         width: fit-content;
         max-width: min(82%, 560px);
-        min-width: 76px;
-        padding: 9px 11px 7px;
+        min-width: 0;
+        height: auto;
+        min-height: 0;
+        padding: 8px 11px 6px;
+        margin: 0;
         border: 0;
-        border-radius: 13px;
-        background: #fff;
-        color: #172033;
+        border-radius: 12px;
+        background: #202c33;
+        color: #e9edef;
         font-size: 14px;
-        line-height: 1.55;
+        line-height: 1.5;
         overflow-wrap: anywhere;
         white-space: pre-wrap;
-        box-shadow: 0 1px 1px rgba(15, 23, 42, .08);
+        box-shadow: 0 1px 1px rgba(0,0,0,.12);
       }
 
-      .ksk-wa-chat-page .ksk-msg-history-item.from-them {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-history-item.from-them {
         align-self: flex-start;
         border-top-left-radius: 4px;
-        background: #fff;
-        color: #172033;
+        background: #202c33;
+        color: #e9edef;
       }
 
-      .ksk-wa-chat-page .ksk-msg-history-item.from-me {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-history-item.from-me {
         align-self: flex-end;
         border-top-right-radius: 4px;
-        border-color: transparent;
-        background: #d9fdd3;
-        color: #173b2c;
+        background: #005c4b;
+        color: #e9edef;
       }
 
-      .ksk-wa-chat-page .ksk-msg-history-item.deleted {
-        opacity: .8;
+      #otherPageText .ksk-wa-chat-page .ksk-msg-history-item.deleted {
+        opacity: .75;
         font-style: italic;
       }
 
-      .ksk-wa-chat-page .ksk-msg-history-time {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-history-time {
         display: flex;
-        align-items: center;
         justify-content: flex-end;
+        align-items: center;
         gap: 4px;
         margin-top: 5px;
-        color: inherit;
-        opacity: .65;
         font-size: 10px;
         line-height: 1.3;
+        opacity: .7;
       }
 
-      .ksk-wa-chat-page .ksk-msg-status {
-        margin-left: 3px;
-        color: #64748b;
+      #otherPageText .ksk-wa-chat-page .ksk-msg-status {
+        color: #8bd3f7;
         font-size: 10px;
-        font-weight: 700;
         white-space: nowrap;
       }
 
-      .ksk-wa-chat-page .ksk-msg-history-item.from-me .ksk-msg-status {
-        color: #1684c7;
-      }
-
-      .ksk-wa-chat-page .ksk-msg-reply-preview {
-        padding: 7px 9px;
-        margin: 0 0 7px;
-        border-left: 3px solid #128c7e;
-        border-radius: 7px;
-        background: rgba(18, 140, 126, .09);
-        color: inherit;
-        font-size: 12px;
-      }
-
-      .ksk-wa-chat-page .ksk-msg-media {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-media {
+        display: block;
         max-width: 100%;
-        max-height: 300px;
+        max-height: 280px;
         margin-top: 7px;
         border-radius: 9px;
         object-fit: contain;
       }
 
-      .ksk-wa-chat-page .ksk-msg-message-options {
-        width: fit-content;
-        max-width: 100%;
-        margin-top: 5px;
-        border: 0;
-        background: transparent;
-      }
-
-      .ksk-wa-chat-page .ksk-msg-message-options > summary {
-        justify-content: flex-end;
-        min-height: 25px;
-        padding: 3px 6px;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        opacity: .65;
-        font-size: 10px;
-      }
-
-      .ksk-wa-chat-page .ksk-msg-message-options > summary::after {
-        display: none;
-      }
-
-      .ksk-wa-chat-page .ksk-msg-message-options .ksk-msg-disclosure-body {
-        padding: 5px 0 0;
-        border: 0;
-      }
-
-      .ksk-wa-chat-page .ksk-msg-bubble-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 5px;
-      }
-
-      .ksk-wa-chat-page .ksk-msg-bubble-actions button {
-        min-height: 32px;
-        padding: 6px 9px;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 8px;
-        background: var(--color-surface, #fff);
-        color: var(--color-text, #172033);
-        font-size: 11px;
-      }
-
-      /* =========================================
-         CHAT SEARCH / GROUP CONTROLS
-      ========================================= */
-
-      .ksk-wa-chat-page .ksk-msg-detail > .ksk-msg-toolbar {
-        flex: 0 0 auto;
-        gap: 7px;
-        padding: 8px 10px;
-        margin: 0;
-        border-bottom: 1px solid var(--color-border, #e2e8f0);
-        background: var(--color-surface, #fff);
-      }
-
-      .ksk-wa-chat-page .ksk-msg-detail > .ksk-msg-toolbar .ksk-msg-search {
-        min-height: 38px;
-        padding: 7px 11px;
-        border-radius: 20px;
+      #otherPageText .ksk-wa-chat-page .ksk-msg-reply-preview {
+        padding: 7px 9px;
+        margin: 0 0 7px;
+        border-left: 3px solid #25a58d;
+        border-radius: 6px;
+        background: rgba(37,165,141,.12);
         font-size: 12px;
       }
 
-      .ksk-wa-chat-page .ksk-msg-detail > .ksk-msg-toolbar .ksk-msg-secondary {
-        min-height: 34px;
-        padding: 6px 9px;
-        font-size: 11px;
+      /* ======================================
+         MESSAGE OPTIONS
+      ====================================== */
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-bubble-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 6px;
       }
 
-      .ksk-wa-chat-page [data-action="load-older"] {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-bubble-actions button {
+        min-height: 29px;
+        padding: 4px 8px;
+        border: 1px solid rgba(255,255,255,.15);
+        border-radius: 7px;
+        background: rgba(255,255,255,.08);
+        color: inherit;
+        font-size: 10px;
+      }
+
+      /* ======================================
+         SEARCH RESULTS / OLDER MESSAGES
+      ====================================== */
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-search-results {
+        flex: 0 0 auto;
+        max-height: 125px;
+        overflow-y: auto;
+        padding: 5px 10px;
+        margin: 0;
+        background: var(--color-surface, #111e30);
+      }
+
+      #otherPageText .ksk-wa-chat-page [data-action="load-older"] {
         flex: 0 0 auto;
         align-self: center;
         min-height: 30px;
-        padding: 4px 10px;
+        padding: 4px 12px;
         margin: 6px 0;
         border-radius: 20px;
         font-size: 11px;
       }
 
-      .ksk-wa-chat-page .ksk-msg-search-results {
-        flex: 0 0 auto;
-        max-height: 140px;
-        overflow-y: auto;
-        padding: 5px 10px;
-        margin: 0;
-        background: var(--color-surface, #fff);
-      }
+      /* ======================================
+         REPLY BAR
+      ====================================== */
 
-      .ksk-wa-chat-page .ksk-msg-search-result {
-        padding: 8px;
-        border-radius: 9px;
-        font-size: 12px;
-      }
-
-      .ksk-wa-chat-page .ksk-msg-reply-preview {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-detail > .ksk-msg-reply-preview {
         flex: 0 0 auto;
-        margin: 0;
         padding: 9px 12px;
-        border-top: 1px solid var(--color-border, #e2e8f0);
-        border-bottom: 1px solid var(--color-border, #e2e8f0);
-        border-left: 3px solid #128c7e;
+        margin: 0;
+        border-top: 1px solid var(--color-border, #29384d);
+        border-bottom: 1px solid var(--color-border, #29384d);
+        border-left: 3px solid #25a58d;
         border-radius: 0;
-        background: var(--color-surface, #fff);
+        background: var(--color-surface, #111e30);
         font-size: 12px;
       }
 
-      /* =========================================
-         WHATSAPP COMPOSER
-      ========================================= */
+      /* ======================================
+         MESSAGE COMPOSER
+      ====================================== */
 
-      .ksk-wa-chat-page .ksk-msg-send-form {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-send-form {
         position: relative;
         z-index: 2;
         display: flex;
         flex: 0 0 auto;
         align-items: flex-end;
         gap: 7px;
+        width: 100%;
         min-width: 0;
         padding: 9px 10px;
         padding-bottom: calc(9px + env(safe-area-inset-bottom, 0px));
         margin: 0;
-        border-top: 1px solid var(--color-border, #e2e8f0);
-        background: var(--color-surface, #fff);
+        border-top: 1px solid var(--color-border, #29384d);
+        background: var(--color-surface, #111e30);
       }
 
-      .ksk-wa-chat-page .ksk-msg-compose {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-compose {
+        display: block;
         flex: 1 1 auto;
         width: 100%;
         min-width: 0;
-        min-height: 44px;
-        max-height: 120px;
+        min-height: 43px;
+        max-height: 115px;
         padding: 11px 15px;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 24px;
-        background: var(--color-surface-secondary, #f8fafc);
+        border: 1px solid var(--color-border, #34445a);
+        border-radius: 23px;
+        background: var(--color-surface-secondary, #18263a);
+        color: var(--color-text, #e5e7eb);
         font-size: 14px;
-        line-height: 1.45;
+        line-height: 1.4;
         resize: none;
       }
 
-      .ksk-wa-chat-page .ksk-msg-compose-actions {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions {
         display: flex;
         flex: 0 0 auto;
         align-items: center;
-        gap: 7px;
+        flex-wrap: nowrap;
+        gap: 6px;
       }
 
-      .ksk-wa-chat-page .ksk-msg-compose-actions label {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions label {
         display: inline-flex;
-        flex: 0 0 42px;
+        flex: 0 0 40px;
         align-items: center;
         justify-content: center;
-        width: 42px;
-        min-height: 42px;
+        width: 40px;
+        min-height: 40px;
         padding: 0;
-        border: 1px solid var(--color-border, #e2e8f0);
+        overflow: hidden;
+        border: 1px solid var(--color-border, #34445a);
         border-radius: 50%;
-        background: var(--color-surface, #fff);
-        color: var(--color-text, #172033);
+        background: transparent;
+        color: transparent;
         font-size: 0;
-        cursor: pointer;
       }
 
-      .ksk-wa-chat-page .ksk-msg-compose-actions label::before {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions label::before {
         content: "📎";
-        font-size: 19px;
+        color: var(--color-text, #e5e7eb);
+        font-size: 18px;
       }
 
-      .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions input[type="file"] {
+        display: none;
+      }
+
+      #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary {
         display: inline-flex;
         flex: 0 0 44px;
         align-items: center;
@@ -716,180 +631,123 @@
         height: 44px;
         min-height: 44px;
         padding: 0;
+        border: 0;
         border-radius: 50%;
         background: #128c7e;
-        color: #fff;
+        color: transparent;
         font-size: 0;
       }
 
-      .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary::after {
+      #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary::before {
         content: "➤";
-        font-size: 19px;
-        line-height: 1;
+        color: white;
+        font-size: 20px;
       }
 
-      .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary:disabled {
-        opacity: .6;
+      /* ======================================
+         DARK / LIGHT THEME SUPPORT
+      ====================================== */
+
+      html[data-theme="light"] #otherPageText .ksk-wa-chat-page .ksk-msg-history {
+        background: #efeae2;
       }
 
-      /* =========================================
-         GROUP / OTHER FORMS
-      ========================================= */
-
-      .ksk-msg-form {
-        padding: 13px;
-        margin: 10px 0;
-        border: 1px solid var(--color-border, #e2e8f0);
-        border-radius: 14px;
-        background: var(--color-surface, #fff);
+      html[data-theme="light"] #otherPageText .ksk-wa-chat-page .ksk-msg-history-item.from-them {
+        background: #ffffff;
+        color: #172033;
       }
 
-      .ksk-msg-friend-options {
-        display: grid;
-        gap: 7px;
-        max-height: 230px;
-        overflow: auto;
-        margin: 10px 0;
+      html[data-theme="light"] #otherPageText .ksk-wa-chat-page .ksk-msg-history-item.from-me {
+        background: #d9fdd3;
+        color: #173b2c;
       }
 
-      .ksk-msg-friend-option {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        padding: 9px;
-        border-radius: 9px;
-        background: var(--color-surface-secondary, #f8fafc);
+      html[data-theme="light"] #otherPageText .ksk-wa-chat-page .ksk-msg-status {
+        color: #1684c7;
       }
 
-      /* =========================================
-         DARK THEME
-      ========================================= */
-
-      html[data-theme="dark"] .ksk-wa-chat-page .ksk-msg-history {
-        background-color: #0b141a;
-        background-image:
-          radial-gradient(rgba(255, 255, 255, .035) .7px, transparent .7px);
-      }
-
-      html[data-theme="dark"] .ksk-wa-chat-page .ksk-msg-history-item.from-them {
-        background: #202c33;
-        color: #e9edef;
-      }
-
-      html[data-theme="dark"] .ksk-wa-chat-page .ksk-msg-history-item.from-me {
-        background: #005c4b;
-        color: #e9edef;
-      }
-
-      html[data-theme="dark"] .ksk-wa-chat-page .ksk-msg-history-item.from-me .ksk-msg-status {
-        color: #7dd3fc;
-      }
-
-      html[data-theme="dark"] .ksk-wa-chat-page .ksk-msg-reply-preview {
-        background: rgba(18, 140, 126, .16);
-      }
-
-      /* =========================================
+      /* ======================================
          MOBILE
-      ========================================= */
+      ====================================== */
 
       @media (max-width: 600px) {
-        .ksk-msg-page {
-          padding: 2px 0 12px;
+        #otherPageText .ksk-msg-page {
+          padding: 4px 0 10px;
         }
 
-        .ksk-wa-list-page h3 {
-          margin: 6px 0 12px;
-          font-size: 19px;
-        }
-
-        .ksk-wa-list-page .ksk-msg-row {
-          min-height: 72px;
-          padding: 9px 10px;
-        }
-
-        .ksk-wa-list-page .ksk-msg-avatar {
-          flex-basis: 49px;
-          width: 49px;
-          height: 49px;
-          min-width: 49px;
-        }
-
-        .ksk-wa-chat-page {
+        #otherPageText .ksk-wa-chat-page {
           padding: 0;
         }
 
-        .ksk-wa-chat-page .ksk-msg-detail {
-          height: calc(100dvh - 160px);
-          min-height: 350px;
+        #otherPageText .ksk-wa-chat-page > .ksk-msg-detail {
+          height: calc(100dvh - 175px);
+          min-height: 340px;
           border-radius: 12px;
         }
 
-        .ksk-wa-chat-page .ksk-msg-chat-header {
-          min-height: 59px;
+        #otherPageText .ksk-wa-chat-page .ksk-msg-chat-header {
+          flex-basis: 60px;
+          min-height: 60px;
           padding: 7px 8px;
           gap: 7px;
         }
 
-        .ksk-wa-chat-page .ksk-wa-back {
-          flex-basis: 32px;
-          width: 32px;
-          min-width: 32px;
-        }
-
-        .ksk-wa-chat-page .ksk-msg-history {
+        #otherPageText .ksk-wa-chat-page .ksk-msg-history {
           padding: 12px 9px;
           gap: 8px;
         }
 
-        .ksk-wa-chat-page .ksk-msg-history-item {
-          max-width: 88%;
-          min-width: 68px;
+        #otherPageText .ksk-wa-chat-page .ksk-msg-history-item {
+          max-width: 86%;
+          min-width: 0;
           padding: 8px 10px 6px;
           font-size: 13px;
         }
 
-        .ksk-wa-chat-page .ksk-msg-send-form {
+        #otherPageText .ksk-wa-chat-page .ksk-msg-send-form {
           gap: 5px;
           padding: 7px 7px;
           padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
         }
 
-        .ksk-wa-chat-page .ksk-msg-compose {
-          min-height: 42px;
+        #otherPageText .ksk-wa-chat-page .ksk-msg-compose {
+          min-height: 41px;
           padding: 10px 12px;
           font-size: 13px;
         }
 
-        .ksk-wa-chat-page .ksk-msg-compose-actions {
+        #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions {
           gap: 5px;
         }
 
-        .ksk-wa-chat-page .ksk-msg-compose-actions label {
-          flex-basis: 38px;
-          width: 38px;
-          min-height: 38px;
+        #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions label {
+          flex-basis: 36px;
+          width: 36px;
+          min-height: 36px;
         }
 
-        .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary {
+        #otherPageText .ksk-wa-chat-page .ksk-msg-compose-actions .ksk-msg-primary {
           flex-basis: 40px;
           width: 40px;
           min-width: 40px;
           height: 40px;
           min-height: 40px;
         }
-      }
 
-      @media (max-height: 600px) {
-        .ksk-wa-chat-page .ksk-msg-detail {
-          height: calc(100dvh - 115px);
-          min-height: 280px;
+        #otherPageText .ksk-msg-row {
+          min-height: 70px;
+          padding: 9px 10px;
+        }
+
+        #otherPageText .ksk-msg-row .ksk-msg-actions {
+          gap: 3px;
         }
       }
 
-      @media (prefers-reduced-motion: reduce) {
-        .ksk-wa-list-page .ksk-msg-row {
-          transition: none;
+      @media (max-height: 600px) {
+        #otherPageText .ksk-wa-chat-page > .ksk-msg-detail {
+          height: calc(100dvh - 125px);
+          min-height: 260px;
         }
       }
     `;
@@ -897,127 +755,58 @@
     document.head.appendChild(style);
   }
 
-  function wrapDisclosure(html, className, label) {
-    return `
-      <details class="ksk-msg-disclosure ${className}">
-        <summary>${label}</summary>
-        <div class="ksk-msg-disclosure-body">
-          ${html}
-        </div>
-      </details>
-    `;
-  }
-
-  function decorate(html) {
-    if (typeof html !== "string" || !html) return html;
-
-    if (html.includes("ksk-wa-chat-page") ||
-        html.includes("ksk-wa-list-page")) {
-      return html;
-    }
-
-    let output = html;
-    const isChat = output.includes('class="ksk-msg-detail"');
-
-    output = output.replace(
-      '<section class="ksk-msg-page">',
-      isChat
-        ? '<section class="ksk-msg-page ksk-wa-chat-page">'
-        : '<section class="ksk-msg-page ksk-wa-list-page">'
-    );
-
-    if (isChat) {
-      output = output.replace(
-        /<button class="ksk-msg-secondary"\s+type="button"\s+data-action="back">([\s\S]*?)<\/button>\s*<div class="ksk-msg-detail">\s*<div class="ksk-msg-chat-header">/,
-        '<div class="ksk-msg-detail"><div class="ksk-msg-chat-header"><button class="ksk-msg-secondary ksk-wa-back" type="button" data-action="back">$1</button>'
-      );
-    }
-
-    output = output.replace(
-      /<div class="ksk-msg-actions">([\s\S]*?)<\/div>/g,
-      match => wrapDisclosure(
-        match,
-        "ksk-msg-conversation-options",
-        "विकल्प"
-      )
-    );
-
-    output = output.replace(
-      /<div class="ksk-msg-bubble-actions">([\s\S]*?)<\/div>/g,
-      match => wrapDisclosure(
-        match,
-        "ksk-msg-message-options",
-        "थप"
-      )
-    );
-
-    return output;
-  }
-
-  function wrapMountedElement(element, className, label) {
-    if (!element || element.parentElement?.classList.contains(
-      "ksk-msg-disclosure-body"
-    )) {
-      return;
-    }
-
-    const details = document.createElement("details");
-    details.className = "ksk-msg-disclosure " + className;
-
-    const summary = document.createElement("summary");
-    summary.textContent = label;
-
-    const body = document.createElement("div");
-    body.className = "ksk-msg-disclosure-body";
-
-    element.parentNode.insertBefore(details, element);
-    details.append(summary, body);
-    body.appendChild(element);
-  }
-
-  function enhanceMountedPage() {
+  function moveChatControls() {
     const root = document.getElementById("otherPageText");
     if (!root) return;
 
     root.querySelectorAll(".ksk-msg-page").forEach(page => {
-      const isChat = Boolean(page.querySelector(".ksk-msg-detail"));
+      const detail = page.querySelector(".ksk-msg-detail");
 
-      page.classList.toggle("ksk-wa-chat-page", isChat);
-      page.classList.toggle("ksk-wa-list-page", !isChat);
+      page.classList.toggle("ksk-wa-chat-page", Boolean(detail));
+      page.classList.toggle("ksk-wa-list-page", !detail);
 
-      if (isChat) {
-        const back = page.querySelector('[data-action="back"]');
-        const header = page.querySelector(".ksk-msg-chat-header");
+      if (!detail) return;
 
-        if (back && header && back.parentElement !== header) {
-          back.classList.add("ksk-wa-back");
-          header.prepend(back);
-        }
+      const header = detail.querySelector(".ksk-msg-chat-header");
+      if (!header) return;
+
+      /* Move Back button into the chat header. */
+      const back = page.querySelector(':scope > [data-action="back"]');
+
+      if (back && back.parentElement !== header) {
+        back.classList.add("ksk-wa-back");
+        header.prepend(back);
       }
 
-      page.querySelectorAll(".ksk-msg-actions").forEach(element => {
-        wrapMountedElement(
-          element,
-          "ksk-msg-conversation-options",
-          "विकल्प"
-        );
-      });
+      /* Put Block inside the three-dot menu. */
+      const block = header.querySelector('[data-action="block-user"]');
 
-      page.querySelectorAll(".ksk-msg-bubble-actions").forEach(element => {
-        wrapMountedElement(
-          element,
-          "ksk-msg-message-options",
-          "थप"
-        );
-      });
+      if (block && !header.querySelector(".ksk-wa-more")) {
+        const menu = document.createElement("details");
+        menu.className = "ksk-wa-more";
+
+        const summary = document.createElement("summary");
+        summary.setAttribute("aria-label", "More chat options");
+
+        const panel = document.createElement("div");
+        panel.className = "ksk-wa-more-panel";
+
+        block.textContent = "Block";
+        panel.appendChild(block);
+        menu.append(summary, panel);
+        header.appendChild(menu);
+      }
+
+      /* Ensure the chat detail is the only chat container. */
+      detail.classList.add("ksk-wa-chat-detail");
     });
   }
 
   function installObserver() {
-    if (observer || !global.MutationObserver) return;
+    if (observer || !global.MutationObserver || !document.body) return;
 
     observer = new MutationObserver(() => {
-      enhanceMountedPage();
+      moveChatControls();
     });
 
     observer.observe(document.body, {
@@ -1025,50 +814,64 @@
       subtree: true
     });
 
-    enhanceMountedPage();
+    moveChatControls();
   }
 
-  function wrappedRender() {
-    addStyles();
-    return decorate(API.render.apply(API, arguments));
+  function renderWithStyles(method, context, args) {
+    const result = method.apply(context, args);
+    installStyles();
+
+    if (typeof result === "string") {
+      return result;
+    }
+
+    return result;
   }
 
-  function wrappedRenderChat() {
-    addStyles();
-    return decorate(API.renderChat.apply(API, arguments));
-  }
+  const Enhanced = Object.create(Original);
 
-  const enhanced = Object.create(API);
-
-  Object.defineProperties(enhanced, {
+  Object.defineProperties(Enhanced, {
     render: {
-      value: wrappedRender,
-      enumerable: true
+      enumerable: true,
+      value: function () {
+        return renderWithStyles(Original.render, Original, arguments);
+      }
     },
+
     renderChat: {
-      value: wrappedRenderChat,
-      enumerable: true
+      enumerable: true,
+      value: function () {
+        return renderWithStyles(Original.renderChat, Original, arguments);
+      }
     },
-    __whatsappUILayerInstalled: {
+
+    renderConversationList: {
+      enumerable: true,
+      value: function () {
+        return renderWithStyles(
+          Original.renderConversationList,
+          Original,
+          arguments
+        );
+      }
+    },
+
+    __waMessengerUI: {
       value: true
     }
   });
 
-  global.KSKMessagesPage = Object.freeze(enhanced);
+  global.KSKMessagesPage = Enhanced;
 
-  function initializeLayer() {
-    addStyles();
+  function start() {
+    installStyles();
     installObserver();
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener(
-      "DOMContentLoaded",
-      initializeLayer,
-      { once: true }
-    );
+    document.addEventListener("DOMContentLoaded", start, { once: true });
   } else {
-    initializeLayer();
+    start();
   }
 
 })(window);
