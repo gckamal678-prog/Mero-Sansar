@@ -51,6 +51,7 @@
   let typingTimer = null;
   let typingUsers = new Set();
   let presenceUsers = new Set();
+  let globalPresenceUsers = new Set();
 
   const mediaUrls = new Map();
   const receiptCache = new Map();
@@ -1307,7 +1308,12 @@
       member => member.id !== currentUserId
     );
 
-    const online = person && presenceUsers.has(person.id);
+    const personId = String(person?.id || "");
+
+    const online = Boolean(personId) && (
+      presenceUsers.has(personId) ||
+      globalPresenceUsers.has(personId)
+    );
 
     return `
       <section class="ksk-msg-page">
@@ -2170,6 +2176,15 @@
   async function handleCloudChange(event) {
     const detail = event.detail || {};
 
+    if (detail.action === "global-presence-sync") {
+      globalPresenceUsers = new Set(
+        Object.keys(detail.state || {}).map(String)
+      );
+
+      refreshPage();
+      return;
+    }
+
     if (
       detail.action === "typing-change" &&
       String(detail.conversationId || "") === String(activeChatId || "")
@@ -2195,7 +2210,7 @@
       detail.action === "presence-sync" &&
       String(detail.conversationId || "") === String(activeChatId || "")
     ) {
-      presenceUsers = new Set(Object.keys(detail.state || {}));
+      presenceUsers = new Set(Object.keys(detail.state || {}).map(String));
       refreshPage();
       return;
     }
@@ -2372,6 +2387,10 @@
             "Realtime connection failed. Please retry."
           )
         );
+      }
+
+      if (typeof service()?.startGlobalPresence === "function") {
+        await service().startGlobalPresence();
       }
 
       initialized = true;
