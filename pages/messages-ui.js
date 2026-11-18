@@ -1,4 +1,3 @@
-
 /* =========================================================
    MERO SANSAR — WHATSAPP CHAT UI + COMPOSER
    FULL REPLACEMENT
@@ -146,23 +145,6 @@
         padding:0!important;
       }
 
-      .ksk-msg-page:has(.ksk-msg-detail) > .ksk-msg-detail {
-        display:flex!important;
-        flex-direction:column!important;
-        width:100%!important;
-        height:calc(100dvh - 155px)!important;
-        min-height:300px!important;
-        max-height:calc(100dvh - 155px)!important;
-        min-width:0!important;
-        margin:0!important;
-        padding:0!important;
-        overflow:hidden!important;
-        border:1px solid #26343c!important;
-        border-radius:14px!important;
-        background:#0b141a!important;
-        color:#e9edef!important;
-      }
-
       .ksk-msg-detail,
       .ksk-msg-detail * {
         box-sizing:border-box!important;
@@ -297,24 +279,6 @@
 
       /* HISTORY */
 
-      .ksk-msg-detail > .ksk-msg-history {
-        display:flex!important;
-        flex:1 1 0!important;
-        flex-direction:column!important;
-        align-items:stretch!important;
-        gap:7px!important;
-        width:100%!important;
-        min-width:0!important;
-        min-height:0!important;
-        margin:0!important;
-        padding:12px 10px!important;
-        overflow-x:hidden!important;
-        overflow-y:auto!important;
-        overscroll-behavior:contain!important;
-        -webkit-overflow-scrolling:touch!important;
-        background:#0b141a!important;
-      }
-
       .ksk-msg-history-item {
         position:relative!important;
         display:block!important;
@@ -407,25 +371,6 @@
       }
 
       /* FIXED BOTTOM COMPOSER */
-
-      .ksk-msg-detail > .ksk-msg-send-form {
-        position:relative!important;
-        z-index:5!important;
-        display:flex!important;
-        flex:0 0 auto!important;
-        flex-direction:row!important;
-        align-items:flex-end!important;
-        gap:7px!important;
-        width:100%!important;
-        min-width:0!important;
-        min-height:64px!important;
-        margin:0!important;
-        margin-top:auto!important;
-        padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))!important;
-        background:#0b141a!important;
-        border:0!important;
-        border-top:1px solid #26343c!important;
-      }
 
       .ksk-wa-composer {
         display:flex!important;
@@ -531,44 +476,146 @@
         display:none!important;
       }
 
-      @media(max-width:520px) {
-        .ksk-msg-page:has(.ksk-msg-detail) > .ksk-msg-detail {
-          height:calc(100dvh - 148px)!important;
-          max-height:calc(100dvh - 148px)!important;
-          border-radius:0!important;
+      /* =====================================================
+         MERO SANSAR — STABLE CHAT HEIGHT + BOTTOM COMPOSER
+      ===================================================== */
+
+      /* Chat page: fixed available height */
+      .ksk-msg-page:has(> .ksk-msg-detail) {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        height: calc(100dvh - 155px) !important;
+        min-height: 300px !important;
+        max-height: calc(100dvh - 155px) !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+      }
+
+      /* Back arrow takes only its required space */
+      .ksk-msg-page:has(> .ksk-msg-detail) > .ksk-msg-back {
+        display: flex !important;
+        flex: 0 0 34px !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        width: 42px !important;
+        min-height: 34px !important;
+        margin: 0 !important;
+        padding: 0 8px !important;
+      }
+
+      /* Chat container fills remaining height */
+      .ksk-msg-page:has(> .ksk-msg-detail) > .ksk-msg-detail {
+        display: flex !important;
+        flex: 1 1 0 !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: hidden !important;
+        border: 1px solid #26343c !important;
+        border-radius: 14px !important;
+        background: #0b141a !important;
+        color: #e9edef !important;
+      }
+
+      /* Header never shrinks */
+      .ksk-msg-detail > .ksk-msg-chat-header {
+        flex: 0 0 65px !important;
+      }
+
+      /* History takes all available middle space */
+      .ksk-msg-detail > .ksk-msg-history {
+        display: flex !important;
+        flex: 1 1 0 !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 7px !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 12px 10px !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        overscroll-behavior: contain !important;
+        -webkit-overflow-scrolling: touch !important;
+        background: #0b141a !important;
+      }
+
+      /* Composer stays at the bottom */
+      .ksk-msg-detail > .ksk-msg-send-form {
+        position: relative !important;
+        z-index: 5 !important;
+        display: flex !important;
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        flex-direction: row !important;
+        align-items: flex-end !important;
+        gap: 7px !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 64px !important;
+        margin: 0 !important;
+        margin-top: auto !important;
+        padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+        background: #0b141a !important;
+        border: 0 !important;
+        border-top: 1px solid #26343c !important;
+      }
+
+      /* Reply preview stays above composer */
+      .ksk-msg-detail > .ksk-msg-reply-preview {
+        flex: 0 0 auto !important;
+      }
+
+      /* Small screens */
+      @media (max-width: 520px) {
+        .ksk-msg-page:has(> .ksk-msg-detail) {
+          height: calc(100dvh - 148px) !important;
+          max-height: calc(100dvh - 148px) !important;
+        }
+
+        .ksk-msg-page:has(> .ksk-msg-detail) > .ksk-msg-detail {
+          border-radius: 0 !important;
         }
 
         .ksk-msg-detail > .ksk-msg-history {
-          padding:9px!important;
+          padding: 9px !important;
         }
 
         .ksk-msg-history-item {
-          max-width:84%!important;
+          max-width: 84% !important;
         }
 
         .ksk-msg-detail > .ksk-msg-send-form {
-          gap:5px!important;
-          padding-left:6px!important;
-          padding-right:6px!important;
+          gap: 5px !important;
+          padding-left: 6px !important;
+          padding-right: 6px !important;
         }
 
         .ksk-wa-composer {
-          gap:1px!important;
-          padding-left:3px!important;
-          padding-right:3px!important;
+          gap: 1px !important;
+          padding-left: 3px !important;
+          padding-right: 3px !important;
         }
 
         .ksk-wa-tool {
-          flex-basis:30px!important;
-          width:30px!important;
-          min-width:30px!important;
+          flex-basis: 30px !important;
+          width: 30px !important;
+          min-width: 30px !important;
         }
 
         .ksk-wa-send {
-          flex-basis:43px!important;
-          width:43px!important;
-          min-width:43px!important;
-          height:43px!important;
+          flex-basis: 43px !important;
+          width: 43px !important;
+          min-width: 43px !important;
+          height: 43px !important;
         }
       }
     `;
