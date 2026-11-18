@@ -3,7 +3,13 @@
 
 /*
  * MERO SANSAR — NOTIFICATION BELL BADGE
- * Version: 1.0.0
+ * Version: 2.0.0
+ *
+ * - Supabase unread notification count
+ * - Realtime badge updates
+ * - Mark only the opened conversation's message notifications as read
+ * - Keep notification page cache in sync
+ * - Safe account switching
  */
 
 (function (global) {
@@ -11,19 +17,37 @@
 
   if (global.KSKNotificationBadge) return;
 
+  const TABLE = "user_notifications";
   const API = () => global.KSKSupabaseNotifications;
+  const AUTH = () => global.KSKSupabaseAuth;
+
+  const SELECT_FIELDS = [
+    "id",
+    "recipient_id",
+    "actor_id",
+    "type",
+    "text",
+    "entity_type",
+    "entity_id",
+    "is_read",
+    "created_at"
+  ].join(",");
 
   let notifications = [];
   let initialized = false;
   let loading = false;
   let loadToken = 0;
 
+  const processedConversations = new Set();
+
   function getButton() {
     return document.getElementById("notificationsToggle");
   }
 
   function addStyles() {
-    if (document.getElementById("kskNotificationBadgeStyles")) return;
+    if (document.getElementById("kskNotificationBadgeStyles")) {
+      return;
+    }
 
     const style = document.createElement("style");
     style.id = "kskNotificationBadgeStyles";
@@ -116,6 +140,8 @@
   }
 
   function remove(id) {
+    if (!id) return;
+
     notifications = notifications.filter(
       item => String(item.id) !== String(id)
     );
@@ -135,7 +161,9 @@
     loading = true;
 
     try {
-      const response = await api.getNotifications({ limit: 200 });
+      const response = await api.getNotifications({
+        limit: 200
+      });
 
       if (token !== loadToken) return false;
 
@@ -168,13 +196,15 @@
   function handleCloudChange(event) {
     const detail = event?.detail || {};
 
-    if (detail.collection !== "user_notifications") return;
+    if (detail.collection !== TABLE) return;
 
     switch (detail.action) {
       case "add":
       case "update":
       case "read":
-        if (detail.item) upsert(detail.item);
+        if (detail.item) {
+          upsert(detail.item);
+        }
         break;
 
       case "delete":
@@ -199,11 +229,168 @@
     loadToken += 1;
     loading = false;
     notifications = [];
+    processedConversations.clear();
+
     render();
 
     if (event?.detail?.user?.id) {
       load();
     }
+  }
+
+  /*
+   * MARK MESSAGE NOTIFICATIONS FOR ONE CONVERSATION
+   *
+   * केवल:
+   * - हाल लगइन भएको प्रयोगकर्ताको सूचना
+   * - type = message
+   * - entity_id = खुलेको conversation ID
+   * - is_read = false
+   *
+   * अरू notification परिवर्तन हुँदैनन्।
+   */
+
+  async function markConversationNotificationsRead(conversationId) {
+    const id = String(conversationId || "").trim();
+
+    if (!id) return false;
+
+    const auth = AUTH();
+
+    if (
+      typeof auth?.getClient !== "function" ||
+      typeof auth?.getUser !== "function"
+    ) {
+      return false;
+    }
+
+    const client = auth.getClient();
+    const user = auth.getUser();
+
+    if (!client || !user?.id) return false;
+
+    const requestKey = String(user.id) + ":" + id;
+
+    if (processedConversations.has(requestKey)) {
+      /*
+       * एउटै खुला कुराकानीका लागि बारम्बार
+       * database update नगर्नुहोस्।
+       */
+      return true;
+    }
+
+    try {
+      const { data, error } = await client
+        .from(TABLE)
+        .update({
+          is_read: true
+        })
+        .eq("recipient_id", user.id)
+        .eq("type", "message")
+        .eq("entity_id", id)
+        .eq("is_read", false)
+        .select(SELECT_FIELDS);
+
+      if (error) {
+        console.warn(
+          "Conversation notification read failed:",
+          error
+        );
+        return false;
+      }
+
+      processedConversations.add(requestKey);
+
+      const rows = Array.isArray(data) ? data : [];
+
+      rows.forEach(row => {
+        const item = {
+          id: row.id,
+          recipientId: row.recipient_id,
+          actorId: row.actor_id || "",
+          type: row.type || "message",
+          text: row.text || "",
+          entityType: row.entity_type || "",
+          entityId: row.entity_id || "",
+          read: Boolean(row.is_read),
+          createdAt: row.created_at,
+          time: row.created_at
+        };
+
+        /*
+         * Badge र Notifications Page दुवैलाई
+         * एउटै सफल DB परिणाम पठाउनुहोस्।
+         */
+        global.dispatchEvent(
+          new CustomEvent("ksk:notification-cloud-change", {
+            detail: {
+              collection: TABLE,
+              action: "read",
+              item
+            }
+          })
+        );
+      });
+
+      render();
+      return true;
+
+    } catch (error) {
+      console.error(
+        "Conversation notification read error:",
+        error
+      );
+
+      return false;
+    }
+  }
+
+  /*
+   * PATCH MESSENGER OPEN CHAT
+   *
+   * कुराकानी वास्तवमै सफलतापूर्वक खुलेपछि मात्र
+   * सोही conversation का message notifications पढेको बनाइन्छ।
+   */
+
+  function patchMessenger() {
+    const messenger = global.KSKMessagesPage;
+
+    if (
+      !messenger ||
+      typeof messenger.openChat !== "function" ||
+      messenger.openChat.__kskNotificationReadWrapped
+    ) {
+      return false;
+    }
+
+    const originalOpenChat = messenger.openChat;
+
+    async function openChatWithNotificationRead(conversationId) {
+      const opened = await originalOpenChat.apply(
+        this,
+        arguments
+      );
+
+      if (opened === true) {
+        await markConversationNotificationsRead(
+          conversationId
+        );
+      }
+
+      return opened;
+    }
+
+    openChatWithNotificationRead.__kskNotificationReadWrapped = true;
+
+    /*
+     * पुरानो Messenger API का अरू सबै method सुरक्षित राख्नुहोस्।
+     */
+    global.KSKMessagesPage = Object.freeze({
+      ...messenger,
+      openChat: openChatWithNotificationRead
+    });
+
+    return true;
   }
 
   function initialize() {
@@ -230,8 +417,17 @@
     );
 
     global.addEventListener("pageshow", () => {
-      if (!document.hidden) load();
+      if (!document.hidden) {
+        load();
+        patchMessenger();
+      }
     });
+
+    /*
+     * index.html मा Messenger यस फाइलभन्दा पहिले
+     * लोड हुने भएकाले यहाँ API उपलब्ध हुन्छ।
+     */
+    patchMessenger();
 
     load();
 
@@ -241,7 +437,8 @@
   global.KSKNotificationBadge = Object.freeze({
     initialize,
     refresh: load,
-    getUnreadCount
+    getUnreadCount,
+    markConversationNotificationsRead
   });
 
   if (document.readyState === "loading") {
