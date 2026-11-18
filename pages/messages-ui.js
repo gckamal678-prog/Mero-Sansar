@@ -1,3 +1,4 @@
+
 /* =========================================================
    MERO SANSAR — WHATSAPP CHAT UI
    File: pages/messages-ui.js
@@ -9,7 +10,6 @@
   if (window.__MERO_SANSAR_WA_CHAT_UI__) return;
   window.__MERO_SANSAR_WA_CHAT_UI__ = true;
 
-  // पुरानो Composer Fix सँग दोहोरो UI बन्न नदिन
   window.MS_COMPOSER_FIX_V3 = true;
 
   const STYLE_ID = "mero-sansar-wa-chat-style";
@@ -25,6 +25,96 @@
     style.id = STYLE_ID;
 
     style.textContent = `
+      /* Conversation list: three-dot menu */
+
+      .ksk-msg-row {
+        position:relative!important;
+        align-items:flex-start!important;
+        overflow:visible!important;
+      }
+
+      .ksk-msg-row-main {
+        flex:1 1 auto!important;
+        min-width:0!important;
+      }
+
+      .ksk-msg-row-menu {
+        position:relative!important;
+        flex:0 0 34px!important;
+        width:34px!important;
+        margin-left:auto!important;
+      }
+
+      .ksk-msg-row-menu > summary {
+        display:flex!important;
+        align-items:center!important;
+        justify-content:center!important;
+        width:34px!important;
+        height:34px!important;
+        border:1px solid var(--color-border,#34434b)!important;
+        border-radius:50%!important;
+        background:transparent!important;
+        color:var(--color-text,#e9edef)!important;
+        font-size:23px!important;
+        line-height:1!important;
+        list-style:none!important;
+        cursor:pointer!important;
+        user-select:none!important;
+      }
+
+      .ksk-msg-row-menu > summary::-webkit-details-marker {
+        display:none!important;
+      }
+
+      .ksk-msg-row-menu[open] > summary {
+        background:var(--color-surface-secondary,#263746)!important;
+      }
+
+      .ksk-msg-row-menu-panel {
+        position:absolute!important;
+        top:39px!important;
+        right:0!important;
+        z-index:100!important;
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:3px!important;
+        width:145px!important;
+        padding:7px!important;
+        border:1px solid var(--color-border,#34434b)!important;
+        border-radius:11px!important;
+        background:var(--color-surface,#172333)!important;
+        box-shadow:0 8px 24px #0005!important;
+      }
+
+      .ksk-msg-row-menu-panel .ksk-msg-actions {
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:3px!important;
+        width:100%!important;
+      }
+
+      .ksk-msg-row-menu-panel .ksk-msg-action {
+        display:block!important;
+        width:100%!important;
+        min-height:39px!important;
+        margin:0!important;
+        padding:8px 10px!important;
+        border:0!important;
+        border-radius:7px!important;
+        background:transparent!important;
+        color:var(--color-text,#e9edef)!important;
+        text-align:left!important;
+        font:inherit!important;
+        font-size:14px!important;
+        cursor:pointer!important;
+      }
+
+      .ksk-msg-row-menu-panel .ksk-msg-action:hover {
+        background:var(--color-surface-secondary,#263746)!important;
+      }
+
+      /* Existing chat detail styles */
+
       #otherPageText:has(.ksk-msg-detail) > h1,
       #otherPageText:has(.ksk-msg-detail) > h2,
       #otherPageText:has(.ksk-msg-detail) > h3 {
@@ -311,7 +401,6 @@
         color:#e9edef!important;
       }
 
-      /* Composer */
       .ksk-msg-detail > .ksk-msg-send-form {
         position:relative!important;
         z-index:5!important;
@@ -478,6 +567,33 @@
     document.head.appendChild(style);
   }
 
+  function repairConversationMenus() {
+    document.querySelectorAll(".ksk-msg-row").forEach(row => {
+      const actions = row.querySelector(
+        ":scope > .ksk-msg-actions"
+      );
+
+      if (!actions || row.dataset.menuReady === "yes") return;
+
+      const menu = document.createElement("details");
+      menu.className = "ksk-msg-row-menu";
+
+      const summary = document.createElement("summary");
+      summary.textContent = "⋮";
+      summary.setAttribute("aria-label", "Conversation options");
+      summary.title = "Conversation options";
+
+      const panel = document.createElement("div");
+      panel.className = "ksk-msg-row-menu-panel";
+
+      panel.appendChild(actions);
+      menu.append(summary, panel);
+      row.appendChild(menu);
+
+      row.dataset.menuReady = "yes";
+    });
+  }
+
   function resizeComposer(form) {
     const area = form.querySelector(".ksk-msg-compose");
     const send = form.querySelector(".ksk-wa-send");
@@ -558,6 +674,7 @@
 
   function repairChat() {
     addStyles();
+    repairConversationMenus();
 
     document.querySelectorAll(".ksk-msg-detail").forEach(detail => {
       const header = detail.querySelector(
@@ -646,6 +763,22 @@
   });
 
   document.addEventListener("click", event => {
+    const menuSummary = event.target.closest(
+      ".ksk-msg-row-menu > summary"
+    );
+
+    if (menuSummary) {
+      const currentMenu = menuSummary.parentElement;
+
+      document.querySelectorAll(
+        ".ksk-msg-row-menu[open]"
+      ).forEach(menu => {
+        if (menu !== currentMenu) menu.removeAttribute("open");
+      });
+
+      return;
+    }
+
     const gallery = event.target.closest("[data-wa-gallery]");
     if (gallery) {
       gallery.closest("[data-send-form]")
@@ -675,6 +808,12 @@
         ".ksk-msg-history-item.ksk-wa-actions-open"
       ).forEach(item => item.classList.remove("ksk-wa-actions-open"));
     }
+
+    if (!event.target.closest(".ksk-msg-row-menu")) {
+      document.querySelectorAll(
+        ".ksk-msg-row-menu[open]"
+      ).forEach(menu => menu.removeAttribute("open"));
+    }
   });
 
   document.addEventListener("input", event => {
@@ -700,6 +839,10 @@
       document.querySelectorAll(
         ".ksk-msg-history-item.ksk-wa-actions-open"
       ).forEach(item => item.classList.remove("ksk-wa-actions-open"));
+
+      document.querySelectorAll(
+        ".ksk-msg-row-menu[open]"
+      ).forEach(menu => menu.removeAttribute("open"));
     }
   });
 
