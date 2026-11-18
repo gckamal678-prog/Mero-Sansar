@@ -38,6 +38,10 @@
   let presenceChannel = null;
   let presenceReady = null;
   let activePresenceConversation = "";
+  let globalPresenceChannel = null;
+  let globalPresenceClient = null;
+  let globalPresenceUserId = "";
+  let globalPresenceReady = null;
   let typingTimers = new Map();
   let typingUsers = new Set();
   let lastPresenceWrite = 0;
@@ -1284,6 +1288,143 @@
     }
   }
 
+  async function startGlobalPresence() {
+    try {
+      if (global.navigator?.onLine === false) return false;
+
+      const { client, user } = await getContext();
+
+      if (
+        globalPresenceChannel &&
+        globalPresenceClient === client &&
+        globalPresenceUserId === user.id
+      ) {
+        return globalPresenceReady
+          ? await globalPresenceReady
+          : false;
+      }
+
+      await stopGlobalPresence();
+
+      const channel = client.channel(
+        "ksk-global-presence",
+        {
+          config: {
+            presence: { key: user.id }
+          }
+        }
+      );
+
+      channel.on("presence", { event: "sync" }, () => {
+        if (globalPresenceChannel !== channel) return;
+
+        notify("global-presence-sync", {
+          state: channel.presenceState()
+        });
+      });
+
+      globalPresenceChannel = channel;
+      globalPresenceClient = client;
+      globalPresenceUserId = user.id;
+
+      const readyPromise = new Promise(resolve => {
+        let settled = false;
+        let timeoutId = global.setTimeout(
+          () => finish(false),
+          15000
+        );
+
+        function finish(value) {
+          if (settled) return;
+          settled = true;
+
+          if (timeoutId !== null) {
+            global.clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+
+          resolve(value);
+        }
+
+        channel.subscribe(async status => {
+          if (globalPresenceChannel !== channel) {
+            finish(false);
+            return;
+          }
+
+          if (status === "SUBSCRIBED") {
+            try {
+              const tracked = await channel.track({
+                userId: user.id,
+                onlineAt: new Date().toISOString()
+              });
+
+              if (globalPresenceChannel !== channel) {
+                finish(false);
+                return;
+              }
+
+              await updateLastSeen();
+
+              finish(
+                tracked === "ok" ||
+                tracked === undefined
+              );
+            } catch (error) {
+              console.warn("Global Presence track:", error);
+              finish(false);
+            }
+
+            return;
+          }
+
+          if (
+            ["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)
+          ) {
+            notify("global-presence-sync", { state: {} });
+            finish(false);
+          }
+        });
+      });
+
+      globalPresenceReady = readyPromise;
+
+      const ready = await readyPromise;
+
+      if (!ready && globalPresenceChannel === channel) {
+        await stopGlobalPresence();
+      }
+
+      return ready;
+
+    } catch (error) {
+      console.warn("Global Presence:", error);
+      return false;
+    }
+  }
+
+  async function stopGlobalPresence() {
+    const old = globalPresenceChannel;
+    const client = globalPresenceClient;
+
+    globalPresenceChannel = null;
+    globalPresenceClient = null;
+    globalPresenceUserId = "";
+    globalPresenceReady = null;
+
+    notify("global-presence-sync", { state: {} });
+
+    if (old && client?.removeChannel) {
+      try {
+        await client.removeChannel(old);
+      } catch (error) {
+        console.warn("Global Presence cleanup:", error);
+      }
+    }
+
+    return true;
+  }
+
   async function startPresence(conversationId) {
     try {
       const id = String(conversationId || "").trim();
@@ -1478,6 +1619,7 @@
     }
 
     await stopPresence();
+    await stopGlobalPresence();
 
     return true;
   }
@@ -1504,6 +1646,7 @@
         realtimeClient === client &&
         realtimeUserId === user.id
       ) {
+        await startGlobalPresence();
         return true;
       }
 
@@ -1613,6 +1756,7 @@
         }
 
         await updateLastSeen();
+        await startGlobalPresence();
         return true;
 
       } catch (error) {
@@ -1673,11 +1817,18 @@
 
   global.addEventListener("online", () => {
     startRealtime();
+    startGlobalPresence();
     updateLastSeen();
+  });
+
+  global.addEventListener("offline", () => {
+    stopGlobalPresence();
+    notify("global-presence-sync", { state: {} });
   });
 
   global.addEventListener("pagehide", () => {
     stopPresence();
+    stopGlobalPresence();
   });
 
   /* =========================================
@@ -1716,6 +1867,8 @@
 
     startPresence,
     stopPresence,
+    startGlobalPresence,
+    stopGlobalPresence,
     sendTyping,
     updateLastSeen,
 
