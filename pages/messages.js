@@ -234,6 +234,18 @@
         font-size:13px;
       }
 
+      .ksk-msg-back {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        width:38px;
+        height:38px;
+        padding:0;
+        border-radius:10px;
+        font-size:16px;
+        margin-bottom:10px;
+      }
+
       .ksk-msg-tab {
         border-radius:30px;
       }
@@ -371,8 +383,11 @@
         flex-direction:column;
         gap:10px;
         min-width:0;
-        min-height:120px;
+        height:380px;
+        max-height:60vh;
+        overflow-y:auto;
         margin:14px 0;
+        padding-right:4px;
       }
 
       .ksk-msg-history-item {
@@ -768,7 +783,13 @@
       loadingOlder
     ) return false;
 
+    const history = document.querySelector(".ksk-msg-history");
+
+    const previousHeight = history?.scrollHeight || 0;
+    const previousTop = history?.scrollTop || 0;
+
     loadingOlder = true;
+
     const id = activeChatId;
     const token = messageRequestToken;
 
@@ -782,12 +803,29 @@
         token
       });
 
-      if (ok && activeMessages.length === beforeCount) {
+      if (!ok) return false;
+
+      if (activeMessages.length === beforeCount) {
         hasOlderMessages = false;
+        return false;
       }
 
-      if (ok) refreshPage();
-      return ok;
+      refreshPage();
+
+      requestAnimationFrame(() => {
+        const updatedHistory = document.querySelector(
+          ".ksk-msg-history"
+        );
+
+        if (!updatedHistory) return;
+
+        const addedHeight =
+          updatedHistory.scrollHeight - previousHeight;
+
+        updatedHistory.scrollTop = previousTop + addedHeight;
+      });
+
+      return true;
     } catch (error) {
       toast(error.message, "error");
       return false;
@@ -831,11 +869,6 @@
       });
   }
 
-  /*
-   * The current conversations API returns only the latest message
-   * and lastReadAt, not a complete unread-message count.
-   * Display an unread indicator, not a fabricated numeric count.
-   */
   function hasUnread(chat) {
     if (!chat?.lastMessage || chat.lastMessage.fromMe) return false;
 
@@ -1278,10 +1311,12 @@
 
     return `
       <section class="ksk-msg-page">
-        <button class="ksk-msg-secondary"
+        <button class="ksk-msg-secondary ksk-msg-back"
                 type="button"
-                data-action="back">
-          ← ${escapeHTML(t("सन्देश सूची", "Conversations"))}
+                data-action="back"
+                aria-label="Back"
+                title="Back">
+          ←
         </button>
 
         <div class="ksk-msg-detail">
@@ -1343,15 +1378,6 @@
           </div>
 
           ${renderSearchResults()}
-
-          <button class="ksk-msg-secondary"
-                  type="button"
-                  data-action="load-older"
-                  ${!hasOlderMessages || loadingOlder ? "disabled" : ""}>
-            ${loadingOlder
-              ? escapeHTML(t("लोड हुँदैछ...", "Loading..."))
-              : escapeHTML(t("पुराना सन्देश", "Older messages"))}
-          </button>
 
           <div class="ksk-msg-history" aria-live="polite">
             ${activeMessages.length
@@ -1451,11 +1477,14 @@
 
       if (!ok || token !== chatRequestToken) return false;
 
-      /*
-       * markRead writes delivered_at and read_at together for
-       * incoming messages. Do not call markDelivered afterwards:
-       * that older sequence could overwrite receipt timestamps.
-       */
+      requestAnimationFrame(() => {
+        const history = document.querySelector(".ksk-msg-history");
+
+        if (history) {
+          history.scrollTop = history.scrollHeight;
+        }
+      });
+
       const readResult = await service().markRead(id);
 
       if (token !== chatRequestToken) return false;
@@ -1716,6 +1745,14 @@
       await loadMessages(id, { token: messageRequestToken });
       await loadConversations();
 
+      requestAnimationFrame(() => {
+        const history = document.querySelector(".ksk-msg-history");
+
+        if (history) {
+          history.scrollTop = history.scrollHeight;
+        }
+      });
+
       return true;
     } catch (error) {
       toast(error.message, "error");
@@ -1949,6 +1986,20 @@
      EVENT HANDLERS
   ======================================================= */
 
+  function handleHistoryScroll(event) {
+    const history = event.target;
+
+    if (!history.matches(".ksk-msg-history")) return;
+
+    if (
+      history.scrollTop <= 80 &&
+      hasOlderMessages &&
+      !loadingOlder
+    ) {
+      loadOlderMessages();
+    }
+  }
+
   function handleClick(event) {
     const target = event.target?.closest?.("[data-action]");
     if (!target) return;
@@ -2016,7 +2067,6 @@
     }
 
     if (action === "search-messages") return void searchMessages();
-    if (action === "load-older") return void loadOlderMessages();
 
     if (action === "toggle-group-members") {
       groupMembersOpen = !groupMembersOpen;
@@ -2210,10 +2260,6 @@
             ""
           ) === String(id);
 
-        /*
-         * Do not mark own messages as delivered.
-         * If the chat is open, markRead handles delivered + read.
-         */
         if (isIncomingInsert && isPageVisible()) {
           await service().markRead(id);
         }
@@ -2298,6 +2344,10 @@
         document.addEventListener("input", handleInput);
         document.addEventListener("change", handleChange);
         document.addEventListener("submit", handleSubmit);
+        document.addEventListener("scroll", handleHistoryScroll, {
+          passive: true,
+          capture: true
+        });
 
         global.addEventListener(
           "ksk:messages-cloud-change",
