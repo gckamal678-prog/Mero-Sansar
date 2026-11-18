@@ -9,6 +9,7 @@
   let observer = null;
   let currentStatus = null;
   let busy = false;
+  let refreshVersion = 0;
 
   const language = () =>
     global.KSKLanguage?.getLanguage?.() === "en";
@@ -20,6 +21,8 @@
   }
 
   function renderStatus(panel) {
+    if (!panel) return;
+
     const status = panel.querySelector("[data-push-status]");
     const button = panel.querySelector("[data-push-toggle]");
 
@@ -34,18 +37,12 @@
       return;
     }
 
-    if (!currentStatus) {
-      status.textContent = text(
-        "Push स्थिति जाँच हुँदैछ...",
-        "Checking Push status..."
-      );
-      button.disabled = true;
-      return;
-    }
-
-    if (!currentStatus.ok) {
-      status.textContent = currentStatus.message ||
-        text("Push उपलब्ध छैन।", "Push is unavailable.");
+    if (!currentStatus || !currentStatus.ok) {
+      status.textContent = currentStatus?.message ||
+        text(
+          "Push स्थिति जाँच हुँदैछ...",
+          "Checking Push status..."
+        );
 
       button.textContent = text(
         "पुनः जाँच गर्नुहोस्",
@@ -58,15 +55,32 @@
 
     const data = currentStatus.data;
 
+    if (!data || typeof data !== "object") {
+      status.textContent = text(
+        "Push स्थिति उपलब्ध भएन। पुनः जाँच गर्नुहोस्।",
+        "Push status is unavailable. Please check again."
+      );
+
+      button.textContent = text(
+        "पुनः जाँच गर्नुहोस्",
+        "Check again"
+      );
+
+      button.disabled = false;
+      return;
+    }
+
     if (data.permission === "denied") {
       status.textContent = text(
         "ब्राउजरमा Notification अनुमति बन्द छ। ब्राउजर Settings मा अनुमति खोल्नुहोस्।",
         "Notification permission is blocked in browser settings."
       );
+
       button.textContent = text(
         "अनुमति बन्द छ",
         "Permission blocked"
       );
+
       button.disabled = true;
       return;
     }
@@ -90,7 +104,10 @@
 
   async function refresh() {
     const panel = document.getElementById("kskPushSettings");
+
     if (!panel) return;
+
+    const version = ++refreshVersion;
 
     currentStatus = null;
     renderStatus(panel);
@@ -98,6 +115,8 @@
     const api = global.KSKSupabasePush;
 
     if (!api?.getStatus) {
+      if (version !== refreshVersion) return;
+
       currentStatus = {
         ok: false,
         message: text(
@@ -105,8 +124,38 @@
           "Push service did not load."
         )
       };
-    } else {
-      currentStatus = await api.getStatus();
+
+      renderStatus(panel);
+      return;
+    }
+
+    try {
+      const result = await api.getStatus();
+
+      if (version !== refreshVersion) return;
+
+      if (!result || typeof result !== "object") {
+        currentStatus = {
+          ok: false,
+          message: text(
+            "Push बाट मान्य उत्तर आएन।",
+            "Push service returned an invalid response."
+          )
+        };
+      } else {
+        currentStatus = result;
+      }
+
+    } catch (error) {
+      if (version !== refreshVersion) return;
+
+      currentStatus = {
+        ok: false,
+        message: error?.message || text(
+          "Push स्थिति जाँच गर्न सकिएन।",
+          "Could not check Push status."
+        )
+      };
     }
 
     renderStatus(panel);
@@ -122,14 +171,21 @@
     }
 
     const panel = document.createElement("section");
+
     panel.id = "kskPushSettings";
     panel.className = "ksk-push-settings";
 
     panel.innerHTML = `
-      <h3>${text("📲 Background Notification", "📲 Background Notifications")}</h3>
+      <h3>${text(
+        "📲 Background Notification",
+        "📲 Background Notifications"
+      )}</h3>
 
       <p data-push-status>
-        ${text("Push स्थिति जाँच हुँदैछ...", "Checking Push status...")}
+        ${text(
+          "Push स्थिति जाँच हुँदैछ...",
+          "Checking Push status..."
+        )}
       </p>
 
       <button
@@ -153,55 +209,81 @@
   }
 
   async function handleClick(event) {
-    const button = event.target?.closest?.("[data-push-toggle]");
+    const button = event.target?.closest?.(
+      "[data-push-toggle]"
+    );
+
     if (!button || busy) return;
 
     const api = global.KSKSupabasePush;
 
     if (!api) {
-      notify(text("Push सेवा उपलब्ध छैन।", "Push service unavailable."), "error");
+      notify(
+        text(
+          "Push सेवा उपलब्ध छैन।",
+          "Push service unavailable."
+        ),
+        "error"
+      );
       return;
     }
 
-    if (!currentStatus?.ok) {
+    if (!currentStatus?.ok ||
+        !currentStatus.data ||
+        typeof currentStatus.data !== "object") {
       await refresh();
       return;
     }
 
+    // महत्वपूर्ण: Event ले currentStatus null बनाउनुअघि पुरानो स्थिति सुरक्षित गर्ने।
+    const wasSubscribed = Boolean(
+      currentStatus.data.subscribed
+    );
+
     busy = true;
-    const panel = document.getElementById("kskPushSettings");
+
+    const panel = document.getElementById(
+      "kskPushSettings"
+    );
+
     renderStatus(panel);
 
     try {
-      /*
-       * enable() is invoked directly from this click handler.
-       * It requests permission before awaiting anything.
-       */
-      const operation = currentStatus.data.subscribed
-        ? api.disable()
-        : api.enable();
+      const response = wasSubscribed
+        ? await api.disable()
+        : await api.enable();
 
-      const response = await operation;
-
-      if (!response?.ok) {
-        throw new Error(response?.message || text(
-          "Push परिवर्तन गर्न सकिएन।",
-          "Could not update Push settings."
-        ));
+      if (!response || !response.ok) {
+        throw new Error(
+          response?.message || text(
+            "Push परिवर्तन गर्न सकिएन।",
+            "Could not update Push settings."
+          )
+        );
       }
 
       notify(
-        currentStatus.data.subscribed
-          ? text("Push बन्द भयो।", "Push notifications disabled.")
-          : text("Push सक्रिय भयो।", "Push notifications enabled."),
+        wasSubscribed
+          ? text(
+              "Push बन्द भयो।",
+              "Push notifications disabled."
+            )
+          : text(
+              "Push सक्रिय भयो।",
+              "Push notifications enabled."
+            ),
         "success"
       );
 
     } catch (error) {
       notify(
-        error?.message || text("Push परिवर्तन असफल भयो।", "Push update failed."),
+        error?.message || text(
+          "Push परिवर्तन असफल भयो।",
+          "Push update failed."
+        ),
         "error"
       );
+
     } finally {
       busy = false;
       await refresh();
@@ -229,7 +311,11 @@
     };
 
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", start, { once: true });
+      document.addEventListener(
+        "DOMContentLoaded",
+        start,
+        { once: true }
+      );
     } else {
       start();
     }
@@ -239,7 +325,10 @@
       refresh
     );
 
-    global.addEventListener("ksk:auth-change", refresh);
+    global.addEventListener(
+      "ksk:auth-change",
+      refresh
+    );
 
     return true;
   }
