@@ -1,4 +1,3 @@
-
 "use strict";
 
 /* =========================================================
@@ -28,7 +27,6 @@
   let session = null;
   let sdkPromise = null;
 
-  // एउटै समयमा धेरै पटक Auth Initialization हुन नदिने।
   let clientInitializationPromise = null;
   let initializationPromise = null;
 
@@ -175,11 +173,11 @@
   /* =======================================================
      INITIALIZE CLIENT
      FIX: SHARE ONE INITIALIZATION PROMISE
+     FIX: VALIDATE GET SESSION RESPONSE
   ======================================================= */
 
   function initializeClient() {
     if (client && session !== undefined) {
-      // Client तयार भइसकेको भए यही प्रयोग गर्ने।
       if (clientInitializationPromise === null) {
         return Promise.resolve(client);
       }
@@ -208,9 +206,21 @@
 
       const result = await client.auth.getSession();
 
+      if (!result || typeof result !== "object") {
+        throw new Error(
+          "Supabase Session बाट मान्य उत्तर आएन। कृपया पेज Reload गर्नुहोस्।"
+        );
+      }
+
       if (result.error) throw result.error;
 
-      session = result.data?.session || null;
+      if (!result.data || typeof result.data !== "object") {
+        throw new Error(
+          "Supabase Session विवरण उपलब्ध छैन।"
+        );
+      }
+
+      session = result.data.session || null;
 
       if (session?.user && !isVerified(session.user)) {
         await client.auth.signOut();
@@ -257,7 +267,6 @@
     })();
 
     return clientInitializationPromise.catch(error => {
-      // असफल भए अर्को पटक पुनः Initialization गर्न दिने।
       clientInitializationPromise = null;
       client = null;
       session = null;
@@ -1108,7 +1117,6 @@
           }
         ));
 
-        // असफल Initialization पछि पुनः प्रयास गर्न दिने।
         initializationPromise = null;
 
         return false;
