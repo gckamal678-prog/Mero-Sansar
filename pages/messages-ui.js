@@ -1,10 +1,7 @@
 /* =========================================================
    MERO SANSAR — WHATSAPP CHAT UI
    File: pages/messages-ui.js
-
-   Existing Supabase messaging, send, edit, delete, reply,
-   forward and media-upload functions remain untouched.
-========================================================= */
+   ========================================================= */
 
 (function () {
   "use strict";
@@ -12,13 +9,10 @@
   if (window.__MERO_SANSAR_WA_CHAT_UI__) return;
   window.__MERO_SANSAR_WA_CHAT_UI__ = true;
 
+  // पुरानो Composer Fix सँग दोहोरो UI बन्न नदिन
+  window.MS_COMPOSER_FIX_V3 = true;
+
   const STYLE_ID = "mero-sansar-wa-chat-style";
-  const EMOJIS = [
-    "😀","😃","😄","😁","😆","😂","🤣","😊",
-    "😉","😍","🥰","😘","😎","😭","😢","😅",
-    "🤔","😮","😴","🙏","👍","👏","❤️","💕",
-    "🔥","🎉","🌹","💐","👌","🤗","😋","💯"
-  ];
 
   let holdTimer = null;
   let heldBubble = null;
@@ -31,7 +25,6 @@
     style.id = STYLE_ID;
 
     style.textContent = `
-      /* Remove the duplicate Conversations heading behind chat */
       #otherPageText:has(.ksk-msg-detail) > h1,
       #otherPageText:has(.ksk-msg-detail) > h2,
       #otherPageText:has(.ksk-msg-detail) > h3 {
@@ -73,7 +66,6 @@
         box-sizing:border-box!important;
       }
 
-      /* Chat header */
       .ksk-msg-detail > .ksk-msg-chat-header {
         position:relative!important;
         z-index:3!important;
@@ -127,7 +119,6 @@
         font-size:12px!important;
       }
 
-      /* Keep Block in a small menu */
       .ksk-wa-chat-options {
         position:relative!important;
         flex:0 0 38px!important;
@@ -172,7 +163,6 @@
         text-align:left!important;
       }
 
-      /* Search area */
       .ksk-msg-detail > .ksk-msg-toolbar {
         display:flex!important;
         flex:0 0 auto!important;
@@ -212,7 +202,6 @@
         color:#aebac1!important;
       }
 
-      /* Message history takes remaining space */
       .ksk-msg-detail > .ksk-msg-history {
         display:flex!important;
         flex:1 1 0!important;
@@ -287,7 +276,6 @@
         border-radius:8px!important;
       }
 
-      /* Message actions appear only after long press */
       .ksk-msg-bubble-actions {
         display:none!important;
         flex-wrap:wrap!important;
@@ -313,7 +301,6 @@
         font-size:12px!important;
       }
 
-      /* Reply preview */
       .ksk-msg-detail > .ksk-msg-reply-preview {
         flex:0 0 auto!important;
         margin:5px 9px 0!important;
@@ -324,7 +311,7 @@
         color:#e9edef!important;
       }
 
-      /* WhatsApp-style composer */
+      /* Composer */
       .ksk-msg-detail > .ksk-msg-send-form {
         position:relative!important;
         z-index:5!important;
@@ -336,6 +323,7 @@
         min-width:0!important;
         min-height:64px!important;
         margin:0!important;
+        margin-top:auto!important;
         padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))!important;
         background:#0b141a!important;
         border:0!important;
@@ -369,8 +357,18 @@
         border-radius:50%!important;
         background:transparent!important;
         color:#aebac1!important;
-        font-size:22px!important;
         cursor:pointer!important;
+      }
+
+      .ksk-wa-tool svg {
+        display:block!important;
+        width:21px!important;
+        height:21px!important;
+        fill:none!important;
+        stroke:currentColor!important;
+        stroke-width:1.8!important;
+        stroke-linecap:round!important;
+        stroke-linejoin:round!important;
       }
 
       .ksk-msg-detail .ksk-msg-compose {
@@ -431,39 +429,8 @@
       }
 
       .ksk-wa-send[hidden],
-      .ksk-wa-emoji-panel[hidden] {
-        display:none!important;
-      }
-
       .ksk-wa-file-input {
         display:none!important;
-      }
-
-      .ksk-wa-emoji-panel {
-        position:absolute!important;
-        left:8px!important;
-        bottom:calc(100% + 7px)!important;
-        z-index:30!important;
-        display:grid!important;
-        grid-template-columns:repeat(8,1fr)!important;
-        gap:3px!important;
-        width:min(300px,calc(100vw - 30px))!important;
-        max-height:220px!important;
-        overflow-y:auto!important;
-        padding:8px!important;
-        border:1px solid #34434b!important;
-        border-radius:13px!important;
-        background:#202c33!important;
-        box-shadow:0 8px 25px #0008!important;
-      }
-
-      .ksk-wa-emoji-panel button {
-        min-height:34px!important;
-        border:0!important;
-        border-radius:6px!important;
-        background:transparent!important;
-        color:white!important;
-        font-size:21px!important;
       }
 
       @media(max-width:520px) {
@@ -497,7 +464,6 @@
           flex-basis:30px!important;
           width:30px!important;
           min-width:30px!important;
-          font-size:20px!important;
         }
 
         .ksk-wa-send {
@@ -538,26 +504,6 @@
     const shell = document.createElement("div");
     shell.className = "ksk-wa-composer";
 
-    const emojiButton = document.createElement("button");
-    emojiButton.type = "button";
-    emojiButton.className = "ksk-wa-tool";
-    emojiButton.dataset.waEmojiToggle = "yes";
-    emojiButton.setAttribute("aria-label", "Emoji");
-    emojiButton.title = "Emoji";
-    emojiButton.textContent = "☺";
-
-    const emojiPanel = document.createElement("div");
-    emojiPanel.className = "ksk-wa-emoji-panel";
-    emojiPanel.hidden = true;
-
-    EMOJIS.forEach(emoji => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.waEmoji = emoji;
-      button.textContent = emoji;
-      emojiPanel.appendChild(button);
-    });
-
     const galleryInput = document.createElement("input");
     galleryInput.type = "file";
     galleryInput.accept = "image/*,video/*,.pdf,.doc,.docx";
@@ -579,7 +525,7 @@
     galleryButton.dataset.waGallery = "yes";
     galleryButton.title = "Gallery";
     galleryButton.setAttribute("aria-label", "Gallery");
-    galleryButton.textContent = "▧";
+    galleryButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></svg>';
 
     const cameraButton = document.createElement("button");
     cameraButton.type = "button";
@@ -587,7 +533,7 @@
     cameraButton.dataset.waCamera = "yes";
     cameraButton.title = "Camera";
     cameraButton.setAttribute("aria-label", "Camera");
-    cameraButton.textContent = "◎";
+    cameraButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>';
 
     area.placeholder = "Message";
     area.setAttribute("aria-label", "Write a message");
@@ -597,12 +543,7 @@
     send.textContent = "➤";
     send.setAttribute("aria-label", "Send message");
 
-    shell.append(
-      emojiButton,
-      area,
-      galleryButton,
-      cameraButton
-    );
+    shell.append(area, galleryButton, cameraButton);
 
     oldActions.replaceChildren(
       galleryInput,
@@ -610,11 +551,7 @@
       send
     );
 
-    form.replaceChildren(
-      emojiPanel,
-      shell,
-      oldActions
-    );
+    form.replaceChildren(shell, oldActions);
 
     resizeComposer(form);
   }
@@ -725,45 +662,6 @@
       return;
     }
 
-    const emojiToggle = event.target.closest("[data-wa-emoji-toggle]");
-    if (emojiToggle) {
-      const panel = emojiToggle.closest("[data-send-form]")
-        ?.querySelector(".ksk-wa-emoji-panel");
-
-      if (panel) panel.hidden = !panel.hidden;
-      return;
-    }
-
-    const emojiButton = event.target.closest("[data-wa-emoji]");
-    if (emojiButton) {
-      const form = emojiButton.closest("[data-send-form]");
-      const area = form?.querySelector(".ksk-msg-compose");
-
-      if (!area) return;
-
-      const start = area.selectionStart ?? area.value.length;
-      const end = area.selectionEnd ?? start;
-      const emoji = emojiButton.dataset.waEmoji || "";
-
-      area.value =
-        area.value.slice(0, start) +
-        emoji +
-        area.value.slice(end);
-
-      area.focus();
-      area.setSelectionRange(
-        start + emoji.length,
-        start + emoji.length
-      );
-
-      resizeComposer(form);
-      area.dispatchEvent(new Event("input", { bubbles: true }));
-
-      const panel = form.querySelector(".ksk-wa-emoji-panel");
-      if (panel) panel.hidden = true;
-      return;
-    }
-
     if (event.target.closest(".ksk-msg-bubble-actions")) {
       const bubble = event.target.closest(".ksk-msg-history-item");
       if (bubble) {
@@ -799,10 +697,6 @@
 
   document.addEventListener("keydown", event => {
     if (event.key === "Escape") {
-      document.querySelectorAll(".ksk-wa-emoji-panel").forEach(panel => {
-        panel.hidden = true;
-      });
-
       document.querySelectorAll(
         ".ksk-msg-history-item.ksk-wa-actions-open"
       ).forEach(item => item.classList.remove("ksk-wa-actions-open"));
