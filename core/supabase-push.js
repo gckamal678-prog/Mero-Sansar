@@ -1,14 +1,9 @@
 
 "use strict";
 
-/*
- * MERO SANSAR — WEB PUSH
- * Permission, subscription, status and unsubscribe.
- */
+/* MERO SANSAR — WEB PUSH FIX */
 
 (function (global) {
-  "use strict";
-
   if (global.KSKSupabasePush) return;
 
   const TABLE = "push_subscriptions";
@@ -16,12 +11,12 @@
   const VAPID_PUBLIC_KEY =
     "BGEZozsFObXqv7EuYO-n-p4PPhy24bQ1MMAONbHQvm4Rz7cEGZzBuS60PveHr_c_FfDR5iP08_4eAPor5M3hkCk";
 
-  function result(ok, code, data = null, message = "") {
-    return { ok, code, data, message };
+  function ok(code, data = null, message = "") {
+    return { ok: true, code, data, message };
   }
 
   function fail(code, message) {
-    return result(false, code, null, message);
+    return { ok: false, code, data: null, message };
   }
 
   function base64UrlToUint8Array(value) {
@@ -31,36 +26,7 @@
       .replace(/_/g, "/");
 
     const raw = global.atob(base64);
-    const output = new Uint8Array(raw.length);
-
-    for (let i = 0; i < raw.length; i++) {
-      output[i] = raw.charCodeAt(i);
-    }
-
-    return output;
-  }
-
-  async function getSession() {
-    const auth = global.KSKSupabaseAuth;
-
-    if (!auth) {
-      return fail("AUTH_MODULE_MISSING", "Supabase Auth उपलब्ध छैन।");
-    }
-
-    await auth.initialize();
-
-    if (!auth.isAuthenticated?.()) {
-      return fail("NOT_AUTHENTICATED", "पहिले लगइन गर्नुहोस्।");
-    }
-
-    const client = auth.getClient?.();
-    const user = auth.getUser?.();
-
-    if (!client || !user?.id) {
-      return fail("USER_NOT_AVAILABLE", "प्रयोगकर्ता विवरण उपलब्ध छैन।");
-    }
-
-    return result(true, "READY", { client, user });
+    return Uint8Array.from(raw, c => c.charCodeAt(0));
   }
 
   function supported() {
@@ -72,15 +38,59 @@
     );
   }
 
+  async function getSession() {
+    const auth = global.KSKSupabaseAuth;
+
+    if (!auth) {
+      throw new Error("Supabase Auth Module उपलब्ध छैन।");
+    }
+
+    const initialized = await auth.initialize();
+
+    if (initialized !== true) {
+      throw new Error("Supabase Auth सुरु हुन सकेन। पेज Reload गर्नुहोस्।");
+    }
+
+    const client = auth.getClient?.();
+
+    if (!client?.auth) {
+      throw new Error("Supabase Client उपलब्ध छैन।");
+    }
+
+    const sessionResult = await client.auth.getSession();
+
+    if (!sessionResult || typeof sessionResult !== "object") {
+      throw new Error("Supabase Session बाट खाली उत्तर आयो।");
+    }
+
+    if (sessionResult.error) {
+      throw sessionResult.error;
+    }
+
+    const session = sessionResult.data?.session;
+    const user = session?.user;
+
+    if (!user?.id) {
+      throw new Error("पहिले आफ्नो खातामा Login गर्नुहोस्।");
+    }
+
+    if (!(user.email_confirmed_at || user.confirmed_at)) {
+      throw new Error("कृपया आफ्नो Email Verify गर्नुहोस्।");
+    }
+
+    return { client, user };
+  }
+
   async function getRegistration() {
     if (!supported()) {
       throw new Error("यो ब्राउजरमा Web Push उपलब्ध छैन।");
     }
 
-    const registration = await global.navigator.serviceWorker.ready;
+    const registration =
+      await global.navigator.serviceWorker.ready;
 
     if (!registration?.pushManager) {
-      throw new Error("Push Manager उपलब्ध छैन।");
+      throw new Error("Service Worker Push Manager उपलब्ध छैन।");
     }
 
     return registration;
@@ -89,7 +99,7 @@
   function makePayload(subscription, userId) {
     const json = subscription.toJSON();
 
-    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+    if (!json?.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
       throw new Error("Push Subscription विवरण अपूर्ण छ।");
     }
 
@@ -111,16 +121,16 @@
         return fail("UNSUPPORTED", "यो ब्राउजरमा Push उपलब्ध छैन।");
       }
 
-      const session = await getSession();
-      if (!session.ok) return session;
-
+      const { client, user } = await getSession();
       const registration = await getRegistration();
-      const subscription = await registration.pushManager.getSubscription();
+      const subscription =
+        await registration.pushManager.getSubscription();
 
-      return result(true, "PUSH_STATUS", {
+      return ok("PUSH_STATUS", {
         permission: global.Notification.permission,
         subscribed: Boolean(subscription),
-        endpoint: subscription?.endpoint || ""
+        endpoint: subscription?.endpoint || "",
+        userId: user.id
       });
     } catch (error) {
       return fail(
@@ -130,12 +140,9 @@
     }
   }
 
-  /*
-   * IMPORTANT:
-   * Permission request happens before the first await.
-   * This preserves the user's tap gesture on Android browsers.
-   */
   async function enable() {
+    let stage = "permission";
+
     try {
       if (!supported()) {
         return fail("UNSUPPORTED", "यो ब्राउजरमा Push उपलब्ध छैन।");
@@ -144,79 +151,92 @@
       let permission = global.Notification.permission;
 
       if (permission === "default") {
-        const permissionRequest =
-          global.Notification.requestPermission();
-
-        permission = await permissionRequest;
+        permission = await global.Notification.requestPermission();
       }
 
       if (permission !== "granted") {
         return fail(
           "PERMISSION_DENIED",
-          "Notification अनुमति प्राप्त भएन। ब्राउजर Settings मा अनुमति जाँच गर्नुहोस्।"
+          "Notification अनुमति प्राप्त भएन।"
         );
       }
 
-      const session = await getSession();
-      if (!session.ok) return session;
+      stage = "authentication";
+      const { client, user } = await getSession();
 
+      stage = "service-worker";
       const registration = await getRegistration();
 
-      let subscription = await registration.pushManager.getSubscription();
+      stage = "subscription";
+      let subscription =
+        await registration.pushManager.getSubscription();
 
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: base64UrlToUint8Array(VAPID_PUBLIC_KEY)
+          applicationServerKey:
+            base64UrlToUint8Array(VAPID_PUBLIC_KEY)
         });
       }
 
-      const payload = makePayload(subscription, session.data.user.id);
+      stage = "database-save";
+      const payload = makePayload(subscription, user.id);
 
-      const { error } = await session.data.client
+      const saveResult = await client
         .from(TABLE)
         .upsert(payload, { onConflict: "endpoint" });
 
-      if (error) throw error;
+      if (!saveResult || typeof saveResult !== "object") {
+        throw new Error("Database बाट खाली उत्तर आयो।");
+      }
+
+      if (saveResult.error) {
+        throw saveResult.error;
+      }
 
       global.dispatchEvent(new CustomEvent(
         "ksk:push-subscription-change",
         { detail: { subscribed: true } }
       ));
 
-      return result(true, "PUSH_ENABLED", { subscribed: true });
+      return ok("PUSH_ENABLED", {
+        subscribed: true,
+        endpoint: subscription.endpoint
+      });
 
     } catch (error) {
-      console.error("Push enable failed:", error);
+      console.error("Push enable failed at:", stage, error);
 
       return fail(
         "PUSH_ENABLE_FAILED",
-        error?.message || "Push सक्रिय गर्न सकिएन।"
+        "[" + stage + "] " +
+        (error?.message || "Push सक्रिय गर्न सकिएन।")
       );
     }
   }
 
   async function disable() {
     try {
-      const session = await getSession();
-      if (!session.ok) return session;
-
+      const { client, user } = await getSession();
       const registration = await getRegistration();
-      const subscription = await registration.pushManager.getSubscription();
+
+      const subscription =
+        await registration.pushManager.getSubscription();
 
       if (!subscription) {
-        return result(true, "ALREADY_DISABLED", {
-          subscribed: false
-        });
+        return ok("ALREADY_DISABLED", { subscribed: false });
       }
 
-      const { error } = await session.data.client
+      const deleteResult = await client
         .from(TABLE)
         .delete()
-        .eq("user_id", session.data.user.id)
+        .eq("user_id", user.id)
         .eq("endpoint", subscription.endpoint);
 
-      if (error) throw error;
+      if (!deleteResult || deleteResult.error) {
+        throw deleteResult?.error ||
+          new Error("Database बाट Subscription हटाउन सकिएन।");
+      }
 
       await subscription.unsubscribe();
 
@@ -225,11 +245,9 @@
         { detail: { subscribed: false } }
       ));
 
-      return result(true, "PUSH_DISABLED", { subscribed: false });
+      return ok("PUSH_DISABLED", { subscribed: false });
 
     } catch (error) {
-      console.error("Push disable failed:", error);
-
       return fail(
         "PUSH_DISABLE_FAILED",
         error?.message || "Push बन्द गर्न सकिएन।"
@@ -244,3 +262,4 @@
   });
 
 })(window);
+ 
