@@ -1,8 +1,9 @@
 
 /* =========================================================
-   MERO SANSAR — WHATSAPP CHAT UI
+   MERO SANSAR — WHATSAPP CHAT UI + COMPOSER
+   FULL REPLACEMENT
    File: pages/messages-ui.js
-   ========================================================= */
+========================================================= */
 
 (function () {
   "use strict";
@@ -10,13 +11,26 @@
   if (window.__MERO_SANSAR_WA_CHAT_UI__) return;
   window.__MERO_SANSAR_WA_CHAT_UI__ = true;
 
+  // पुरानो composer-fix script सँग दोहोरो काम हुन नदिने
   window.MS_COMPOSER_FIX_V3 = true;
 
   const STYLE_ID = "mero-sansar-wa-chat-style";
-
   let holdTimer = null;
   let heldBubble = null;
   let observer = null;
+
+  const GALLERY_ICON = `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="4"></rect>
+      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+      <path d="m21 15-5-5L5 21"></path>
+    </svg>`;
+
+  const CAMERA_ICON = `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"></path>
+      <circle cx="12" cy="13" r="3.5"></circle>
+    </svg>`;
 
   function addStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -25,7 +39,7 @@
     style.id = STYLE_ID;
 
     style.textContent = `
-      /* Conversation list: three-dot menu */
+      /* CONVERSATION THREE DOT MENU */
 
       .ksk-msg-row {
         position:relative!important;
@@ -76,8 +90,6 @@
         right:0!important;
         z-index:100!important;
         display:grid!important;
-        grid-template-columns:1fr!important;
-        gap:3px!important;
         width:145px!important;
         padding:7px!important;
         border:1px solid var(--color-border,#34434b)!important;
@@ -113,7 +125,7 @@
         background:var(--color-surface-secondary,#263746)!important;
       }
 
-      /* Existing chat detail styles */
+      /* CHAT PAGE */
 
       #otherPageText:has(.ksk-msg-detail) > h1,
       #otherPageText:has(.ksk-msg-detail) > h2,
@@ -139,7 +151,7 @@
         flex-direction:column!important;
         width:100%!important;
         height:calc(100dvh - 155px)!important;
-        min-height:350px!important;
+        min-height:300px!important;
         max-height:calc(100dvh - 155px)!important;
         min-width:0!important;
         margin:0!important;
@@ -155,6 +167,8 @@
       .ksk-msg-detail * {
         box-sizing:border-box!important;
       }
+
+      /* CHAT HEADER */
 
       .ksk-msg-detail > .ksk-msg-chat-header {
         position:relative!important;
@@ -253,6 +267,8 @@
         text-align:left!important;
       }
 
+      /* CHAT TOOLBAR */
+
       .ksk-msg-detail > .ksk-msg-toolbar {
         display:flex!important;
         flex:0 0 auto!important;
@@ -279,18 +295,7 @@
         font-size:13px!important;
       }
 
-      .ksk-msg-detail > [data-action="load-older"] {
-        flex:0 0 auto!important;
-        width:100%!important;
-        min-height:42px!important;
-        margin:0!important;
-        padding:8px!important;
-        border:0!important;
-        border-bottom:1px solid #26343c!important;
-        border-radius:0!important;
-        background:#111b21!important;
-        color:#aebac1!important;
-      }
+      /* HISTORY */
 
       .ksk-msg-detail > .ksk-msg-history {
         display:flex!important;
@@ -401,11 +406,14 @@
         color:#e9edef!important;
       }
 
+      /* FIXED BOTTOM COMPOSER */
+
       .ksk-msg-detail > .ksk-msg-send-form {
         position:relative!important;
         z-index:5!important;
         display:flex!important;
         flex:0 0 auto!important;
+        flex-direction:row!important;
         align-items:flex-end!important;
         gap:7px!important;
         width:100%!important;
@@ -515,6 +523,7 @@
         color:#062d26!important;
         font-size:22px!important;
         font-weight:800!important;
+        cursor:pointer!important;
       }
 
       .ksk-wa-send[hidden],
@@ -567,11 +576,21 @@
     document.head.appendChild(style);
   }
 
+  function makeButton(className, label, icon) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.innerHTML = icon;
+    return button;
+  }
+
+  /* MOVE EXISTING ACTIONS INTO THREE-DOT MENU.
+     Existing Pin/Archive/Mute handlers remain attached. */
   function repairConversationMenus() {
     document.querySelectorAll(".ksk-msg-row").forEach(row => {
-      const actions = row.querySelector(
-        ":scope > .ksk-msg-actions"
-      );
+      const actions = row.querySelector(":scope > .ksk-msg-actions");
 
       if (!actions || row.dataset.menuReady === "yes") return;
 
@@ -612,6 +631,7 @@
     const area = form.querySelector(".ksk-msg-compose");
     const oldActions = form.querySelector(".ksk-msg-compose-actions");
     const send = oldActions?.querySelector('[type="submit"]');
+    const originalFile = oldActions?.querySelector('input[type="file"][data-media-file]');
 
     if (!area || !oldActions || !send) return;
 
@@ -620,12 +640,12 @@
     const shell = document.createElement("div");
     shell.className = "ksk-wa-composer";
 
-    const galleryInput = document.createElement("input");
+    const galleryInput = originalFile || document.createElement("input");
     galleryInput.type = "file";
     galleryInput.accept = "image/*,video/*,.pdf,.doc,.docx";
     galleryInput.dataset.mediaFile = "";
     galleryInput.className = "ksk-wa-file-input";
-    galleryInput.setAttribute("aria-label", "Choose from gallery");
+    galleryInput.removeAttribute("capture");
 
     const cameraInput = document.createElement("input");
     cameraInput.type = "file";
@@ -635,21 +655,19 @@
     cameraInput.className = "ksk-wa-file-input";
     cameraInput.setAttribute("aria-label", "Take a photo");
 
-    const galleryButton = document.createElement("button");
-    galleryButton.type = "button";
-    galleryButton.className = "ksk-wa-tool";
+    const galleryButton = makeButton(
+      "ksk-wa-tool",
+      "Gallery",
+      GALLERY_ICON
+    );
     galleryButton.dataset.waGallery = "yes";
-    galleryButton.title = "Gallery";
-    galleryButton.setAttribute("aria-label", "Gallery");
-    galleryButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></svg>';
 
-    const cameraButton = document.createElement("button");
-    cameraButton.type = "button";
-    cameraButton.className = "ksk-wa-tool";
+    const cameraButton = makeButton(
+      "ksk-wa-tool",
+      "Camera",
+      CAMERA_ICON
+    );
     cameraButton.dataset.waCamera = "yes";
-    cameraButton.title = "Camera";
-    cameraButton.setAttribute("aria-label", "Camera");
-    cameraButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>';
 
     area.placeholder = "Message";
     area.setAttribute("aria-label", "Write a message");
@@ -659,14 +677,15 @@
     send.textContent = "➤";
     send.setAttribute("aria-label", "Send message");
 
-    shell.append(area, galleryButton, cameraButton);
-
-    oldActions.replaceChildren(
+    shell.append(
+      galleryButton,
+      cameraButton,
+      area,
       galleryInput,
-      cameraInput,
-      send
+      cameraInput
     );
 
+    oldActions.replaceChildren(send);
     form.replaceChildren(shell, oldActions);
 
     resizeComposer(form);
@@ -734,6 +753,8 @@
     heldBubble = null;
   }
 
+  /* LONG PRESS MESSAGE ACTIONS */
+
   document.addEventListener("pointerdown", event => {
     const bubble = event.target.closest(".ksk-msg-history-item");
 
@@ -761,6 +782,8 @@
     event.preventDefault();
     showMessageActions(bubble);
   });
+
+  /* GALLERY / CAMERA / MENU INTERACTIONS */
 
   document.addEventListener("click", event => {
     const menuSummary = event.target.closest(
@@ -798,7 +821,9 @@
     if (event.target.closest(".ksk-msg-bubble-actions")) {
       const bubble = event.target.closest(".ksk-msg-history-item");
       if (bubble) {
-        setTimeout(() => bubble.classList.remove("ksk-wa-actions-open"), 150);
+        setTimeout(() => {
+          bubble.classList.remove("ksk-wa-actions-open");
+        }, 150);
       }
       return;
     }
@@ -806,7 +831,9 @@
     if (!event.target.closest(".ksk-msg-history-item")) {
       document.querySelectorAll(
         ".ksk-msg-history-item.ksk-wa-actions-open"
-      ).forEach(item => item.classList.remove("ksk-wa-actions-open"));
+      ).forEach(item => {
+        item.classList.remove("ksk-wa-actions-open");
+      });
     }
 
     if (!event.target.closest(".ksk-msg-row-menu")) {
@@ -816,12 +843,18 @@
     }
   });
 
+  /* TEXTAREA RESIZE */
+
   document.addEventListener("input", event => {
     if (!event.target.matches(".ksk-msg-compose")) return;
 
     const form = event.target.closest("[data-send-form]");
     if (form) resizeComposer(form);
   });
+
+  /* FILE SELECTED:
+     Keep the original data-media-file event flowing to messages.js.
+     Do not stop propagation or upload a second time. */
 
   document.addEventListener("change", event => {
     if (!event.target.matches(".ksk-wa-file-input")) return;
@@ -834,24 +867,35 @@
     }
   });
 
-  document.addEventListener("keydown", event => {
-    if (event.key === "Escape") {
-      document.querySelectorAll(
-        ".ksk-msg-history-item.ksk-wa-actions-open"
-      ).forEach(item => item.classList.remove("ksk-wa-actions-open"));
+  /* CLOSE MENUS AND MESSAGE ACTIONS */
 
-      document.querySelectorAll(
-        ".ksk-msg-row-menu[open]"
-      ).forEach(menu => menu.removeAttribute("open"));
-    }
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+
+    document.querySelectorAll(
+      ".ksk-msg-history-item.ksk-wa-actions-open"
+    ).forEach(item => {
+      item.classList.remove("ksk-wa-actions-open");
+    });
+
+    document.querySelectorAll(
+      ".ksk-msg-row-menu[open],.ksk-wa-chat-options[open]"
+    ).forEach(menu => menu.removeAttribute("open"));
   });
 
+  /* REPAIR DYNAMICALLY RENDERED CHAT UI */
+
   function start() {
+    if (!document.body) return;
+
     repairChat();
 
-    if (observer || !document.body) return;
+    if (observer) return;
 
-    observer = new MutationObserver(() => repairChat());
+    observer = new MutationObserver(() => {
+      repairChat();
+    });
+
     observer.observe(document.body, {
       childList: true,
       subtree: true
