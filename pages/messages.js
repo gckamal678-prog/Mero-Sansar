@@ -40,6 +40,7 @@
   let loading = false;
   let loadingOlder = false;
   let chatHistoryReady = false;
+  let lastHistoryScrollTop = 0;
   let sending = false;
 
   let oldestCursor = null;
@@ -1403,14 +1404,10 @@
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const history = document.querySelector(".ksk-msg-history");
-
         if (!history) return;
 
-        history.scrollTo({
-          top: history.scrollHeight,
-          behavior: "instant"
-        });
-
+        history.scrollTop = history.scrollHeight;
+        lastHistoryScrollTop = history.scrollTop;
         chatHistoryReady = true;
       });
     });
@@ -1589,7 +1586,9 @@
     activeChatId = id;
     activeChat = chat;
     activeMessages = [];
+
     chatHistoryReady = false;
+    lastHistoryScrollTop = 0;
 
     replyTarget = null;
     messageSearchResults = [];
@@ -1619,7 +1618,6 @@
       if (!ok || token !== chatRequestToken) return false;
 
       refreshPage();
-      scrollChatToBottom();
 
       const readResult = await service().markRead(id);
 
@@ -1635,12 +1633,19 @@
 
       await loadConversations();
 
+      if (token !== chatRequestToken) return false;
+
+      // अन्तिम Render पूरा भएपछि मात्र पछिल्लो मेसेजमा जाने
       refreshPage();
+      scrollChatToBottom();
+
       return true;
+
     } catch (error) {
       if (token === chatRequestToken) {
         toast(error.message, "error");
       }
+
       return false;
     }
   }
@@ -2128,12 +2133,16 @@
 
     if (!history.matches(".ksk-msg-history")) return;
 
-    // Initial positioning पूरा नभएसम्म पुराना मेसेज लोड नगर्ने
-    if (!chatHistoryReady) return;
+    const currentTop = history.scrollTop;
+    const movedUp = currentTop < lastHistoryScrollTop;
+
+    lastHistoryScrollTop = currentTop;
+
+    if (!chatHistoryReady || !movedUp) return;
 
     // प्रयोगकर्ताले आफैँ माथि स्क्रोल गरेपछि मात्र पुराना मेसेज लोड गर्ने
     if (
-      history.scrollTop <= 80 &&
+      currentTop <= 80 &&
       hasOlderMessages &&
       !loadingOlder
     ) {
