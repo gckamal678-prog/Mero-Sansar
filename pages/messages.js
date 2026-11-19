@@ -245,7 +245,7 @@
         padding:0;
         border-radius:10px;
         font-size:16px;
-        margin-bottom:10px;
+        margin-bottom:0;
       }
 
       .ksk-msg-tab {
@@ -368,6 +368,24 @@
         border-bottom:1px solid var(--color-border,#e2e8f0);
       }
 
+      .ksk-msg-profile-button {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        flex-shrink:0;
+        padding:0;
+        border:0;
+        border-radius:50%;
+        background:transparent;
+        cursor:pointer;
+      }
+
+      .ksk-msg-profile-button .ksk-msg-avatar {
+        width:44px;
+        height:44px;
+        min-width:44px;
+      }
+
       .ksk-msg-chat-header-main {
         flex:1;
         min-width:0;
@@ -378,6 +396,62 @@
         margin-top:4px;
         color:var(--color-muted,#64748b);
         font-size:12px;
+      }
+
+      .ksk-wa-chat-options {
+        position:relative;
+        flex-shrink:0;
+      }
+
+      .ksk-wa-chat-options summary {
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        width:38px;
+        height:38px;
+        border:1px solid var(--color-border,#e2e8f0);
+        border-radius:50%;
+        background:var(--color-surface,#fff);
+        color:var(--color-text,#172033);
+        cursor:pointer;
+        list-style:none;
+        font-size:24px;
+        line-height:1;
+      }
+
+      .ksk-wa-chat-options summary::-webkit-details-marker {
+        display:none;
+      }
+
+      .ksk-wa-chat-options-panel {
+        position:absolute;
+        top:44px;
+        right:0;
+        z-index:100;
+        display:grid;
+        min-width:190px;
+        padding:6px;
+        border:1px solid var(--color-border,#e2e8f0);
+        border-radius:12px;
+        background:var(--color-surface,#fff);
+        box-shadow:0 8px 24px rgba(0,0,0,.15);
+      }
+
+      .ksk-wa-chat-options-panel button {
+        width:100%;
+        padding:12px;
+        border:0;
+        border-radius:8px;
+        background:transparent;
+        color:var(--color-text,#172033);
+        text-align:left;
+        font:inherit;
+        font-size:14px;
+        cursor:pointer;
+      }
+
+      .ksk-wa-chat-options-panel button:hover {
+        background:var(--color-surface-secondary,#f1f5f9);
       }
 
       .ksk-msg-history {
@@ -623,7 +697,7 @@
   }
 
   /* =======================================================
-     DATA LOADING — REQUEST TOKENS PREVENT CHAT MIXUPS
+     DATA LOADING
   ======================================================= */
 
   async function loadFriends() {
@@ -720,7 +794,10 @@
       try {
         const result = await api.getMessageReceipts(message.id);
         if (result?.ok) {
-          receiptCache.set(message.id, Array.isArray(result.data) ? result.data : []);
+          receiptCache.set(
+            message.id,
+            Array.isArray(result.data) ? result.data : []
+          );
         }
       } catch (error) {
         console.warn("Message receipt:", error);
@@ -1318,7 +1395,7 @@
   }
 
   /* =======================================================
-     CHAT VIEW
+     CHAT VIEW — WHATSAPP STYLE HEADER
   ======================================================= */
 
   function scrollChatToBottom() {
@@ -1337,7 +1414,7 @@
     if (!chat) return renderConversationList();
 
     const person = chat.members?.find(
-      member => member.id !== currentUserId
+      member => String(member.id) !== String(currentUserId)
     );
 
     const personId = String(person?.id || "");
@@ -1349,20 +1426,22 @@
 
     return `
       <section class="ksk-msg-page">
-        <button class="ksk-msg-secondary ksk-msg-back"
-                type="button"
-                data-action="back"
-                aria-label="Back"
-                title="Back">
-          ←
-        </button>
-
         <div class="ksk-msg-detail">
+
           <div class="ksk-msg-chat-header">
+
+            <button class="ksk-msg-secondary ksk-msg-back"
+                    type="button"
+                    data-action="back"
+                    aria-label="Back"
+                    title="Back">
+              ←
+            </button>
+
             <button type="button"
-                    class="ksk-msg-secondary"
+                    class="ksk-msg-profile-button"
                     data-action="open-chat-profile"
-                    data-id="${escapeHTML(person?.id || "")}">
+                    data-id="${escapeHTML(personId)}">
               ${getAvatar(chat)}
             </button>
 
@@ -1386,41 +1465,56 @@
               </div>
             </div>
 
-            ${chat.type === "direct" ? `
+            <details class="ksk-wa-chat-options">
+              <summary aria-label="Chat options">⋮</summary>
+
+              <div class="ksk-wa-chat-options-panel">
+
+                <button type="button"
+                        data-action="toggle-message-search">
+                  ${escapeHTML(t("सन्देश खोज्नुहोस्", "Search messages"))}
+                </button>
+
+                ${chat.type === "direct" ? `
+                  <button type="button"
+                          data-action="block-user"
+                          data-id="${escapeHTML(personId)}">
+                    ${escapeHTML(t("Block", "Block"))}
+                  </button>
+                ` : ""}
+              </div>
+            </details>
+
+          </div>
+
+          ${messageSearchOpen ? `
+            <div class="ksk-msg-toolbar">
+              <input class="ksk-msg-search"
+                     type="search"
+                     data-message-content-search
+                     value="${escapeHTML(messageSearchQuery)}"
+                     placeholder="${escapeHTML(t(
+                       "यो कुराकानीमा सन्देश खोज्नुहोस्",
+                       "Search messages in this chat"
+                     ))}">
+
               <button class="ksk-msg-secondary"
                       type="button"
-                      data-action="block-user"
-                      data-id="${escapeHTML(person?.id || "")}">
-                Block
+                      data-action="search-messages">
+                ${escapeHTML(t("खोज्नुहोस्", "Search"))}
               </button>
-            ` : ""}
-          </div>
-
-          ${renderGroupMemberControls(chat)}
-
-          <div class="ksk-msg-toolbar">
-            <input class="ksk-msg-search"
-                   type="search"
-                   data-message-content-search
-                   value="${escapeHTML(messageSearchQuery)}"
-                   placeholder="${escapeHTML(t(
-                     "यो कुराकानीमा सन्देश खोज्नुहोस्",
-                     "Search messages in this chat"
-                   ))}">
-
-            <button class="ksk-msg-secondary"
-                    type="button"
-                    data-action="search-messages">
-              ${escapeHTML(t("खोज्नुहोस्", "Search"))}
-            </button>
-          </div>
-
-          ${renderSearchResults()}
+            </div>
+          ` : ""}
 
           <div class="ksk-msg-history" aria-live="polite">
+
+            ${renderGroupMemberControls(chat)}
+            ${renderSearchResults()}
+
             ${activeMessages.length
               ? activeMessages.map(renderChatMessage).join("")
               : emptyMessage(t("सन्देश छैन", "No messages yet"))}
+
           </div>
 
           ${renderReplyComposer()}
@@ -1451,6 +1545,7 @@
               </button>
             </div>
           </form>
+
         </div>
       </section>
     `;
@@ -1492,6 +1587,7 @@
     replyTarget = null;
     messageSearchResults = [];
     messageSearchQuery = "";
+    messageSearchOpen = false;
 
     oldestCursor = null;
     hasOlderMessages = false;
@@ -1586,6 +1682,7 @@
     replyTarget = null;
     messageSearchResults = [];
     messageSearchQuery = "";
+    messageSearchOpen = false;
 
     presenceUsers.clear();
     typingUsers.clear();
@@ -2097,6 +2194,24 @@
     if (action === "cancel-reply") {
       replyTarget = null;
       refreshPage();
+      return;
+    }
+
+    /* OPEN / CLOSE MESSAGE SEARCH */
+
+    if (action === "toggle-message-search") {
+      messageSearchOpen = !messageSearchOpen;
+      messageSearchResults = [];
+      refreshPage();
+
+      if (messageSearchOpen) {
+        requestAnimationFrame(() => {
+          document.querySelector(
+            "[data-message-content-search]"
+          )?.focus();
+        });
+      }
+
       return;
     }
 
