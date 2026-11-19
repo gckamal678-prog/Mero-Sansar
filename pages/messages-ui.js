@@ -116,33 +116,77 @@
         background: var(--color-surface-hover) !important;
       }
 
-      /* REMOVE EXTRA PAGE TITLE */
+ /* =================================================
+   MERO SANSAR — MESSAGES PAGE LAYOUT FIX
+================================================= */
 
-      #otherPageText:has(.ksk-msg-detail) > h1,
-      #otherPageText:has(.ksk-msg-detail) > h2,
-      #otherPageText:has(.ksk-msg-detail) > h3 {
-        display: none !important;
-      }
+/* Remove the outer Messages heading and divider */
+#otherPage:has(#otherPageText > .ksk-msg-page)
+.other-page-heading {
+  display: none !important;
+}
 
-      #otherPageText:has(.ksk-msg-detail) {
-        min-width: 0 !important;
-        min-height: 0 !important;
-        overflow-x: hidden !important;
-      }
+/* Give the Messages page the available screen height */
+#otherPage:has(#otherPageText > .ksk-msg-page) {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+}
 
-      .ksk-msg-page:has(> .ksk-msg-detail) {
-        display: flex !important;
-        flex-direction: column !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-      }
+#otherPage:has(#otherPageText > .ksk-msg-page)
+.page-content-card {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  height: calc(
+    100dvh -
+    var(--app-header-height, 66px) -
+    var(--app-bottom-height, 78px) -
+    36px
+  ) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
 
-      /* CHAT CONTAINER */
+/* Stretch the actual rendered page */
+#otherPageText:has(> .ksk-msg-page) {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+#otherPageText > .ksk-msg-page {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+/* Chat view must not scroll as a whole */
+#otherPageText > .ksk-msg-page:has(> .ksk-msg-detail) {
+  overflow: hidden !important;
+}
+
+#otherPageText > .ksk-msg-page
+> .ksk-msg-detail {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
 
       .ksk-msg-detail,
       .ksk-msg-detail * {
