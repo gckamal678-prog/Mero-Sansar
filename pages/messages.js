@@ -39,6 +39,7 @@
 
   let loading = false;
   let loadingOlder = false;
+  let chatHistoryReady = false;
   let sending = false;
 
   let oldestCursor = null;
@@ -1403,9 +1404,14 @@
       requestAnimationFrame(() => {
         const history = document.querySelector(".ksk-msg-history");
 
-        if (history) {
-          history.scrollTop = history.scrollHeight;
-        }
+        if (!history) return;
+
+        history.scrollTo({
+          top: history.scrollHeight,
+          behavior: "instant"
+        });
+
+        chatHistoryReady = true;
       });
     });
   }
@@ -1583,6 +1589,7 @@
     activeChatId = id;
     activeChat = chat;
     activeMessages = [];
+    chatHistoryReady = false;
 
     replyTarget = null;
     messageSearchResults = [];
@@ -1629,7 +1636,6 @@
       await loadConversations();
 
       refreshPage();
-      scrollChatToBottom();
       return true;
     } catch (error) {
       if (token === chatRequestToken) {
@@ -2122,6 +2128,10 @@
 
     if (!history.matches(".ksk-msg-history")) return;
 
+    // Initial positioning पूरा नभएसम्म पुराना मेसेज लोड नगर्ने
+    if (!chatHistoryReady) return;
+
+    // प्रयोगकर्ताले आफैँ माथि स्क्रोल गरेपछि मात्र पुराना मेसेज लोड गर्ने
     if (
       history.scrollTop <= 80 &&
       hasOlderMessages &&
