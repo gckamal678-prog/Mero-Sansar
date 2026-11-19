@@ -30,6 +30,7 @@
   let activeTab = "all";
   let searchQuery = "";
   let messageSearchQuery = "";
+  let messageSearchOpen = false;
   let messageSearchResults = [];
 
   let replyTarget = null;
@@ -1160,6 +1161,25 @@
     `;
   }
 
+  function renderMessageText(value = "") {
+    const escaped = escapeHTML(value);
+
+    return escaped.replace(
+      /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi,
+      url => {
+        const safeUrl = url.replace(/[),.!?;:]+$/, "");
+        const suffix = url.slice(safeUrl.length);
+        const href = safeUrl.startsWith("www.")
+          ? "https://" + safeUrl
+          : safeUrl;
+
+        return `<a href="${href}"
+                   target="_blank"
+                   rel="noopener noreferrer">${safeUrl}</a>${suffix}`;
+      }
+    );
+  }
+
   function renderChatMessage(message) {
     const mine = Boolean(message.fromMe);
     const deleted = Boolean(message.deletedForEveryone);
@@ -1175,7 +1195,7 @@
 
         ${renderReplyPreview(message)}
 
-        ${escapeHTML(content)}
+        ${renderMessageText(content)}
 
         ${!deleted ? renderMessageMedia(message) : ""}
 
@@ -1300,6 +1320,18 @@
   /* =======================================================
      CHAT VIEW
   ======================================================= */
+
+  function scrollChatToBottom() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const history = document.querySelector(".ksk-msg-history");
+
+        if (history) {
+          history.scrollTop = history.scrollHeight;
+        }
+      });
+    });
+  }
 
   function renderChat(chat = activeChat) {
     if (!chat) return renderConversationList();
@@ -1483,13 +1515,8 @@
 
       if (!ok || token !== chatRequestToken) return false;
 
-      requestAnimationFrame(() => {
-        const history = document.querySelector(".ksk-msg-history");
-
-        if (history) {
-          history.scrollTop = history.scrollHeight;
-        }
-      });
+      refreshPage();
+      scrollChatToBottom();
 
       const readResult = await service().markRead(id);
 
@@ -1506,6 +1533,7 @@
       await loadConversations();
 
       refreshPage();
+      scrollChatToBottom();
       return true;
     } catch (error) {
       if (token === chatRequestToken) {
