@@ -5,7 +5,7 @@
  * MERO SANSAR — FACEBOOK STYLE PEOPLE DIRECTORY
  * Version: 1.0.0
  *
- * All members, relationship-aware actions and pagination.
+ * Discover people, relationship-aware actions and pagination.
  */
 
 (function (global) {
@@ -328,10 +328,10 @@
       card.innerHTML = `
         <div class="ksfd-heading">
           <div>
-            <h3>${t("सबै सदस्यहरू", "All members")}</h3>
+            <h3>${t("नयाँ सदस्यहरू खोज्नुहोस्", "Discover people")}</h3>
             <p>${t(
-              "सदस्यहरू खोज्नुहोस् र नयाँ सम्बन्ध जोड्नुहोस्।",
-              "Discover members and build connections."
+              "नयाँ सदस्यहरू खोज्नुहोस् र साथी बनाउनुहोस्।",
+              "Find new people and make friends."
             )}</p>
           </div>
 
@@ -673,8 +673,11 @@
             blocked: false
           }
         }))
-        // Block भएको सम्बन्धलाई directory बाट लुकाउने।
-        .filter(profile => !profile.status.blocked);
+        // Block भएका र पहिल्यै साथी भएका सदस्य नदेखाउने।
+        .filter(profile =>
+          !profile.status.blocked &&
+          profile.status.state !== "friend"
+        );
 
       if (append) {
         people = people.concat(page);
