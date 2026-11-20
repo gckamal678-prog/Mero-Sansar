@@ -27,6 +27,7 @@
   let profileExperiences = [];
   let profileDetailsPromise = null;
   let profileDetailsRequestToken = 0;
+  let profileDetailsLoadedFor = "";
 
   function isEnglish() {
     return global.KSKLanguage?.getLanguage?.() === "en";
@@ -387,6 +388,112 @@
         gap:12px;
       }
 
+      /* BIRTHDAY + WORK/STUDY */
+
+      .profile-section .profile-detail-card {
+        min-width:0;
+        padding:15px;
+        border:1px solid var(--color-border);
+        border-radius:15px;
+        background:var(--color-surface);
+      }
+
+      .profile-section .profile-detail-heading {
+        display:flex;
+        align-items:center;
+        gap:9px;
+        margin-bottom:12px;
+        color:var(--color-text);
+        font-size:14px;
+        font-weight:850;
+      }
+
+      .profile-section .profile-detail-heading > span {
+        width:34px;
+        height:34px;
+        display:grid;
+        place-items:center;
+        border-radius:10px;
+        background:var(--color-surface-secondary);
+        font-size:17px;
+      }
+
+      .profile-section .profile-detail-value {
+        color:var(--color-text);
+        font-size:15px;
+        font-weight:750;
+      }
+
+      .profile-section .profile-detail-meta {
+        margin-top:5px;
+        color:var(--color-muted);
+        font-size:11px;
+        line-height:1.5;
+      }
+
+      .profile-section .profile-detail-empty {
+        margin:0;
+        color:var(--color-muted);
+        font-size:12px;
+      }
+
+      .profile-section .profile-experience-item {
+        display:flex;
+        align-items:flex-start;
+        gap:11px;
+        padding:12px 0;
+        border-bottom:1px solid var(--color-border);
+      }
+
+      .profile-section .profile-experience-item:last-child {
+        border-bottom:0;
+      }
+
+      .profile-section .profile-experience-icon {
+        width:36px;
+        height:36px;
+        flex:0 0 36px;
+        display:grid;
+        place-items:center;
+        border-radius:10px;
+        background:var(--color-surface-secondary);
+      }
+
+      .profile-section .profile-experience-content {
+        min-width:0;
+        flex:1;
+      }
+
+      .profile-section .profile-experience-content small {
+        display:block;
+        margin-bottom:3px;
+        color:var(--color-muted);
+        font-size:10px;
+      }
+
+      .profile-section .profile-experience-content strong {
+        display:block;
+        color:var(--color-text);
+        font-size:14px;
+        overflow-wrap:anywhere;
+      }
+
+      .profile-section .profile-experience-content p {
+        margin:3px 0 0;
+        color:var(--color-text-secondary);
+        font-size:12px;
+        overflow-wrap:anywhere;
+      }
+
+      .profile-section .profile-experience-description {
+        margin-top:7px;
+        color:var(--color-text-secondary);
+        font-size:12px;
+        line-height:1.5;
+        white-space:pre-wrap;
+        overflow-wrap:anywhere;
+      }
+
       /* ABOUT */
 
       .profile-section .profile-about-card {
@@ -615,51 +722,46 @@
   /* LOAD BIRTHDAY + WORK/STUDY DETAILS */
 
   async function loadProfileDetails(userId, ownProfile) {
-    const requestToken = ++profileDetailsRequestToken;
+    const profileKey = ownProfile
+      ? "my-profile"
+      : `user:${String(userId || "").trim()}`;
 
-    if (profileDetailsPromise) {
-      profileDetailsPromise = null;
-    }
+    if (!ownProfile && !userId) return;
+
+    // एउटै प्रोफाइलको डेटा बारम्बार लोड हुन नदिने
+    if (profileDetailsLoadedFor === profileKey) return;
+
+    // अघिल्लो request चलिरहेको छ भने दोहोर्‍याएर नचलाउने
+    if (profileDetailsPromise) return profileDetailsPromise;
+
+    profileDetailsLoadedFor = profileKey;
+
+    const requestToken = ++profileDetailsRequestToken;
 
     profileDetailsPromise = (async () => {
       try {
-        if (ownProfile) {
-          const results = await Promise.allSettled([
-            getMyBirthdaySettings(),
-            getMyExperiences()
-          ]);
+        const results = ownProfile
+          ? await Promise.allSettled([
+              getMyBirthdaySettings(),
+              getMyExperiences()
+            ])
+          : await Promise.allSettled([
+              getProfileBirthday(userId),
+              getProfileExperiences(userId)
+            ]);
 
-          if (requestToken !== profileDetailsRequestToken) return;
+        if (requestToken !== profileDetailsRequestToken) return;
 
-          results.forEach((result, index) => {
-            if (result.status === "rejected") {
-              console.warn(
-                index === 0
-                  ? "Birthday settings could not load."
-                  : "My experiences could not load.",
-                result.reason
-              );
-            }
-          });
-        } else {
-          const results = await Promise.allSettled([
-            getProfileBirthday(userId),
-            getProfileExperiences(userId)
-          ]);
-
-          if (requestToken !== profileDetailsRequestToken) return;
-
-          results.forEach((result, index) => {
-            if (result.status === "rejected") {
-              console.warn(
-                index === 0
-                  ? "Profile birthday could not load."
-                  : "Profile experiences could not load.",
-                result.reason
-              );
-            }
-          });
-        }
+        results.forEach((result, index) => {
+          if (result.status === "rejected") {
+            console.warn(
+              index === 0
+                ? "Birthday details could not load."
+                : "Work/Study details could not load.",
+              result.reason
+            );
+          }
+        });
       } finally {
         if (requestToken === profileDetailsRequestToken) {
           profileDetailsPromise = null;
@@ -898,6 +1000,13 @@
     profilePostsPromise = null;
     profileLoadState = "idle";
     profileRequestToken += 1;
+    profileDetailsLoadedFor = "";
+    profileDetailsPromise = null;
+    profileDetailsRequestToken += 1;
+
+    birthdaySettings = null;
+    profileBirthday = null;
+    profileExperiences = [];
   }
 
   /* POSTS AND FRIENDS */
@@ -1164,6 +1273,241 @@
     `;
   }
 
+  /* BIRTHDAY DISPLAY */
+
+  function formatBirthday(data, showYear = false) {
+    if (!data) return "";
+
+    let month = null;
+    let day = null;
+    let year = null;
+
+    if (data.dateOfBirth) {
+      const parts = String(data.dateOfBirth).split("-");
+
+      if (parts.length === 3) {
+        year = Number(parts[0]);
+        month = Number(parts[1]);
+        day = Number(parts[2]);
+      }
+    } else {
+      month = Number(data.birthMonth);
+      day = Number(data.birthDay);
+      year = data.birthYear
+        ? Number(data.birthYear)
+        : null;
+    }
+
+    if (
+      !Number.isInteger(month) ||
+      !Number.isInteger(day) ||
+      month < 1 ||
+      month > 12 ||
+      day < 1 ||
+      day > 31
+    ) {
+      return "";
+    }
+
+    const date = new Date(2000, month - 1, day);
+
+    const locale = isEnglish() ? "en-US" : "ne-NP";
+
+    const options = {
+      month: "long",
+      day: "numeric"
+    };
+
+    if (showYear && year) {
+      options.year = "numeric";
+    }
+
+    return date.toLocaleDateString(locale, options)
+      .replace("2000", showYear && year ? String(year) : "");
+  }
+
+  function getBirthdayVisibilityLabel(value) {
+    const labels = {
+      public: t("सबैले देख्न सक्छन्", "Public"),
+      friends: t("साथीहरूले मात्र", "Friends"),
+      only_me: t("मात्र म", "Only me")
+    };
+
+    return labels[value] || labels.only_me;
+  }
+
+  function renderBirthdaySection(ownProfile) {
+    const data = ownProfile
+      ? birthdaySettings
+      : profileBirthday;
+
+    const birthdayText = ownProfile
+      ? formatBirthday(data, true)
+      : formatBirthday(data, Boolean(data?.birthYear));
+
+    if (!birthdayText) {
+      if (!ownProfile) return "";
+
+      return `
+        <section class="profile-detail-card">
+          <div class="profile-detail-heading">
+            <span>🎂</span>
+            <strong>${t("जन्मदिन", "Birthday")}</strong>
+          </div>
+
+          <p class="profile-detail-empty">
+            ${t(
+              "जन्ममिति थपिएको छैन।",
+              "Birthday has not been added."
+            )}
+          </p>
+        </section>
+      `;
+    }
+
+    return `
+      <section class="profile-detail-card">
+        <div class="profile-detail-heading">
+          <span>🎂</span>
+          <strong>${t("जन्मदिन", "Birthday")}</strong>
+        </div>
+
+        <div class="profile-detail-value">
+          ${escapeHTML(birthdayText)}
+        </div>
+
+        ${ownProfile ? `
+          <div class="profile-detail-meta">
+            ${t("गोपनीयता", "Privacy")}:
+            ${escapeHTML(
+              getBirthdayVisibilityLabel(
+                data?.birthdayVisibility
+              )
+            )}
+          </div>
+        ` : ""}
+      </section>
+    `;
+  }
+
+  /* WORK / STUDY DISPLAY */
+
+  function formatExperienceDate(value) {
+    if (!value) return "";
+
+    const parts = String(value).split("-");
+
+    if (parts.length !== 3) return "";
+
+    const date = new Date(
+      Number(parts[0]),
+      Number(parts[1]) - 1,
+      Number(parts[2])
+    );
+
+    if (Number.isNaN(date.getTime())) return "";
+
+    return date.toLocaleDateString(
+      isEnglish() ? "en-US" : "ne-NP",
+      {
+        month: "short",
+        year: "numeric"
+      }
+    );
+  }
+
+  function renderExperienceItem(item, ownProfile) {
+    const isWork = item.type === "work";
+
+    const title = isWork
+      ? t("काम", "Work")
+      : t("अध्ययन", "Study");
+
+    const start = formatExperienceDate(item.startDate);
+    const end = item.isCurrent
+      ? t("हालसम्म", "Present")
+      : formatExperienceDate(item.endDate);
+
+    const dateRange = [start, end]
+      .filter(Boolean)
+      .join(" – ");
+
+    return `
+      <article class="profile-experience-item">
+        <div class="profile-experience-icon">
+          ${isWork ? "💼" : "🎓"}
+        </div>
+
+        <div class="profile-experience-content">
+          <small>${title}</small>
+
+          <strong>
+            ${escapeHTML(item.roleTitle || "")}
+          </strong>
+
+          <p>
+            ${escapeHTML(item.organizationName || "")}
+          </p>
+
+          ${dateRange ? `
+            <div class="profile-detail-meta">
+              ${escapeHTML(dateRange)}
+            </div>
+          ` : ""}
+
+          ${item.description ? `
+            <div class="profile-experience-description">
+              ${escapeHTML(item.description)}
+            </div>
+          ` : ""}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderExperienceSection(ownProfile) {
+    const items = Array.isArray(profileExperiences)
+      ? profileExperiences
+      : [];
+
+    const workItems = items.filter(item => item.type === "work");
+    const studyItems = items.filter(item => item.type === "study");
+
+    return `
+      <section class="profile-detail-card">
+        <div class="profile-detail-heading">
+          <span>💼</span>
+          <strong>${t("कामको अनुभव", "Work Experience")}</strong>
+        </div>
+
+        ${workItems.length
+          ? workItems.map(item =>
+              renderExperienceItem(item, ownProfile)
+            ).join("")
+          : `<p class="profile-detail-empty">
+              ${t("कामको विवरण छैन।", "No work details added.")}
+            </p>`
+        }
+      </section>
+
+      <section class="profile-detail-card">
+        <div class="profile-detail-heading">
+          <span>🎓</span>
+          <strong>${t("शिक्षा", "Education")}</strong>
+        </div>
+
+        ${studyItems.length
+          ? studyItems.map(item =>
+              renderExperienceItem(item, ownProfile)
+            ).join("")
+          : `<p class="profile-detail-empty">
+              ${t("अध्ययनको विवरण छैन।", "No study details added.")}
+            </p>`
+        }
+      </section>
+    `;
+  }
+
   /* MAIN RENDER */
 
   function render(options = {}) {
@@ -1185,6 +1529,13 @@
       profilePostsPromise = null;
       profileLoadState = "idle";
       profileRequestToken += 1;
+      profileDetailsLoadedFor = "";
+      profileDetailsPromise = null;
+      profileDetailsRequestToken += 1;
+
+      birthdaySettings = null;
+      profileBirthday = null;
+      profileExperiences = [];
     }
 
     loadSupabaseProfile();
@@ -1220,6 +1571,12 @@
       : getProfile();
 
     const ownProfile = isOwnProfile(user);
+
+    if (ownProfile && currentUserId) {
+      loadProfileDetails(currentUserId, true);
+    } else if (!ownProfile && viewingUserId) {
+      loadProfileDetails(viewingUserId, false);
+    }
 
     const allPosts = Array.isArray(options.posts)
       ? options.posts
@@ -1386,6 +1743,10 @@
           <div class="card profile-about-card">
             ${renderAbout(user)}
           </div>
+
+          ${renderBirthdaySection(ownProfile)}
+
+          ${renderExperienceSection(ownProfile)}
         </div>
 
       </section>
