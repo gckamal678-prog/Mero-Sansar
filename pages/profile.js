@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -225,39 +224,6 @@
         font-size:13px;
         line-height:1.55;
         overflow-wrap:anywhere;
-      }
-
-      .profile-section .profile-stats {
-        width:min(100%,460px);
-        display:grid;
-        grid-template-columns:repeat(3,minmax(0,1fr));
-        gap:8px;
-        margin-top:5px;
-      }
-
-      .profile-section .profile-stat {
-        min-width:0;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        gap:3px;
-        padding:11px 5px;
-        border:1px solid var(--color-border);
-        border-radius:13px;
-        background:var(--color-surface-secondary);
-      }
-
-      .profile-section .profile-stat strong {
-        color:var(--color-text);
-        font-size:19px;
-        font-weight:850;
-      }
-
-      .profile-section .profile-stat span {
-        color:var(--color-muted);
-        font-size:11px;
-        font-weight:700;
       }
 
       .profile-section .profile-post-count {
@@ -833,62 +799,6 @@
     `).join("");
   }
 
-  function safeCount(value) {
-    const count = Array.isArray(value)
-      ? value.length
-      : Number(value);
-
-    return Number.isFinite(count) && count > 0
-      ? Math.floor(count)
-      : 0;
-  }
-
-  function getSocialCounts(user) {
-    const social = global.KSKSocialData;
-    let localCounts = null;
-
-    try {
-      const localUserId = social?.getLocalUserId?.();
-
-      if (localUserId && typeof social?.getCounts === "function") {
-        localCounts = social.getCounts(localUserId);
-      }
-    } catch (error) {
-      localCounts = null;
-    }
-
-    if (localCounts && typeof localCounts === "object") {
-      return {
-        followers: safeCount(localCounts.followers),
-        following: safeCount(localCounts.following),
-        friends: safeCount(localCounts.friends)
-      };
-    }
-
-    const followers = Array.isArray(user?.followers)
-      ? user.followers.length
-      : safeCount(user?.followersCount ?? user?.followers);
-
-    const following = Array.isArray(user?.following)
-      ? user.following.length
-      : safeCount(user?.followingCount ?? user?.following);
-
-    return {
-      followers,
-      following,
-      friends: getFriends().length
-    };
-  }
-
-  function renderStat(value, label) {
-    return `
-      <div class="profile-stat">
-        <strong>${escapeHTML(value)}</strong>
-        <span>${escapeHTML(label)}</span>
-      </div>
-    `;
-  }
-
   /* PROFILE LINK */
 
   function getProfileLink() {
@@ -1094,14 +1004,6 @@
     const posts = getProfilePosts(user, allPosts);
     const photos = posts.filter(isPhotoPost);
 
-    const counts = ownProfile
-      ? getSocialCounts(user)
-      : {
-          followers: safeCount(user.followersCount ?? user.followers),
-          following: safeCount(user.followingCount ?? user.following),
-          friends: safeCount(user.friendsCount ?? user.friends)
-        };
-
     const activeTab = VALID_TABS.has(options.activeTab)
       ? options.activeTab
       : "posts";
@@ -1166,12 +1068,6 @@
             ? `<p>📍 ${escapeHTML(user.location)}</p>`
             : ""
           }
-
-          <div class="profile-stats">
-            ${renderStat(counts.followers, t("फलोअर्स", "Followers"))}
-            ${renderStat(counts.following, t("फलोइङ", "Following"))}
-            ${renderStat(counts.friends, t("साथीहरू", "Friends"))}
-          </div>
 
           <div class="profile-post-count">
             ${posts.length} ${t("पोस्ट", "Posts")}
@@ -1352,7 +1248,6 @@
     render,
     getProfile,
     getProfilePosts,
-    getSocialCounts,
     getProfileLink,
     isPhotoPost,
 
