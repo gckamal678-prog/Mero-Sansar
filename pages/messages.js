@@ -39,8 +39,6 @@
 
   let loading = false;
   let loadingOlder = false;
-  let chatHistoryReady = false;
-  let lastHistoryScrollTop = 0;
   let sending = false;
 
   let oldestCursor = null;
@@ -458,7 +456,7 @@
 
       .ksk-msg-history {
         display:flex;
-        flex-direction:column;
+        flex-direction:column-reverse;
         gap:10px;
         min-width:0;
         height:380px;
@@ -1400,19 +1398,6 @@
      CHAT VIEW — WHATSAPP STYLE HEADER
   ======================================================= */
 
-  function scrollChatToBottom() {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const history = document.querySelector(".ksk-msg-history");
-        if (!history) return;
-
-        history.scrollTop = history.scrollHeight;
-        lastHistoryScrollTop = history.scrollTop;
-        chatHistoryReady = true;
-      });
-    });
-  }
-
   function renderChat(chat = activeChat) {
     if (!chat) return renderConversationList();
 
@@ -1515,7 +1500,7 @@
             ${renderSearchResults()}
 
             ${activeMessages.length
-              ? activeMessages.map(renderChatMessage).join("")
+              ? [...activeMessages].reverse().map(renderChatMessage).join("")
               : emptyMessage(t("सन्देश छैन", "No messages yet"))}
 
           </div>
@@ -1587,9 +1572,6 @@
     activeChat = chat;
     activeMessages = [];
 
-    chatHistoryReady = false;
-    lastHistoryScrollTop = 0;
-
     replyTarget = null;
     messageSearchResults = [];
     messageSearchQuery = "";
@@ -1635,10 +1617,7 @@
 
       if (token !== chatRequestToken) return false;
 
-      // अन्तिम Render पूरा भएपछि मात्र पछिल्लो मेसेजमा जाने
       refreshPage();
-      scrollChatToBottom();
-
       return true;
 
     } catch (error) {
@@ -1887,14 +1866,6 @@
       await loadMessages(id, { token: messageRequestToken });
       await loadConversations();
 
-      requestAnimationFrame(() => {
-        const history = document.querySelector(".ksk-msg-history");
-
-        if (history) {
-          history.scrollTop = history.scrollHeight;
-        }
-      });
-
       return true;
     } catch (error) {
       toast(error.message, "error");
@@ -2127,28 +2098,6 @@
   /* =======================================================
      EVENT HANDLERS
   ======================================================= */
-
-  function handleHistoryScroll(event) {
-    const history = event.target;
-
-    if (!history.matches(".ksk-msg-history")) return;
-
-    const currentTop = history.scrollTop;
-    const movedUp = currentTop < lastHistoryScrollTop;
-
-    lastHistoryScrollTop = currentTop;
-
-    if (!chatHistoryReady || !movedUp) return;
-
-    // प्रयोगकर्ताले आफैँ माथि स्क्रोल गरेपछि मात्र पुराना मेसेज लोड गर्ने
-    if (
-      currentTop <= 80 &&
-      hasOlderMessages &&
-      !loadingOlder
-    ) {
-      loadOlderMessages();
-    }
-  }
 
   function handleClick(event) {
     const target = event.target?.closest?.("[data-action]");
@@ -2521,10 +2470,6 @@
         document.addEventListener("input", handleInput);
         document.addEventListener("change", handleChange);
         document.addEventListener("submit", handleSubmit);
-        document.addEventListener("scroll", handleHistoryScroll, {
-          passive: true,
-          capture: true
-        });
 
         global.addEventListener(
           "ksk:messages-cloud-change",
