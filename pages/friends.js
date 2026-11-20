@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -138,23 +139,11 @@
 
       .ksf-page * { box-sizing:border-box; }
 
-      .ksf-heading {
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
+      .ksf-page-description {
         margin:0 0 14px;
-      }
-
-      .ksf-heading h2 {
-        margin:0;
-        font-size:21px;
-        font-weight:850;
-      }
-
-      .ksf-heading p {
-        margin:5px 0 0;
         color:var(--color-muted,#888);
         font-size:12px;
+        line-height:1.5;
       }
 
       .ksf-card {
@@ -460,10 +449,6 @@
   function render() {
     styles();
 
-    /*
-     * Navigation ले HTML DOM मा राखेपछि Dashboard स्वतः सुरु हुन्छ।
-     * छोटो delay ले render-before-mount race रोक्छ।
-     */
     global.setTimeout(() => {
       if (document.getElementById("ksfDashboard")) {
         loadDashboard();
@@ -474,15 +459,12 @@
     return `
       <section class="page-section ksf-page" id="ksfFriendsRoot">
 
-        <header class="ksf-heading">
-          <div>
-            <h2>${t("साथीहरू", "Friends")}</h2>
-            <p>${t(
-              "साथी खोज्नुहोस् र आफ्नो सामाजिक सम्बन्ध व्यवस्थापन गर्नुहोस्।",
-              "Find people and manage your social connections."
-            )}</p>
-          </div>
-        </header>
+        <div class="ksf-page-description">
+          ${t(
+            "साथी खोज्नुहोस् र आफ्नो सामाजिक सम्बन्ध व्यवस्थापन गर्नुहोस्।",
+            "Find people and manage your social connections."
+          )}
+        </div>
 
         <section class="ksf-card">
           <strong>${t("नयाँ साथी खोज्नुहोस्", "Find people")}</strong>
@@ -516,12 +498,6 @@
             </div>
           </div>
 
-          <p class="ksf-note">
-            ${t(
-              "साथी बनेपछि Direct Message गर्न सकिन्छ।",
-              "Direct messaging is available after becoming friends."
-            )}
-          </p>
         </section>
 
         <div id="ksfDashboard">
@@ -689,7 +665,7 @@
 
         ${section(
           t("तपाईंका साथीहरू", "Your friends"),
-          "👥", friendsList.length, friends, true
+          "👥", friendsList.length, friends, false
         )}
 
         ${section("Followers", "↙️", followersList.length, followers)}
