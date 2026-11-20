@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -20,6 +19,14 @@
   let profilePostsPromise = null;
   let profileRequestToken = 0;
   let profileLoadState = "idle";
+
+  /* BIRTHDAY + WORK/STUDY STATE */
+
+  let birthdaySettings = null;
+  let profileBirthday = null;
+  let profileExperiences = [];
+  let profileDetailsPromise = null;
+  let profileDetailsRequestToken = 0;
 
   function isEnglish() {
     return global.KSKLanguage?.getLanguage?.() === "en";
@@ -469,6 +476,199 @@
     `;
 
     (document.head || document.documentElement).appendChild(style);
+  }
+
+  /* BIRTHDAY API */
+
+  async function getMyBirthdaySettings() {
+    const api = global.KSKSupabaseProfile;
+
+    if (typeof api?.getMyBirthdaySettings !== "function") {
+      throw new Error("Birthday settings API उपलब्ध छैन।");
+    }
+
+    const result = await api.getMyBirthdaySettings();
+    birthdaySettings = result || null;
+
+    return birthdaySettings;
+  }
+
+  async function updateMyBirthdaySettings(settings) {
+    const api = global.KSKSupabaseProfile;
+
+    if (typeof api?.updateMyBirthdaySettings !== "function") {
+      throw new Error("Birthday update API उपलब्ध छैन।");
+    }
+
+    const result = await api.updateMyBirthdaySettings(settings);
+
+    birthdaySettings = await getMyBirthdaySettings();
+
+    refreshProfilePage();
+
+    return result;
+  }
+
+  async function getProfileBirthday(userId) {
+    const id = String(userId || "").trim();
+
+    if (!id) return null;
+
+    const api = global.KSKSupabaseProfile;
+
+    if (typeof api?.getProfileBirthday !== "function") {
+      throw new Error("Profile birthday API उपलब्ध छैन।");
+    }
+
+    profileBirthday = await api.getProfileBirthday(id);
+
+    return profileBirthday;
+  }
+
+  /* WORK / STUDY EXPERIENCE API */
+
+  async function getMyExperiences() {
+    const api = global.KSKSupabaseProfile;
+
+    if (typeof api?.getMyExperiences !== "function") {
+      throw new Error("Experience API उपलब्ध छैन।");
+    }
+
+    const result = await api.getMyExperiences();
+
+    profileExperiences = Array.isArray(result)
+      ? result
+      : Array.isArray(result?.data)
+        ? result.data
+        : [];
+
+    return profileExperiences;
+  }
+
+  async function getProfileExperiences(userId) {
+    const id = String(userId || "").trim();
+
+    if (!id) return [];
+
+    const api = global.KSKSupabaseProfile;
+
+    if (typeof api?.getProfileExperiences !== "function") {
+      throw new Error("Profile experience API उपलब्ध छैन।");
+    }
+
+    const result = await api.getProfileExperiences(id);
+
+    profileExperiences = Array.isArray(result)
+      ? result
+      : Array.isArray(result?.data)
+        ? result.data
+        : [];
+
+    return profileExperiences;
+  }
+
+  async function addMyExperience(values) {
+    const api = global.KSKSupabaseProfile;
+
+    if (typeof api?.addMyExperience !== "function") {
+      throw new Error("Add experience API उपलब्ध छैन।");
+    }
+
+    const result = await api.addMyExperience(values);
+
+    await getMyExperiences();
+    refreshProfilePage();
+
+    return result;
+  }
+
+  async function updateMyExperience(id, values) {
+    const api = global.KSKSupabaseProfile;
+
+    if (typeof api?.updateMyExperience !== "function") {
+      throw new Error("Update experience API उपलब्ध छैन।");
+    }
+
+    const result = await api.updateMyExperience(id, values);
+
+    await getMyExperiences();
+    refreshProfilePage();
+
+    return result;
+  }
+
+  async function deleteMyExperience(id) {
+    const api = global.KSKSupabaseProfile;
+
+    if (typeof api?.deleteMyExperience !== "function") {
+      throw new Error("Delete experience API उपलब्ध छैन।");
+    }
+
+    const result = await api.deleteMyExperience(id);
+
+    await getMyExperiences();
+    refreshProfilePage();
+
+    return result;
+  }
+
+  /* LOAD BIRTHDAY + WORK/STUDY DETAILS */
+
+  async function loadProfileDetails(userId, ownProfile) {
+    const requestToken = ++profileDetailsRequestToken;
+
+    if (profileDetailsPromise) {
+      profileDetailsPromise = null;
+    }
+
+    profileDetailsPromise = (async () => {
+      try {
+        if (ownProfile) {
+          const results = await Promise.allSettled([
+            getMyBirthdaySettings(),
+            getMyExperiences()
+          ]);
+
+          if (requestToken !== profileDetailsRequestToken) return;
+
+          results.forEach((result, index) => {
+            if (result.status === "rejected") {
+              console.warn(
+                index === 0
+                  ? "Birthday settings could not load."
+                  : "My experiences could not load.",
+                result.reason
+              );
+            }
+          });
+        } else {
+          const results = await Promise.allSettled([
+            getProfileBirthday(userId),
+            getProfileExperiences(userId)
+          ]);
+
+          if (requestToken !== profileDetailsRequestToken) return;
+
+          results.forEach((result, index) => {
+            if (result.status === "rejected") {
+              console.warn(
+                index === 0
+                  ? "Profile birthday could not load."
+                  : "Profile experiences could not load.",
+                result.reason
+              );
+            }
+          });
+        }
+      } finally {
+        if (requestToken === profileDetailsRequestToken) {
+          profileDetailsPromise = null;
+          refreshProfilePage();
+        }
+      }
+    })();
+
+    return profileDetailsPromise;
   }
 
   /* PROFILE DATA */
@@ -1258,6 +1458,16 @@
     getProfilePosts,
     getProfileLink,
     isPhotoPost,
+
+    getMyBirthdaySettings,
+    updateMyBirthdaySettings,
+    getProfileBirthday,
+
+    getMyExperiences,
+    getProfileExperiences,
+    addMyExperience,
+    updateMyExperience,
+    deleteMyExperience,
 
     refreshFromSupabase() {
       remoteLoadPromise = null;
