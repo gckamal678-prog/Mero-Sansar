@@ -7,6 +7,8 @@
  * - Load own profile
  * - Load another user's public profile by ID
  * - Update own profile only
+ * - Manage private birthday settings through secure RPC
+ * - Read another user's permitted birthday through secure RPC
  * - Normalize Supabase profile rows
  */
 
@@ -30,6 +32,12 @@
     "updated_at",
     "onboarding_completed"
   ].join(",");
+
+  const BIRTHDAY_VISIBILITIES = [
+    "public",
+    "friends",
+    "only_me"
+  ];
 
   function getAuth() {
     return global.KSKSupabaseAuth || null;
@@ -223,6 +231,45 @@
   }
 
   /*
+   * DATE VALIDATION
+   */
+
+  function validateBirthDate(value) {
+    const date = String(value || "").trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error(
+        "जन्ममिति YYYY-MM-DD ढाँचामा हुनुपर्छ।"
+      );
+    }
+
+    const parsed = new Date(date + "T00:00:00Z");
+
+    if (
+      Number.isNaN(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== date
+    ) {
+      throw new Error(
+        "कृपया सही जन्ममिति राख्नुहोस्।"
+      );
+    }
+
+    const today = new Date();
+    const todayString =
+      today.getUTCFullYear() + "-" +
+      String(today.getUTCMonth() + 1).padStart(2, "0") + "-" +
+      String(today.getUTCDate()).padStart(2, "0");
+
+    if (date > todayString) {
+      throw new Error(
+        "भविष्यको मिति जन्ममिति हुन सक्दैन।"
+      );
+    }
+
+    return date;
+  }
+
+  /*
    * GET MY PROFILE
    */
 
@@ -265,7 +312,6 @@
   /*
    * GET ANOTHER USER'S PUBLIC PROFILE
    *
-   * Reads only the selected profile row.
    * Supabase RLS remains responsible for access.
    */
 
@@ -353,6 +399,196 @@
   }
 
   /*
+   * GET MY PRIVATE BIRTHDAY SETTINGS
+   *
+   * Full date of birth is returned only by the
+   * authenticated user's own secure RPC.
+   */
+
+  async function getMyBirthdaySettings() {
+    const { client } =
+      await getAuthenticatedContext();
+
+    const { data, error } = await client.rpc(
+      "get_my_birthday_settings"
+    );
+
+    if (error) {
+      console.error(
+        "Birthday Settings Load Failed:",
+        error
+      );
+
+      throw error;
+    }
+
+    const row = Array.isArray(data)
+      ? data[0]
+      : data;
+
+    if (!row) return null;
+
+    return {
+      dateOfBirth: row.date_of_birth || "",
+      birthdayVisibility:
+        row.birthday_visibility || "only_me",
+      showBirthYear:
+        Boolean(row.show_birth_year)
+    };
+  }
+
+  /*
+   * UPDATE MY PRIVATE BIRTHDAY SETTINGS
+   *
+   * Database RPC verifies auth.uid() and updates
+   * only the currently authenticated user's row.
+   */
+
+  async function updateMyBirthdaySettings(settings) {
+    if (
+      !settings ||
+      typeof settings !== "object" ||
+      Array.isArray(settings)
+    ) {
+      throw new Error(
+        "जन्मदिन सेटिङ सही छैन।"
+      );
+    }
+
+    const dateOfBirth = validateBirthDate(
+      settings.dateOfBirth ?? settings.date_of_birth
+    );
+
+    const birthdayVisibility =
+      String(
+        settings.birthdayVisibility ??
+        settings.birthday_visibility ??
+        ""
+      ).trim();
+
+    if (
+      !BIRTHDAY_VISIBILITIES.includes(birthdayVisibility)
+    ) {
+      throw new Error(
+        "जन्मदिन देखाउने गोपनीयता विकल्प सही छैन।"
+      );
+    }
+
+    if (typeof settings.showBirthYear !== "boolean") {
+      throw new Error(
+        "जन्म वर्ष देखाउने विकल्प true वा false हुनुपर्छ।"
+      );
+    }
+
+    const { client } =
+      await getAuthenticatedContext();
+
+    const { data, error } = await client.rpc(
+      "update_my_birthday_settings",
+      {
+        p_date_of_birth: dateOfBirth,
+        p_birthday_visibility: birthdayVisibility,
+        p_show_birth_year: settings.showBirthYear
+      }
+    );
+
+    if (error) {
+      console.error(
+        "Birthday Settings Update Failed:",
+        error
+      );
+
+      throw error;
+    }
+
+    if (data !== true) {
+      throw new Error(
+        "जन्मदिन सेटिङ सुरक्षित भएको पुष्टि भएन।"
+      );
+    }
+
+    const result = {
+      dateOfBirth,
+      birthdayVisibility,
+      showBirthYear: settings.showBirthYear
+    };
+
+    global.dispatchEvent(
+      new CustomEvent("ksk:birthday-updated", {
+        detail: {
+          settings: result
+        }
+      })
+    );
+
+    return result;
+  }
+
+  /*
+   * GET ANOTHER USER'S PERMITTED BIRTHDAY
+   *
+   * The database RPC enforces:
+   * - Public / Friends / Only Me
+   * - Friendship status
+   * - Either-direction block restrictions
+   * - Birth year visibility
+   *
+   * This method never reads the private details table directly.
+   */
+
+  async function getProfileBirthday(userId) {
+    const id = String(userId || "").trim();
+
+    if (!id) {
+      throw new Error(
+        "प्रयोगकर्ताको ID उपलब्ध भएन।"
+      );
+    }
+
+    const { client } =
+      await getAuthenticatedContext();
+
+    const { data, error } = await client.rpc(
+      "get_profile_birthday",
+      {
+        p_user_id: id
+      }
+    );
+
+    if (error) {
+      console.error(
+        "Profile Birthday Load Failed:",
+        error
+      );
+
+      throw error;
+    }
+
+    const row = Array.isArray(data)
+      ? data[0]
+      : data;
+
+    if (!row) return null;
+
+    return {
+      birthMonth:
+        row.birth_month == null
+          ? null
+          : Number(row.birth_month),
+
+      birthDay:
+        row.birth_day == null
+          ? null
+          : Number(row.birth_day),
+
+      birthYear:
+        row.birth_year == null
+          ? null
+          : Number(row.birth_year)
+    };
+  }
+
+  /*
    * PUBLIC API
    */
 
@@ -368,6 +604,11 @@
     getMyProfile,
     getProfileById,
     updateMyProfile,
+
+    getMyBirthdaySettings,
+    updateMyBirthdaySettings,
+    getProfileBirthday,
+
     normalizeProfile
   });
 
