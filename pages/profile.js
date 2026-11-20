@@ -377,6 +377,103 @@
         color:var(--color-primary);
       }
 
+      /* FACEBOOK STYLE — AT A GLANCE */
+
+      .profile-section .profile-at-glance {
+        width:100%;
+        min-width:0;
+        padding:16px;
+        border:1px solid var(--color-border);
+        border-radius:16px;
+        background:var(--color-surface);
+      }
+
+      .profile-section .profile-at-glance-heading {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        margin-bottom:12px;
+      }
+
+      .profile-section .profile-at-glance-heading h3 {
+        margin:0;
+        color:var(--color-text);
+        font-size:17px;
+        font-weight:850;
+      }
+
+      .profile-section .profile-at-glance-see-all {
+        border:0;
+        padding:6px 0 6px 8px;
+        background:transparent;
+        color:var(--color-primary);
+        font:inherit;
+        font-size:12px;
+        font-weight:750;
+        cursor:pointer;
+      }
+
+      .profile-section .profile-glance-row {
+        display:flex;
+        align-items:flex-start;
+        gap:13px;
+        padding:12px 0;
+        border-bottom:1px solid var(--color-border);
+      }
+
+      .profile-section .profile-glance-row:last-child {
+        border-bottom:0;
+      }
+
+      .profile-section .profile-glance-icon {
+        width:34px;
+        height:34px;
+        flex:0 0 34px;
+        display:grid;
+        place-items:center;
+        color:var(--color-text);
+        font-size:23px;
+      }
+
+      .profile-section .profile-glance-content {
+        min-width:0;
+        flex:1;
+        color:var(--color-text);
+        font-size:13px;
+        line-height:1.55;
+        overflow-wrap:anywhere;
+      }
+
+      .profile-section .profile-glance-content strong {
+        font-weight:800;
+      }
+
+      .profile-section .profile-glance-content small {
+        display:block;
+        margin-top:2px;
+        color:var(--color-muted);
+        font-size:11px;
+      }
+
+      .profile-section .profile-glance-edit {
+        flex:0 0 auto;
+        border:0;
+        padding:5px;
+        background:transparent;
+        color:var(--color-primary);
+        font:inherit;
+        font-size:11px;
+        font-weight:750;
+        cursor:pointer;
+      }
+
+      .profile-section .profile-glance-empty {
+        padding:12px 0;
+        color:var(--color-muted);
+        font-size:12px;
+      }
+
       .profile-section .profile-tab-panel {
         width:100%;
         min-width:0;
@@ -1459,6 +1556,187 @@
   }
 
   /* =========================================================
+     FACEBOOK STYLE — AT A GLANCE
+  ========================================================= */
+
+  function getFeaturedExperience(type) {
+    const items = Array.isArray(profileExperiences)
+      ? profileExperiences.filter(item => item.type === type)
+      : [];
+
+    return items.sort((a, b) => {
+      if (Boolean(a.isCurrent) !== Boolean(b.isCurrent)) {
+        return a.isCurrent ? -1 : 1;
+      }
+
+      return String(b.startDate || "")
+        .localeCompare(String(a.startDate || ""));
+    })[0] || null;
+  }
+
+  function renderAtAGlance(user, ownProfile) {
+    const birthdayData = ownProfile
+      ? birthdaySettings
+      : profileBirthday;
+
+    const birthdayText = ownProfile
+      ? formatBirthday(
+          birthdayData,
+          Boolean(birthdayData?.showBirthYear)
+        )
+      : formatBirthday(
+          birthdayData,
+          Boolean(birthdayData?.birthYear)
+        );
+
+    const work = getFeaturedExperience("work");
+    const study = getFeaturedExperience("study");
+
+    const rows = [];
+
+    if (user?.location) {
+      rows.push({
+        icon: "📍",
+        value: `${t("बसोबास", "Lives in")} ${user.location}`
+      });
+    }
+
+    if (birthdayText) {
+      rows.push({
+        icon: "🎂",
+        value: `${t("जन्म", "Born")} ${birthdayText}`,
+        edit: ownProfile
+          ? `<button type="button"
+               class="profile-glance-edit"
+               data-edit-birthday>
+               ${t("सम्पादन", "Edit")}
+             </button>`
+          : ""
+      });
+    } else if (ownProfile) {
+      rows.push({
+        icon: "🎂",
+        value: t("जन्ममिति थप्नुहोस्", "Add birthday"),
+        edit: `<button type="button"
+                 class="profile-glance-edit"
+                 data-edit-birthday>
+                 ${t("थप्नुहोस्", "Add")}
+               </button>`
+      });
+    }
+
+    if (work) {
+      rows.push({
+        icon: "💼",
+        value: `${t("काम गर्नुहुन्छ", "Works at")} ${
+          work.organizationName || work.roleTitle || ""
+        }`,
+        sub: work.roleTitle || "",
+        edit: ownProfile
+          ? `<button type="button"
+               class="profile-glance-edit"
+               data-edit-experience="${escapeHTML(work.id)}">
+               ${t("सम्पादन", "Edit")}
+             </button>`
+          : ""
+      });
+    } else if (ownProfile) {
+      rows.push({
+        icon: "💼",
+        value: t("कामको विवरण थप्नुहोस्", "Add work"),
+        edit: `<button type="button"
+                 class="profile-glance-edit"
+                 data-add-experience="work">
+                 ${t("थप्नुहोस्", "Add")}
+               </button>`
+      });
+    }
+
+    if (study) {
+      rows.push({
+        icon: "🎓",
+        value: `${t("अध्ययन", "Studied at")} ${
+          study.organizationName || study.roleTitle || ""
+        }`,
+        sub: study.roleTitle || "",
+        edit: ownProfile
+          ? `<button type="button"
+               class="profile-glance-edit"
+               data-edit-experience="${escapeHTML(study.id)}">
+               ${t("सम्पादन", "Edit")}
+             </button>`
+          : ""
+      });
+    } else if (ownProfile) {
+      rows.push({
+        icon: "🎓",
+        value: t("अध्ययनको विवरण थप्नुहोस्", "Add education"),
+        edit: `<button type="button"
+                 class="profile-glance-edit"
+                 data-add-experience="study">
+                 ${t("थप्नुहोस्", "Add")}
+               </button>`
+      });
+    }
+
+    return `
+      <section class="profile-at-glance">
+        <div class="profile-at-glance-heading">
+          <h3>${t("एक नजरमा", "At a glance")}</h3>
+
+          <button
+            type="button"
+            class="profile-at-glance-see-all"
+            data-see-all-profile-details>
+            ${t("सबै हेर्नुहोस्", "See all")}
+          </button>
+        </div>
+
+        ${rows.length
+          ? rows.map(row => `
+              <div class="profile-glance-row">
+                <span class="profile-glance-icon"
+                      aria-hidden="true">
+                  ${row.icon}
+                </span>
+
+                <div class="profile-glance-content">
+                  ${escapeHTML(row.value)}
+                  ${row.sub
+                    ? `<small>${escapeHTML(row.sub)}</small>`
+                    : ""
+                  }
+                </div>
+
+                ${row.edit || ""}
+              </div>
+            `).join("")
+          : `
+            <div class="profile-glance-empty">
+              ${t(
+                "प्रोफाइल विवरण उपलब्ध छैन।",
+                "No profile details available."
+              )}
+            </div>
+          `
+        }
+      </section>
+    `;
+  }
+
+  function openAtAGlanceDetails(ownProfile) {
+    const content = `
+      ${renderBirthdaySection(ownProfile)}
+      ${renderExperienceSection(ownProfile)}
+    `;
+
+    openProfileDetailsDialog(
+      t("प्रोफाइल विवरण", "Profile Details"),
+      content
+    );
+  }
+
+  /* =========================================================
      BIRTHDAY + WORK / STUDY DISPLAY AND EDIT
   ========================================================= */
 
@@ -2509,6 +2787,8 @@
           </button>
         </div>
 
+        ${renderAtAGlance(user, ownProfile)}
+
         <div
           class="profile-tab-panel${activeTab === "posts" ? "" : " hidden"}"
           data-profile-panel="posts"
@@ -2540,10 +2820,6 @@
           <div class="card profile-about-card">
             ${renderAbout(user)}
           </div>
-
-          ${renderBirthdaySection(ownProfile)}
-
-          ${renderExperienceSection(ownProfile)}
         </div>
 
       </section>
@@ -2612,6 +2888,20 @@
 
     if (tab) {
       switchTab(tab);
+      return;
+    }
+
+    const seeAllDetailsButton = target.closest(
+      "[data-see-all-profile-details]"
+    );
+
+    if (seeAllDetailsButton) {
+      event.preventDefault();
+
+      openAtAGlanceDetails(
+        isOwnProfile(getProfile())
+      );
+
       return;
     }
 
