@@ -9,6 +9,7 @@
  * - Update own profile only
  * - Manage private birthday settings through secure RPC
  * - Read another user's permitted birthday through secure RPC
+ * - Manage work and study experiences with RLS
  * - Normalize Supabase profile rows
  */
 
@@ -18,6 +19,7 @@
   if (global.KSKSupabaseProfile) return;
 
   const TABLE = "profiles";
+  const EXPERIENCE_TABLE = "profile_experiences";
 
   const PROFILE_COLUMNS = [
     "id",
@@ -33,7 +35,33 @@
     "onboarding_completed"
   ].join(",");
 
+  const EXPERIENCE_COLUMNS = [
+    "id",
+    "user_id",
+    "experience_type",
+    "organization_name",
+    "role_title",
+    "description",
+    "start_date",
+    "end_date",
+    "is_current",
+    "visibility",
+    "created_at",
+    "updated_at"
+  ].join(",");
+
   const BIRTHDAY_VISIBILITIES = [
+    "public",
+    "friends",
+    "only_me"
+  ];
+
+  const EXPERIENCE_TYPES = [
+    "work",
+    "study"
+  ];
+
+  const EXPERIENCE_VISIBILITIES = [
     "public",
     "friends",
     "only_me"
@@ -126,20 +154,14 @@
     if (
       Object.prototype.hasOwnProperty.call(profile, "name")
     ) {
-      update.name = cleanText(
-        profile.name,
-        "नाम",
-        60
-      );
+      update.name = cleanText(profile.name, "नाम", 60);
     }
 
     if (
       Object.prototype.hasOwnProperty.call(profile, "firstName")
     ) {
       update.first_name = cleanText(
-        profile.firstName,
-        "पहिलो नाम",
-        60
+        profile.firstName, "पहिलो नाम", 60
       );
     }
 
@@ -147,9 +169,7 @@
       Object.prototype.hasOwnProperty.call(profile, "first_name")
     ) {
       update.first_name = cleanText(
-        profile.first_name,
-        "पहिलो नाम",
-        60
+        profile.first_name, "पहिलो नाम", 60
       );
     }
 
@@ -157,9 +177,7 @@
       Object.prototype.hasOwnProperty.call(profile, "lastName")
     ) {
       update.last_name = cleanText(
-        profile.lastName,
-        "थर",
-        60
+        profile.lastName, "थर", 60
       );
     }
 
@@ -167,29 +185,21 @@
       Object.prototype.hasOwnProperty.call(profile, "last_name")
     ) {
       update.last_name = cleanText(
-        profile.last_name,
-        "थर",
-        60
+        profile.last_name, "थर", 60
       );
     }
 
     if (
       Object.prototype.hasOwnProperty.call(profile, "bio")
     ) {
-      update.bio = cleanText(
-        profile.bio,
-        "परिचय",
-        240
-      );
+      update.bio = cleanText(profile.bio, "परिचय", 240);
     }
 
     if (
       Object.prototype.hasOwnProperty.call(profile, "location")
     ) {
       update.location = cleanText(
-        profile.location,
-        "ठेगाना",
-        100
+        profile.location, "ठेगाना", 100
       );
     }
 
@@ -234,12 +244,22 @@
    * DATE VALIDATION
    */
 
-  function validateBirthDate(value) {
+  function validateDate(value, fieldName, required = false) {
     const date = String(value || "").trim();
+
+    if (!date) {
+      if (required) {
+        throw new Error(
+          `${fieldName} राख्नुहोस्।`
+        );
+      }
+
+      return null;
+    }
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new Error(
-        "जन्ममिति YYYY-MM-DD ढाँचामा हुनुपर्छ।"
+        `${fieldName} YYYY-MM-DD ढाँचामा हुनुपर्छ।`
       );
     }
 
@@ -250,23 +270,27 @@
       parsed.toISOString().slice(0, 10) !== date
     ) {
       throw new Error(
-        "कृपया सही जन्ममिति राख्नुहोस्।"
+        `${fieldName} सही मिति हुनुपर्छ।`
       );
     }
 
-    const today = new Date();
-    const todayString =
-      today.getUTCFullYear() + "-" +
-      String(today.getUTCMonth() + 1).padStart(2, "0") + "-" +
-      String(today.getUTCDate()).padStart(2, "0");
+    const now = new Date();
+    const today =
+      now.getUTCFullYear() + "-" +
+      String(now.getUTCMonth() + 1).padStart(2, "0") + "-" +
+      String(now.getUTCDate()).padStart(2, "0");
 
-    if (date > todayString) {
+    if (date > today) {
       throw new Error(
-        "भविष्यको मिति जन्ममिति हुन सक्दैन।"
+        `${fieldName} भविष्यको मिति हुन सक्दैन।`
       );
     }
 
     return date;
+  }
+
+  function validateBirthDate(value) {
+    return validateDate(value, "जन्ममिति", true);
   }
 
   /*
@@ -311,8 +335,6 @@
 
   /*
    * GET ANOTHER USER'S PUBLIC PROFILE
-   *
-   * Supabase RLS remains responsible for access.
    */
 
   async function getProfileById(userId) {
@@ -346,9 +368,7 @@
       throw error;
     }
 
-    if (!data) {
-      return null;
-    }
+    if (!data) return null;
 
     return normalizeProfile(data);
   }
@@ -389,9 +409,7 @@
 
     global.dispatchEvent(
       new CustomEvent("ksk:profile-updated", {
-        detail: {
-          profile: result
-        }
+        detail: { profile: result }
       })
     );
 
@@ -400,9 +418,6 @@
 
   /*
    * GET MY PRIVATE BIRTHDAY SETTINGS
-   *
-   * Full date of birth is returned only by the
-   * authenticated user's own secure RPC.
    */
 
   async function getMyBirthdaySettings() {
@@ -439,9 +454,6 @@
 
   /*
    * UPDATE MY PRIVATE BIRTHDAY SETTINGS
-   *
-   * Database RPC verifies auth.uid() and updates
-   * only the currently authenticated user's row.
    */
 
   async function updateMyBirthdaySettings(settings) {
@@ -459,12 +471,11 @@
       settings.dateOfBirth ?? settings.date_of_birth
     );
 
-    const birthdayVisibility =
-      String(
-        settings.birthdayVisibility ??
-        settings.birthday_visibility ??
-        ""
-      ).trim();
+    const birthdayVisibility = String(
+      settings.birthdayVisibility ??
+      settings.birthday_visibility ??
+      ""
+    ).trim();
 
     if (
       !BIRTHDAY_VISIBILITIES.includes(birthdayVisibility)
@@ -515,9 +526,7 @@
 
     global.dispatchEvent(
       new CustomEvent("ksk:birthday-updated", {
-        detail: {
-          settings: result
-        }
+        detail: { settings: result }
       })
     );
 
@@ -526,14 +535,6 @@
 
   /*
    * GET ANOTHER USER'S PERMITTED BIRTHDAY
-   *
-   * The database RPC enforces:
-   * - Public / Friends / Only Me
-   * - Friendship status
-   * - Either-direction block restrictions
-   * - Birth year visibility
-   *
-   * This method never reads the private details table directly.
    */
 
   async function getProfileBirthday(userId) {
@@ -589,6 +590,398 @@
   }
 
   /*
+   * EXPERIENCE NORMALIZATION
+   */
+
+  function normalizeExperience(row) {
+    if (!row) return null;
+
+    return {
+      id: row.id || "",
+      userId: row.user_id || "",
+
+      type: row.experience_type || "",
+
+      organizationName: row.organization_name || "",
+      roleTitle: row.role_title || "",
+      description: row.description || "",
+
+      startDate: row.start_date || "",
+      endDate: row.end_date || "",
+
+      isCurrent: Boolean(row.is_current),
+      visibility: row.visibility || "only_me",
+
+      createdAt: row.created_at || "",
+      updatedAt: row.updated_at || ""
+    };
+  }
+
+  /*
+   * EXPERIENCE VALIDATION
+   */
+
+  function buildExperiencePayload(experience) {
+    if (
+      !experience ||
+      typeof experience !== "object" ||
+      Array.isArray(experience)
+    ) {
+      throw new Error(
+        "Work/Study विवरण सही छैन।"
+      );
+    }
+
+    const type = String(
+      experience.type ??
+      experience.experienceType ??
+      experience.experience_type ??
+      ""
+    ).trim().toLowerCase();
+
+    if (!EXPERIENCE_TYPES.includes(type)) {
+      throw new Error(
+        "विवरण Work वा Study हुनुपर्छ।"
+      );
+    }
+
+    const organizationName = cleanText(
+      experience.organizationName ??
+      experience.organization_name ??
+      "",
+      type === "work" ? "कम्पनीको नाम" : "विद्यालय/कलेजको नाम",
+      120
+    );
+
+    const roleTitle = cleanText(
+      experience.roleTitle ??
+      experience.role_title ??
+      "",
+      type === "work" ? "पद" : "तह वा विषय",
+      120
+    );
+
+    if (!organizationName || !roleTitle) {
+      throw new Error(
+        "संस्था र पद/तहको विवरण आवश्यक छ।"
+      );
+    }
+
+    const description = cleanText(
+      experience.description || "",
+      "विवरण",
+      500
+    );
+
+    const startDate = validateDate(
+      experience.startDate ?? experience.start_date,
+      "सुरु मिति"
+    );
+
+    const isCurrent = Boolean(
+      experience.isCurrent ?? experience.is_current
+    );
+
+    const endDate = isCurrent
+      ? null
+      : validateDate(
+          experience.endDate ?? experience.end_date,
+          "अन्त्य मिति"
+        );
+
+    if (
+      startDate &&
+      endDate &&
+      endDate < startDate
+    ) {
+      throw new Error(
+        "अन्त्य मिति सुरु मितिभन्दा अगाडिको हुन सक्दैन।"
+      );
+    }
+
+    const visibility = String(
+      experience.visibility || "only_me"
+    ).trim();
+
+    if (
+      !EXPERIENCE_VISIBILITIES.includes(visibility)
+    ) {
+      throw new Error(
+        "गोपनीयता विकल्प सही छैन।"
+      );
+    }
+
+    return {
+      experience_type: type,
+      organization_name: organizationName,
+      role_title: roleTitle,
+      description,
+      start_date: startDate,
+      end_date: endDate,
+      is_current: isCurrent,
+      visibility
+    };
+  }
+
+  /*
+   * GET MY WORK / STUDY EXPERIENCES
+   */
+
+  async function getMyExperiences(type) {
+    const { client, user } =
+      await getAuthenticatedContext();
+
+    let query = client
+      .from(EXPERIENCE_TABLE)
+      .select(EXPERIENCE_COLUMNS)
+      .eq("user_id", user.id);
+
+    if (type) {
+      const normalizedType = String(type).trim().toLowerCase();
+
+      if (!EXPERIENCE_TYPES.includes(normalizedType)) {
+        throw new Error(
+          "विवरण Work वा Study हुनुपर्छ।"
+        );
+      }
+
+      query = query.eq("experience_type", normalizedType);
+    }
+
+    const { data, error } = await query
+      .order("start_date", {
+        ascending: false,
+        nullsFirst: false
+      })
+      .order("created_at", {
+        ascending: false
+      });
+
+    if (error) {
+      console.error(
+        "My Experiences Load Failed:",
+        error
+      );
+
+      throw error;
+    }
+
+    return (data || [])
+      .map(normalizeExperience)
+      .filter(Boolean);
+  }
+
+  /*
+   * GET ANOTHER USER'S PERMITTED EXPERIENCES
+   *
+   * Database RLS checks visibility, friendship
+   * and either-direction block restrictions.
+   */
+
+  async function getProfileExperiences(userId, type) {
+    const id = String(userId || "").trim();
+
+    if (!id) {
+      throw new Error(
+        "प्रयोगकर्ताको ID उपलब्ध भएन।"
+      );
+    }
+
+    const { client } =
+      await getAuthenticatedContext();
+
+    let query = client
+      .from(EXPERIENCE_TABLE)
+      .select(EXPERIENCE_COLUMNS)
+      .eq("user_id", id);
+
+    if (type) {
+      const normalizedType = String(type).trim().toLowerCase();
+
+      if (!EXPERIENCE_TYPES.includes(normalizedType)) {
+        throw new Error(
+          "विवरण Work वा Study हुनुपर्छ।"
+        );
+      }
+
+      query = query.eq("experience_type", normalizedType);
+    }
+
+    const { data, error } = await query
+      .order("start_date", {
+        ascending: false,
+        nullsFirst: false
+      })
+      .order("created_at", {
+        ascending: false
+      });
+
+    if (error) {
+      console.error(
+        "Profile Experiences Load Failed:",
+        error
+      );
+
+      throw error;
+    }
+
+    return (data || [])
+      .map(normalizeExperience)
+      .filter(Boolean);
+  }
+
+  /*
+   * ADD MY WORK / STUDY EXPERIENCE
+   */
+
+  async function addMyExperience(experience) {
+    const { client, user } =
+      await getAuthenticatedContext();
+
+    const payload = buildExperiencePayload(experience);
+
+    const { data, error } = await client
+      .from(EXPERIENCE_TABLE)
+      .insert({
+        ...payload,
+        user_id: user.id
+      })
+      .select(EXPERIENCE_COLUMNS)
+      .single();
+
+    if (error) {
+      console.error(
+        "Experience Insert Failed:",
+        error
+      );
+
+      throw error;
+    }
+
+    const result = normalizeExperience(data);
+
+    global.dispatchEvent(
+      new CustomEvent("ksk:experience-updated", {
+        detail: {
+          action: "added",
+          experience: result
+        }
+      })
+    );
+
+    return result;
+  }
+
+  /*
+   * UPDATE MY OWN EXPERIENCE ONLY
+   */
+
+  async function updateMyExperience(id, experience) {
+    const experienceId = String(id || "").trim();
+
+    if (!experienceId) {
+      throw new Error(
+        "विवरणको ID उपलब्ध भएन।"
+      );
+    }
+
+    const { client, user } =
+      await getAuthenticatedContext();
+
+    const payload = buildExperiencePayload(experience);
+
+    const { data, error } = await client
+      .from(EXPERIENCE_TABLE)
+      .update({
+        ...payload,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", experienceId)
+      .eq("user_id", user.id)
+      .select(EXPERIENCE_COLUMNS)
+      .maybeSingle();
+
+    if (error) {
+      console.error(
+        "Experience Update Failed:",
+        error
+      );
+
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error(
+        "विवरण अपडेट भएन वा यो विवरण तपाईंको होइन।"
+      );
+    }
+
+    const result = normalizeExperience(data);
+
+    global.dispatchEvent(
+      new CustomEvent("ksk:experience-updated", {
+        detail: {
+          action: "updated",
+          experience: result
+        }
+      })
+    );
+
+    return result;
+  }
+
+  /*
+   * DELETE MY OWN EXPERIENCE ONLY
+   */
+
+  async function deleteMyExperience(id) {
+    const experienceId = String(id || "").trim();
+
+    if (!experienceId) {
+      throw new Error(
+        "विवरणको ID उपलब्ध भएन।"
+      );
+    }
+
+    const { client, user } =
+      await getAuthenticatedContext();
+
+    const { data, error } = await client
+      .from(EXPERIENCE_TABLE)
+      .delete()
+      .eq("id", experienceId)
+      .eq("user_id", user.id)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      console.error(
+        "Experience Delete Failed:",
+        error
+      );
+
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error(
+        "विवरण हटेन वा यो विवरण तपाईंको होइन।"
+      );
+    }
+
+    global.dispatchEvent(
+      new CustomEvent("ksk:experience-updated", {
+        detail: {
+          action: "deleted",
+          id: experienceId
+        }
+      })
+    );
+
+    return true;
+  }
+
+  /*
    * PUBLIC API
    */
 
@@ -609,7 +1002,14 @@
     updateMyBirthdaySettings,
     getProfileBirthday,
 
-    normalizeProfile
+    getMyExperiences,
+    getProfileExperiences,
+    addMyExperience,
+    updateMyExperience,
+    deleteMyExperience,
+
+    normalizeProfile,
+    normalizeExperience
   });
 
   console.info(
