@@ -494,6 +494,191 @@
         overflow-wrap:anywhere;
       }
 
+      /* BIRTHDAY + EXPERIENCE EDIT FORMS */
+
+      .profile-section .profile-detail-actions {
+        display:flex;
+        flex-wrap:wrap;
+        gap:7px;
+        margin-left:auto;
+      }
+
+      .profile-section .profile-detail-btn {
+        min-height:34px;
+        padding:7px 11px;
+        border:1px solid var(--color-border);
+        border-radius:9px;
+        background:var(--color-surface-secondary);
+        color:var(--color-text);
+        font:inherit;
+        font-size:11px;
+        font-weight:750;
+        cursor:pointer;
+      }
+
+      .profile-section .profile-detail-btn.primary {
+        border-color:var(--color-primary);
+        background:var(--color-primary);
+        color:#fff;
+      }
+
+      .profile-section .profile-detail-btn.danger {
+        color:#dc2626;
+      }
+
+      .profile-section .profile-detail-heading {
+        flex-wrap:wrap;
+      }
+
+      .profile-section .profile-experience-actions {
+        display:flex;
+        flex-wrap:wrap;
+        gap:7px;
+        margin-top:9px;
+      }
+
+      #ksk-profile-details-dialog {
+        width:min(94%,520px);
+        max-width:520px;
+        max-height:88vh;
+        padding:0;
+        overflow:auto;
+        border:1px solid var(--color-border);
+        border-radius:18px;
+        background:var(--color-surface);
+        color:var(--color-text);
+        box-shadow:0 20px 70px rgba(0,0,0,.3);
+      }
+
+      #ksk-profile-details-dialog::backdrop {
+        background:rgba(0,0,0,.62);
+        backdrop-filter:blur(3px);
+      }
+
+      #ksk-profile-details-dialog .profile-dialog-header {
+        position:sticky;
+        top:0;
+        z-index:2;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        padding:16px;
+        border-bottom:1px solid var(--color-border);
+        background:var(--color-surface);
+      }
+
+      #ksk-profile-details-dialog .profile-dialog-header strong {
+        font-size:16px;
+        font-weight:850;
+      }
+
+      #ksk-profile-details-dialog .profile-dialog-close {
+        width:34px;
+        height:34px;
+        border:0;
+        border-radius:9px;
+        background:var(--color-surface-secondary);
+        color:var(--color-text);
+        font-size:20px;
+        cursor:pointer;
+      }
+
+      #ksk-profile-details-dialog .profile-dialog-body {
+        padding:16px;
+      }
+
+      #ksk-profile-details-dialog .profile-form {
+        display:flex;
+        flex-direction:column;
+        gap:13px;
+      }
+
+      #ksk-profile-details-dialog .profile-form-field {
+        display:flex;
+        flex-direction:column;
+        gap:6px;
+      }
+
+      #ksk-profile-details-dialog .profile-form-field label {
+        color:var(--color-text);
+        font-size:12px;
+        font-weight:750;
+      }
+
+      #ksk-profile-details-dialog .profile-form-field input,
+      #ksk-profile-details-dialog .profile-form-field select,
+      #ksk-profile-details-dialog .profile-form-field textarea {
+        width:100%;
+        min-width:0;
+        min-height:44px;
+        padding:10px 12px;
+        border:1px solid var(--color-border);
+        border-radius:10px;
+        outline:none;
+        background:var(--color-surface-secondary);
+        color:var(--color-text);
+        font:inherit;
+        font-size:13px;
+        box-sizing:border-box;
+      }
+
+      #ksk-profile-details-dialog .profile-form-field textarea {
+        min-height:90px;
+        resize:vertical;
+      }
+
+      #ksk-profile-details-dialog .profile-form-field input:focus,
+      #ksk-profile-details-dialog .profile-form-field select:focus,
+      #ksk-profile-details-dialog .profile-form-field textarea:focus {
+        border-color:var(--color-primary);
+      }
+
+      #ksk-profile-details-dialog .profile-form-check {
+        display:flex;
+        align-items:center;
+        gap:9px;
+        color:var(--color-text);
+        font-size:12px;
+        font-weight:650;
+      }
+
+      #ksk-profile-details-dialog .profile-form-check input {
+        width:18px;
+        height:18px;
+        accent-color:var(--color-primary);
+      }
+
+      #ksk-profile-details-dialog .profile-form-actions {
+        display:flex;
+        gap:9px;
+        margin-top:5px;
+      }
+
+      #ksk-profile-details-dialog .profile-form-actions button {
+        flex:1;
+        min-height:45px;
+        border:1px solid var(--color-border);
+        border-radius:11px;
+        background:var(--color-surface-secondary);
+        color:var(--color-text);
+        font:inherit;
+        font-size:13px;
+        font-weight:800;
+        cursor:pointer;
+      }
+
+      #ksk-profile-details-dialog .profile-form-actions button[type="submit"] {
+        border-color:var(--color-primary);
+        background:var(--color-primary);
+        color:#fff;
+      }
+
+      #ksk-profile-details-dialog .profile-form-actions button:disabled {
+        opacity:.55;
+        cursor:wait;
+      }
+
       /* ABOUT */
 
       .profile-section .profile-about-card {
@@ -1273,7 +1458,9 @@
     `;
   }
 
-  /* BIRTHDAY DISPLAY */
+  /* =========================================================
+     BIRTHDAY + WORK / STUDY DISPLAY AND EDIT
+  ========================================================= */
 
   function formatBirthday(data, showYear = false) {
     if (!data) return "";
@@ -1309,9 +1496,18 @@
       return "";
     }
 
-    const date = new Date(2000, month - 1, day);
+    const date = new Date(
+      year || 2000,
+      month - 1,
+      day
+    );
 
-    const locale = isEnglish() ? "en-US" : "ne-NP";
+    if (
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return "";
+    }
 
     const options = {
       month: "long",
@@ -1322,8 +1518,8 @@
       options.year = "numeric";
     }
 
-    return date.toLocaleDateString(locale, options)
-      .replace("2000", showYear && year ? String(year) : "");
+    // सधैँ AD / Gregorian मिति
+    return date.toLocaleDateString("en-US", options);
   }
 
   function getBirthdayVisibilityLabel(value) {
@@ -1336,61 +1532,232 @@
     return labels[value] || labels.only_me;
   }
 
+  function getTodayISO() {
+    const date = new Date();
+
+    return [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0")
+    ].join("-");
+  }
+
+  /* =========================================================
+     MODAL
+  ========================================================= */
+
+  function getProfileDetailsDialog() {
+    let dialog = document.getElementById(
+      "ksk-profile-details-dialog"
+    );
+
+    if (!dialog) {
+      dialog = document.createElement("dialog");
+      dialog.id = "ksk-profile-details-dialog";
+
+      document.body.appendChild(dialog);
+    }
+
+    return dialog;
+  }
+
+  function openProfileDetailsDialog(title, content) {
+    const dialog = getProfileDetailsDialog();
+
+    dialog.innerHTML = `
+      <div class="profile-dialog-header">
+        <strong>${escapeHTML(title)}</strong>
+
+        <button
+          type="button"
+          class="profile-dialog-close"
+          data-close-profile-dialog
+          aria-label="${t("बन्द गर्नुहोस्", "Close")}">
+          ×
+        </button>
+      </div>
+
+      <div class="profile-dialog-body">
+        ${content}
+      </div>
+    `;
+
+    if (typeof dialog.showModal === "function") {
+      if (!dialog.open) dialog.showModal();
+    } else {
+      dialog.setAttribute("open", "");
+    }
+  }
+
+  function closeProfileDetailsDialog() {
+    const dialog = document.getElementById(
+      "ksk-profile-details-dialog"
+    );
+
+    if (!dialog) return;
+
+    if (typeof dialog.close === "function" && dialog.open) {
+      dialog.close();
+    } else {
+      dialog.removeAttribute("open");
+    }
+  }
+
+  /* =========================================================
+     BIRTHDAY FORM
+  ========================================================= */
+
+  function openBirthdayEditor() {
+    const data = birthdaySettings || {};
+
+    const visibility = [
+      "public",
+      "friends",
+      "only_me"
+    ].includes(data.birthdayVisibility)
+      ? data.birthdayVisibility
+      : "only_me";
+
+    const content = `
+      <form
+        class="profile-form"
+        data-profile-details-form
+        data-form-type="birthday">
+
+        <div class="profile-form-field">
+          <label for="profile-birthday-date">
+            ${t("जन्ममिति (AD)", "Date of Birth (AD)")}
+          </label>
+
+          <input
+            id="profile-birthday-date"
+            type="date"
+            name="dateOfBirth"
+            value="${escapeHTML(data.dateOfBirth || "")}"
+            max="${getTodayISO()}"
+            required>
+        </div>
+
+        <div class="profile-form-field">
+          <label for="profile-birthday-visibility">
+            ${t("जन्मदिनको गोपनीयता", "Birthday Privacy")}
+          </label>
+
+          <select
+            id="profile-birthday-visibility"
+            name="birthdayVisibility">
+
+            <option value="public" ${visibility === "public" ? "selected" : ""}>
+              ${t("सबैले देख्न सक्छन्", "Public")}
+            </option>
+
+            <option value="friends" ${visibility === "friends" ? "selected" : ""}>
+              ${t("साथीहरूले मात्र", "Friends")}
+            </option>
+
+            <option value="only_me" ${visibility === "only_me" ? "selected" : ""}>
+              ${t("मात्र म", "Only me")}
+            </option>
+          </select>
+        </div>
+
+        <label class="profile-form-check">
+          <input
+            type="checkbox"
+            name="showBirthYear"
+            ${data.showBirthYear ? "checked" : ""}>
+
+          <span>
+            ${t(
+              "मेरो जन्मवर्ष पनि देखाउने",
+              "Show my birth year"
+            )}
+          </span>
+        </label>
+
+        <div class="profile-form-actions">
+          <button type="button" data-close-profile-dialog>
+            ${t("रद्द गर्नुहोस्", "Cancel")}
+          </button>
+
+          <button type="submit">
+            ${t("सुरक्षित गर्नुहोस्", "Save")}
+          </button>
+        </div>
+      </form>
+    `;
+
+    openProfileDetailsDialog(
+      t("जन्ममिति सम्पादन", "Edit Birthday"),
+      content
+    );
+  }
+
   function renderBirthdaySection(ownProfile) {
     const data = ownProfile
       ? birthdaySettings
       : profileBirthday;
 
     const birthdayText = ownProfile
-      ? formatBirthday(data, true)
+      ? formatBirthday(data, Boolean(data?.showBirthYear))
       : formatBirthday(data, Boolean(data?.birthYear));
-
-    if (!birthdayText) {
-      if (!ownProfile) return "";
-
-      return `
-        <section class="profile-detail-card">
-          <div class="profile-detail-heading">
-            <span>🎂</span>
-            <strong>${t("जन्मदिन", "Birthday")}</strong>
-          </div>
-
-          <p class="profile-detail-empty">
-            ${t(
-              "जन्ममिति थपिएको छैन।",
-              "Birthday has not been added."
-            )}
-          </p>
-        </section>
-      `;
-    }
 
     return `
       <section class="profile-detail-card">
+
         <div class="profile-detail-heading">
           <span>🎂</span>
-          <strong>${t("जन्मदिन", "Birthday")}</strong>
+
+          <strong>
+            ${t("जन्मदिन", "Birthday")}
+          </strong>
+
+          ${ownProfile ? `
+            <div class="profile-detail-actions">
+              <button
+                type="button"
+                class="profile-detail-btn primary"
+                data-edit-birthday>
+                ${t("सम्पादन", "Edit")}
+              </button>
+            </div>
+          ` : ""}
         </div>
 
-        <div class="profile-detail-value">
-          ${escapeHTML(birthdayText)}
-        </div>
+        ${birthdayText
+          ? `
+            <div class="profile-detail-value">
+              ${escapeHTML(birthdayText)}
+            </div>
+          `
+          : `
+            <p class="profile-detail-empty">
+              ${ownProfile
+                ? t("जन्ममिति थपिएको छैन।", "Birthday has not been added.")
+                : ""
+              }
+            </p>
+          `
+        }
 
-        ${ownProfile ? `
+        ${ownProfile && data?.dateOfBirth ? `
           <div class="profile-detail-meta">
             ${t("गोपनीयता", "Privacy")}:
             ${escapeHTML(
               getBirthdayVisibilityLabel(
-                data?.birthdayVisibility
+                data.birthdayVisibility
               )
             )}
           </div>
         ` : ""}
+
       </section>
     `;
   }
 
-  /* WORK / STUDY DISPLAY */
+  /* =========================================================
+     EXPERIENCE DATE
+  ========================================================= */
 
   function formatExperienceDate(value) {
     if (!value) return "";
@@ -1399,22 +1766,216 @@
 
     if (parts.length !== 3) return "";
 
-    const date = new Date(
-      Number(parts[0]),
-      Number(parts[1]) - 1,
-      Number(parts[2])
-    );
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+    const day = Number(parts[2]);
 
-    if (Number.isNaN(date.getTime())) return "";
+    const date = new Date(year, month - 1, day);
 
-    return date.toLocaleDateString(
-      isEnglish() ? "en-US" : "ne-NP",
-      {
-        month: "short",
-        year: "numeric"
-      }
+    if (
+      Number.isNaN(date.getTime()) ||
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return "";
+    }
+
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      year: "numeric"
+    });
+  }
+
+  /* =========================================================
+     EXPERIENCE FORM
+  ========================================================= */
+
+  function openExperienceEditor(type, experienceId = "") {
+    const normalizedType = String(type || "").toLowerCase();
+
+    if (!["work", "study"].includes(normalizedType)) {
+      return;
+    }
+
+    const existing = experienceId
+      ? profileExperiences.find(item =>
+          String(item.id) === String(experienceId)
+        )
+      : null;
+
+    if (experienceId && !existing) {
+      showToast(
+        t("विवरण भेटिएन।", "Experience not found."),
+        "error"
+      );
+      return;
+    }
+
+    const isWork = normalizedType === "work";
+
+    const title = isWork
+      ? t("कामको विवरण", "Work Experience")
+      : t("अध्ययनको विवरण", "Education");
+
+    const organizationLabel = isWork
+      ? t("कम्पनी / संस्थाको नाम", "Company / Organization")
+      : t("विद्यालय / कलेजको नाम", "School / College");
+
+    const roleLabel = isWork
+      ? t("पद / काम", "Position / Job Title")
+      : t("तह / विषय", "Level / Subject");
+
+    const visibility = [
+      "public",
+      "friends",
+      "only_me"
+    ].includes(existing?.visibility)
+      ? existing.visibility
+      : "only_me";
+
+    const content = `
+      <form
+        class="profile-form"
+        data-profile-details-form
+        data-form-type="experience"
+        data-experience-id="${escapeHTML(existing?.id || "")}">
+
+        <input
+          type="hidden"
+          name="type"
+          value="${normalizedType}">
+
+        <div class="profile-form-field">
+          <label>
+            ${organizationLabel}
+          </label>
+
+          <input
+            type="text"
+            name="organizationName"
+            maxlength="120"
+            value="${escapeHTML(existing?.organizationName || "")}"
+            placeholder="${escapeHTML(organizationLabel)}"
+            required>
+        </div>
+
+        <div class="profile-form-field">
+          <label>
+            ${roleLabel}
+          </label>
+
+          <input
+            type="text"
+            name="roleTitle"
+            maxlength="120"
+            value="${escapeHTML(existing?.roleTitle || "")}"
+            placeholder="${escapeHTML(roleLabel)}"
+            required>
+        </div>
+
+        <div class="profile-form-field">
+          <label>
+            ${t("विवरण (वैकल्पिक)", "Description (Optional)")}
+          </label>
+
+          <textarea
+            name="description"
+            maxlength="500"
+            placeholder="${t(
+              "थप जानकारी लेख्नुहोस्...",
+              "Add more information..."
+            )}">${escapeHTML(existing?.description || "")}</textarea>
+        </div>
+
+        <div class="profile-form-field">
+          <label>
+            ${t("सुरु मिति", "Start Date")}
+          </label>
+
+          <input
+            type="date"
+            name="startDate"
+            max="${getTodayISO()}"
+            value="${escapeHTML(existing?.startDate || "")}">
+        </div>
+
+        <label class="profile-form-check">
+          <input
+            type="checkbox"
+            name="isCurrent"
+            data-experience-current
+            ${existing?.isCurrent ? "checked" : ""}>
+
+          <span>
+            ${isWork
+              ? t("अहिले पनि यहीँ काम गर्दैछु", "I currently work here")
+              : t("अहिले पनि यहीँ अध्ययन गर्दैछु", "I currently study here")
+            }
+          </span>
+        </label>
+
+        <div class="profile-form-field">
+          <label>
+            ${t("अन्त्य मिति", "End Date")}
+          </label>
+
+          <input
+            type="date"
+            name="endDate"
+            max="${getTodayISO()}"
+            value="${escapeHTML(existing?.endDate || "")}"
+            ${existing?.isCurrent ? "disabled" : ""}>
+        </div>
+
+        <div class="profile-form-field">
+          <label>
+            ${t("गोपनीयता", "Privacy")}
+          </label>
+
+          <select name="visibility">
+            <option value="public" ${visibility === "public" ? "selected" : ""}>
+              ${t("सबैले देख्न सक्छन्", "Public")}
+            </option>
+
+            <option value="friends" ${visibility === "friends" ? "selected" : ""}>
+              ${t("साथीहरूले मात्र", "Friends")}
+            </option>
+
+            <option value="only_me" ${visibility === "only_me" ? "selected" : ""}>
+              ${t("मात्र म", "Only me")}
+            </option>
+          </select>
+        </div>
+
+        <div class="profile-form-actions">
+          <button type="button" data-close-profile-dialog>
+            ${t("रद्द गर्नुहोस्", "Cancel")}
+          </button>
+
+          <button type="submit">
+            ${existing
+              ? t("अपडेट गर्नुहोस्", "Update")
+              : t("थप्नुहोस्", "Add")
+            }
+          </button>
+        </div>
+      </form>
+    `;
+
+    openProfileDetailsDialog(
+      existing
+        ? t("विवरण सम्पादन", "Edit Details")
+        : isWork
+          ? t("कामको अनुभव थप्नुहोस्", "Add Work Experience")
+          : t("अध्ययन थप्नुहोस्", "Add Education"),
+      content
     );
   }
+
+  /* =========================================================
+     EXPERIENCE DISPLAY
+  ========================================================= */
 
   function renderExperienceItem(item, ownProfile) {
     const isWork = item.type === "work";
@@ -1424,6 +1985,7 @@
       : t("अध्ययन", "Study");
 
     const start = formatExperienceDate(item.startDate);
+
     const end = item.isCurrent
       ? t("हालसम्म", "Present")
       : formatExperienceDate(item.endDate);
@@ -1434,11 +1996,13 @@
 
     return `
       <article class="profile-experience-item">
+
         <div class="profile-experience-icon">
           ${isWork ? "💼" : "🎓"}
         </div>
 
         <div class="profile-experience-content">
+
           <small>${title}</small>
 
           <strong>
@@ -1460,6 +2024,27 @@
               ${escapeHTML(item.description)}
             </div>
           ` : ""}
+
+          ${ownProfile ? `
+            <div class="profile-experience-actions">
+
+              <button
+                type="button"
+                class="profile-detail-btn"
+                data-edit-experience="${escapeHTML(item.id)}">
+                ${t("सम्पादन", "Edit")}
+              </button>
+
+              <button
+                type="button"
+                class="profile-detail-btn danger"
+                data-delete-experience="${escapeHTML(item.id)}">
+                ${t("हटाउनुहोस्", "Delete")}
+              </button>
+
+            </div>
+          ` : ""}
+
         </div>
       </article>
     `;
@@ -1475,37 +2060,249 @@
 
     return `
       <section class="profile-detail-card">
+
         <div class="profile-detail-heading">
           <span>💼</span>
-          <strong>${t("कामको अनुभव", "Work Experience")}</strong>
+
+          <strong>
+            ${t("कामको अनुभव", "Work Experience")}
+          </strong>
+
+          ${ownProfile ? `
+            <div class="profile-detail-actions">
+              <button
+                type="button"
+                class="profile-detail-btn primary"
+                data-add-experience="work">
+                + ${t("थप्नुहोस्", "Add")}
+              </button>
+            </div>
+          ` : ""}
         </div>
 
         ${workItems.length
           ? workItems.map(item =>
               renderExperienceItem(item, ownProfile)
             ).join("")
-          : `<p class="profile-detail-empty">
+          : `
+            <p class="profile-detail-empty">
               ${t("कामको विवरण छैन।", "No work details added.")}
-            </p>`
+            </p>
+          `
         }
+
       </section>
 
       <section class="profile-detail-card">
+
         <div class="profile-detail-heading">
           <span>🎓</span>
-          <strong>${t("शिक्षा", "Education")}</strong>
+
+          <strong>
+            ${t("शिक्षा", "Education")}
+          </strong>
+
+          ${ownProfile ? `
+            <div class="profile-detail-actions">
+              <button
+                type="button"
+                class="profile-detail-btn primary"
+                data-add-experience="study">
+                + ${t("थप्नुहोस्", "Add")}
+              </button>
+            </div>
+          ` : ""}
         </div>
 
         ${studyItems.length
           ? studyItems.map(item =>
               renderExperienceItem(item, ownProfile)
             ).join("")
-          : `<p class="profile-detail-empty">
+          : `
+            <p class="profile-detail-empty">
               ${t("अध्ययनको विवरण छैन।", "No study details added.")}
-            </p>`
+            </p>
+          `
         }
+
       </section>
     `;
+  }
+
+  /* =========================================================
+     FORM SUBMIT
+  ========================================================= */
+
+  async function handleProfileDetailsSubmit(event) {
+    const form = event.target;
+
+    if (!form?.matches?.("[data-profile-details-form]")) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const submitButton = form.querySelector(
+      'button[type="submit"]'
+    );
+
+    if (submitButton?.disabled) return;
+
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = t(
+        "सुरक्षित हुँदैछ...",
+        "Saving..."
+      );
+    }
+
+    try {
+      const formData = new FormData(form);
+      const formType = form.dataset.formType;
+
+      if (formType === "birthday") {
+        await updateMyBirthdaySettings({
+          dateOfBirth: String(
+            formData.get("dateOfBirth") || ""
+          ),
+
+          birthdayVisibility: String(
+            formData.get("birthdayVisibility") || "only_me"
+          ),
+
+          showBirthYear: form.elements.showBirthYear.checked
+        });
+
+        closeProfileDetailsDialog();
+
+        showToast(
+          t(
+            "जन्मदिन सेटिङ सुरक्षित भयो।",
+            "Birthday settings saved."
+          ),
+          "success"
+        );
+
+        return;
+      }
+
+      if (formType === "experience") {
+        const payload = {
+          type: String(formData.get("type") || ""),
+
+          organizationName: String(
+            formData.get("organizationName") || ""
+          ).trim(),
+
+          roleTitle: String(
+            formData.get("roleTitle") || ""
+          ).trim(),
+
+          description: String(
+            formData.get("description") || ""
+          ).trim(),
+
+          startDate: String(
+            formData.get("startDate") || ""
+          ),
+
+          endDate: String(
+            formData.get("endDate") || ""
+          ),
+
+          isCurrent: form.elements.isCurrent.checked,
+
+          visibility: String(
+            formData.get("visibility") || "only_me"
+          )
+        };
+
+        const experienceId = String(
+          form.dataset.experienceId || ""
+        ).trim();
+
+        if (experienceId) {
+          await updateMyExperience(experienceId, payload);
+        } else {
+          await addMyExperience(payload);
+        }
+
+        closeProfileDetailsDialog();
+
+        showToast(
+          experienceId
+            ? t("विवरण अपडेट भयो।", "Details updated.")
+            : t("विवरण थपियो।", "Details added."),
+          "success"
+        );
+      }
+
+    } catch (error) {
+      console.error(
+        "Profile details save failed:",
+        error
+      );
+
+      showToast(
+        error?.message ||
+          t(
+            "विवरण सुरक्षित गर्न सकिएन।",
+            "Could not save details."
+          ),
+        "error"
+      );
+
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = t(
+          "फेरि प्रयास गर्नुहोस्",
+          "Try Again"
+        );
+      }
+    }
+  }
+
+  /* =========================================================
+     EXPERIENCE DELETE
+  ========================================================= */
+
+  async function removeExperience(experienceId) {
+    const id = String(experienceId || "").trim();
+
+    if (!id) return;
+
+    const confirmed = global.confirm(
+      t(
+        "यो विवरण हटाउने निश्चित गर्नुहुन्छ?",
+        "Are you sure you want to delete this detail?"
+      )
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteMyExperience(id);
+
+      showToast(
+        t("विवरण हटाइयो।", "Details deleted."),
+        "success"
+      );
+
+    } catch (error) {
+      console.error(
+        "Experience delete failed:",
+        error
+      );
+
+      showToast(
+        error?.message ||
+          t(
+            "विवरण हटाउन सकिएन।",
+            "Could not delete details."
+          ),
+        "error"
+      );
+    }
   }
 
   /* MAIN RENDER */
@@ -1753,7 +2550,9 @@
     `;
   }
 
-  /* TABS AND CLICK HANDLERS */
+  /* =========================================================
+     TABS AND CLICK HANDLERS
+  ========================================================= */
 
   function switchTab(button) {
     const section = button.closest("[data-profile-section]");
@@ -1765,7 +2564,10 @@
       const active = tab === button;
 
       tab.classList.toggle("is-active", active);
-      tab.setAttribute("aria-selected", active ? "true" : "false");
+      tab.setAttribute(
+        "aria-selected",
+        active ? "true" : "false"
+      );
     });
 
     section.querySelectorAll("[data-profile-panel]").forEach(panel => {
@@ -1780,9 +2582,22 @@
 
   function handleClick(event) {
     const target = event.target;
+
     if (!target?.closest) return;
 
-    const retryButton = target.closest("[data-retry-public-profile]");
+    const closeButton = target.closest(
+      "[data-close-profile-dialog]"
+    );
+
+    if (closeButton) {
+      event.preventDefault();
+      closeProfileDetailsDialog();
+      return;
+    }
+
+    const retryButton = target.closest(
+      "[data-retry-public-profile]"
+    );
 
     if (retryButton) {
       event.preventDefault();
@@ -1800,7 +2615,69 @@
       return;
     }
 
-    const copyButton = target.closest("[data-copy-profile-link]");
+    const birthdayButton = target.closest(
+      "[data-edit-birthday]"
+    );
+
+    if (birthdayButton) {
+      event.preventDefault();
+      openBirthdayEditor();
+      return;
+    }
+
+    const addExperienceButton = target.closest(
+      "[data-add-experience]"
+    );
+
+    if (addExperienceButton) {
+      event.preventDefault();
+
+      openExperienceEditor(
+        addExperienceButton.dataset.addExperience
+      );
+
+      return;
+    }
+
+    const editExperienceButton = target.closest(
+      "[data-edit-experience]"
+    );
+
+    if (editExperienceButton) {
+      event.preventDefault();
+
+      const item = profileExperiences.find(experience =>
+        String(experience.id) ===
+        String(editExperienceButton.dataset.editExperience)
+      );
+
+      if (item) {
+        openExperienceEditor(
+          item.type,
+          item.id
+        );
+      }
+
+      return;
+    }
+
+    const deleteExperienceButton = target.closest(
+      "[data-delete-experience]"
+    );
+
+    if (deleteExperienceButton) {
+      event.preventDefault();
+
+      removeExperience(
+        deleteExperienceButton.dataset.deleteExperience
+      );
+
+      return;
+    }
+
+    const copyButton = target.closest(
+      "[data-copy-profile-link]"
+    );
 
     if (copyButton) {
       event.preventDefault();
@@ -1808,8 +2685,46 @@
     }
   }
 
+  function handleProfileDetailsChange(event) {
+    const checkbox = event.target;
+
+    if (!checkbox?.matches?.("[data-experience-current]")) {
+      return;
+    }
+
+    const form = checkbox.closest(
+      "[data-profile-details-form]"
+    );
+
+    const endDate = form?.querySelector(
+      '[name="endDate"]'
+    );
+
+    if (!endDate) return;
+
+    endDate.disabled = checkbox.checked;
+
+    if (checkbox.checked) {
+      endDate.value = "";
+    }
+  }
+
   document.addEventListener("click", handleClick);
-  global.addEventListener("ksk:navigate", handleProfileNavigation);
+
+  document.addEventListener(
+    "submit",
+    handleProfileDetailsSubmit
+  );
+
+  document.addEventListener(
+    "change",
+    handleProfileDetailsChange
+  );
+
+  global.addEventListener(
+    "ksk:navigate",
+    handleProfileNavigation
+  );
 
   /* PUBLIC API */
 
