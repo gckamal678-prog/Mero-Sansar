@@ -2529,8 +2529,10 @@
             ${ownProfile ? 'tabindex="0"' : ""}
             aria-label="${t("Cover फोटो", "Cover photo")}"
           >
+
             <div class="ksk-profile-cover-empty">
               <span class="ksk-profile-cover-icon">🌄</span>
+
               <span class="ksk-profile-cover-label">
                 ${ownProfile
                   ? t("Cover फोटो राख्नुहोस्", "Add cover photo")
@@ -2538,6 +2540,17 @@
                 }
               </span>
             </div>
+
+            ${ownProfile ? `
+              <button
+                type="button"
+                class="ksk-profile-cover-edit"
+                data-edit-profile
+                aria-label="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
+                title="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
+              >✍️</button>
+            ` : ""}
+
           </div>
 
           <div
