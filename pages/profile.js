@@ -81,6 +81,7 @@
       }
 
       .profile-section .profile-card {
+        position:relative;
         display:flex;
         flex-direction:column;
         align-items:center;
@@ -122,7 +123,8 @@
         position:absolute;
         top:10px;
         right:10px;
-        z-index:5;
+        z-index:10;
+        pointer-events:auto;
 
         width:42px;
         height:42px;
@@ -1365,29 +1367,48 @@
   }
 
   function isPhotoPost(post) {
-    if (!post || typeof post !== "object") return false;
+    if (!post || typeof post !== "object") {
+      return false;
+    }
 
     const mediaType = String(
       post.mediaType || post.media?.type || ""
     ).trim().toLowerCase();
 
-    if (["video", "audio", "voice", "music"].includes(mediaType)) {
+    if (
+      mediaType &&
+      mediaType !== "image" &&
+      !mediaType.startsWith("image/")
+    ) {
       return false;
     }
 
-    if (post.video || post.videoUrl || post.audio || post.audioUrl) {
+    if (
+      post.video ||
+      post.videoUrl ||
+      post.audio ||
+      post.audioUrl
+    ) {
       return false;
     }
 
-    return Boolean(
-      post.mediaId ||
+    const supabaseImage = Boolean(
+      mediaType.startsWith("image/") &&
+      (
+        post.mediaPath ||
+        post.mediaUrl ||
+        post.media
+      )
+    );
+
+    const legacyImage = Boolean(
       post.mediaData ||
       post.image ||
       post.imageUrl ||
-      post.mediaUrl ||
-      post.photo ||
-      post.media
+      post.photo
     );
+
+    return supabaseImage || legacyImage;
   }
 
   function renderPostList(posts, options = {}) {
@@ -2589,17 +2610,17 @@
               </span>
             </div>
 
-            ${ownProfile ? `
-              <button
-                type="button"
-                class="ksk-profile-cover-edit"
-                data-edit-profile
-                aria-label="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
-                title="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
-              >✍️</button>
-            ` : ""}
-
           </div>
+
+          ${ownProfile ? `
+            <button
+              type="button"
+              class="ksk-profile-cover-edit"
+              data-edit-profile
+              aria-label="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
+              title="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
+            >✍️</button>
+          ` : ""}
 
           <div
             class="profile-avatar"
