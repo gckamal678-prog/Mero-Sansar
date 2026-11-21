@@ -85,9 +85,15 @@
         align-items:center;
         gap:11px;
         min-width:0;
-        padding:6px 4px 10px;
+        padding:0;
         text-align:center;
-        overflow:hidden;
+        overflow:visible;
+
+        /* Remove the unnecessary outer profile box */
+        background:transparent !important;
+        border:0 !important;
+        border-radius:0 !important;
+        box-shadow:none !important;
       }
 
       .profile-section .ksk-profile-cover {
@@ -100,6 +106,46 @@
         cursor:pointer;
         margin-bottom:2px;
         display:block;
+        outline-offset:3px;
+      }
+
+      .profile-section .ksk-profile-cover img {
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        display:block;
+      }
+
+      /* Edit profile pencil on cover */
+      .profile-section .ksk-profile-cover-edit {
+        position:absolute;
+        top:10px;
+        right:10px;
+        z-index:5;
+
+        width:42px;
+        height:42px;
+        display:grid;
+        place-items:center;
+
+        border:1px solid rgba(255,255,255,.35);
+        border-radius:50%;
+        background:rgba(15,23,42,.78);
+        color:#fff;
+
+        font-size:22px;
+        line-height:1;
+        cursor:pointer;
+        backdrop-filter:blur(8px);
+        box-shadow:0 3px 12px rgba(0,0,0,.25);
+      }
+
+      .profile-section .ksk-profile-cover-edit:active {
+        transform:scale(.94);
+      }
+
+      .profile-section .ksk-profile-cover-edit:focus-visible {
+        outline:3px solid var(--color-primary);
         outline-offset:3px;
       }
 
@@ -124,13 +170,6 @@
         font-size:12px;
         font-weight:750;
         letter-spacing:.2px;
-      }
-
-      .profile-section .ksk-profile-cover img {
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
       }
 
       .profile-section .profile-card .profile-avatar {
@@ -241,8 +280,7 @@
         transition:transform .18s ease, border-color .18s ease;
       }
 
-      .profile-section .profile-action-btn:active,
-      .profile-section .profile-tool-grid button:active {
+      .profile-section .profile-action-btn:active {
         transform:scale(.98);
       }
 
@@ -263,39 +301,70 @@
         min-width:0;
       }
 
+      /* PROFILE SETTINGS — SIMPLE VERTICAL LIST */
+
       .profile-section .profile-tool-grid {
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:9px;
+        width:100%;
+        min-width:0;
+
+        display:flex;
+        flex-direction:column;
+        gap:0;
+
+        border:0;
+        border-radius:0;
+        background:transparent;
+        padding:0;
       }
 
       .profile-section .profile-tool-grid button {
+        width:100%;
         min-width:0;
-        min-height:58px;
+        min-height:48px;
+
         display:flex;
         align-items:center;
-        gap:9px;
-        padding:11px 12px;
-        border:1px solid var(--color-border);
-        border-radius:13px;
-        background:var(--color-surface-secondary);
+        justify-content:flex-start;
+        gap:12px;
+
+        padding:12px 8px;
+
+        border:0;
+        border-bottom:1px solid var(--color-border);
+        border-radius:0;
+
+        background:transparent;
         color:var(--color-text);
+
         font:inherit;
-        font-size:12px;
-        font-weight:750;
+        font-size:14px;
+        font-weight:700;
         line-height:1.4;
         text-align:left;
+
         overflow-wrap:anywhere;
         cursor:pointer;
-        transition:transform .18s ease, border-color .18s ease, background .18s ease;
+
+        transition:background .15s ease;
+      }
+
+      .profile-section .profile-tool-grid button:last-child {
+        border-bottom:0;
       }
 
       .profile-section .profile-tool-grid button:hover {
-        border-color:var(--color-primary);
         background:var(--color-primary-soft);
       }
 
-      .profile-section .profile-tool-grid button:focus-visible,
+      .profile-section .profile-tool-grid button:active {
+        transform:scale(.99);
+      }
+
+      .profile-section .profile-tool-grid button:focus-visible {
+        outline:2px solid var(--color-primary);
+        outline-offset:2px;
+      }
+
       .profile-section .profile-action-btn:focus-visible {
         outline:2px solid var(--color-primary);
         outline-offset:3px;
@@ -785,12 +854,6 @@
 
         .profile-section .profile-card h2 {
           font-size:19px;
-        }
-      }
-
-      @media(max-width:340px) {
-        .profile-section .profile-tool-grid {
-          grid-template-columns:1fr;
         }
       }
     `;
@@ -2536,7 +2599,7 @@
               role="tab"
               aria-selected="${activeTab === "settings"}"
               data-profile-tab="settings">
-              ⚙️
+              ${t("सेटिङ", "Settings")}
             </button>
           ` : ""}
         </div>
@@ -2581,13 +2644,28 @@
             role="tabpanel">
 
             <div class="profile-tool-grid" data-profile-extras>
-              <button type="button" data-copy-profile-link>
-                🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
+
+              <button
+                type="button"
+                data-copy-profile-link>
+                <span aria-hidden="true">🔗</span>
+                <span>${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}</span>
               </button>
 
-              <button type="button" data-page="saved">
-                🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
+              <button
+                type="button"
+                data-page="saved">
+                <span aria-hidden="true">🔖</span>
+                <span>${t("सेभ गरिएका पोस्ट", "Saved Posts")}</span>
               </button>
+
+              <button
+                type="button"
+                data-page="insights">
+                <span aria-hidden="true">📊</span>
+                <span>${t("मेरो तथ्याङ्क", "My Insights")}</span>
+              </button>
+
             </div>
 
           </div>
