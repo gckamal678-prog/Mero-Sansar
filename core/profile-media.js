@@ -1,4 +1,4 @@
-"use strict";
+p"use strict";
 
 /*
  * KSK PROFILE MEDIA UI
@@ -1201,59 +1201,59 @@
   ===================================================== */
 
   function handleClick(event) {
+  const target = event.target;
 
-    const target = event.target;
+  if (!target?.closest) return;
 
-    if (!target?.closest) return;
+  /* =========================================
+     EDIT PROFILE — CHECK BEFORE COVER
+  ========================================= */
 
+  const editButton = target.closest(
+    "[data-edit-profile]"
+  );
 
-    /* AVATAR GALLERY */
+  if (editButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
 
-    const avatar = target.closest(
-      ".profile-section .profile-card .profile-avatar"
-    );
-
-    if (avatar) {
-
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      openGallery("avatar");
-
-      return;
-    }
-
-
-    /* COVER GALLERY */
-
-    const cover = target.closest(
-      ".profile-section .profile-card .ksk-profile-cover"
-    );
-
-    if (cover) {
-
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      openGallery("cover");
-
-      return;
-    }
-
-
-    /* EDIT PROFILE */
-
-    const editButton = target.closest("[data-edit-profile]");
-
-    if (editButton) {
-
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      openEditor();
-    }
+    openEditor();
+    return;
   }
 
+  /* =========================================
+     AVATAR GALLERY
+  ========================================= */
+
+  const avatar = target.closest(
+    ".profile-section .profile-card .profile-avatar"
+  );
+
+  if (avatar) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    openGallery("avatar");
+    return;
+  }
+
+  /* =========================================
+     COVER GALLERY
+  ========================================= */
+
+  const cover = target.closest(
+    ".profile-section .profile-card .ksk-profile-cover"
+  );
+
+  if (cover) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    openGallery("cover");
+    return;
+  }
+}
 
   /* =====================================================
      KEYBOARD ACCESSIBILITY
