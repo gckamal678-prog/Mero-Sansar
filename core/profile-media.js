@@ -464,45 +464,38 @@ p"use strict";
     }
 
 
-    /* COVER IMAGE */
+/* COVER IMAGE */
 
-    const coverSource = user.coverMediaId || user.cover || "";
-    const coverURL = await getImageSource(coverSource);
+const coverSource = user.coverMediaId || user.cover || "";
+const coverURL = await getImageSource(coverSource);
 
-    if (!cover.isConnected) return;
+if (!cover.isConnected) return;
 
-    if (coverURL) {
+const currentImage = $("img", cover);
+const emptyCover = $(".ksk-profile-cover-empty", cover);
 
-      const currentImage = $("img", cover);
+if (coverURL) {
+  if (currentImage?.src !== coverURL) {
+    currentImage?.remove();
+    emptyCover?.remove();
 
-      if (currentImage?.src !== coverURL) {
+    const img = document.createElement("img");
+    img.src = coverURL;
+    img.alt = "Cover Photo";
 
-        cover.innerHTML = "";
+    cover.prepend(img);
+  }
+} else {
+  currentImage?.remove();
 
-        const img = document.createElement("img");
+  if (!emptyCover) {
+    const empty = document.createElement("div");
+    empty.className = "ksk-profile-cover-empty";
+    empty.textContent = "🌄";
 
-        img.src = coverURL;
-        img.alt = "Cover Photo";
-
-        cover.appendChild(img);
-      }
-
-    } else if (!$(".ksk-profile-cover-empty", cover)) {
-
-      cover.innerHTML = `
-        <div class="ksk-profile-cover-empty">🌄</div>
-      `;
-    }
-
-    if (!$(".ksk-profile-photo-hint", cover)) {
-      const hint = document.createElement("span");
-
-      hint.className = "ksk-profile-photo-hint";
-      hint.textContent = "📷";
-
-      cover.appendChild(hint);
-    }
-
+    cover.prepend(empty);
+  }
+}
 
     /* AVATAR */
 
