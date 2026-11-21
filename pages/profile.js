@@ -1411,6 +1411,13 @@
     return supabaseImage || legacyImage;
   }
 
+  function isPhotoGalleryPost(post) {
+    if (!isPhotoPost(post)) return false;
+
+    // लेखसहितका फोटो Feed मा मात्र रहनेछन्।
+    return !String(post.text || "").trim();
+  }
+
   function renderPostList(posts, options = {}) {
     if (!posts.length) {
       return `<div class="empty-state">${t(
@@ -2578,7 +2585,7 @@
         );
 
     const posts = getProfilePosts(user, allPosts);
-    const photos = posts.filter(isPhotoPost);
+    const photos = posts.filter(isPhotoGalleryPost);
 
     const activeTab = VALID_TABS.has(options.activeTab)
       ? options.activeTab
@@ -2748,6 +2755,13 @@
                 <span>${t("मेरो तथ्याङ्क", "My Insights")}</span>
               </button>
 
+              <button
+                type="button"
+                data-profile-open-settings>
+                <span aria-hidden="true">⚙️</span>
+                <span>${t("सबै सेटिङ व्यवस्थापन", "Manage All Settings")}</span>
+              </button>
+
             </div>
 
           </div>
@@ -2882,6 +2896,28 @@
       return;
     }
 
+    const settingsButton = target.closest(
+      "[data-profile-open-settings]"
+    );
+
+    if (settingsButton) {
+      event.preventDefault();
+
+      const opened = global.KSKSettingsPage?.open?.();
+
+      if (!opened) {
+        global.KSKToast?.show?.(
+          t(
+            "Settings खोल्न सकिएन।",
+            "Could not open Settings."
+          ),
+          "error"
+        );
+      }
+
+      return;
+    }
+
     const copyButton = target.closest(
       "[data-copy-profile-link]"
     );
@@ -2959,6 +2995,7 @@
     getProfilePosts,
     getProfileLink,
     isPhotoPost,
+    isPhotoGalleryPost,
 
     getMyBirthdaySettings,
     updateMyBirthdaySettings,
