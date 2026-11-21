@@ -257,27 +257,13 @@
         pointer-events:none;
       }
 
-      /*
-       * REAL NATIVE FILE INPUT
-       * Transparent input covers the complete photo area.
-       * User taps the actual input directly.
-       */
-
       .ksk-profile-upload-input {
-        position:absolute !important;
-        inset:0 !important;
-        display:block !important;
-        width:100% !important;
-        height:100% !important;
-        min-width:100% !important;
-        min-height:100% !important;
+        position:fixed !important;
+        width:1px !important;
+        height:1px !important;
         opacity:0 !important;
-        z-index:20 !important;
-        margin:0 !important;
-        padding:0 !important;
-        border:0 !important;
-        cursor:pointer !important;
-        touch-action:manipulation !important;
+        pointer-events:none !important;
+        left:-9999px !important;
       }
 
       .ksk-nav-avatar {
@@ -453,45 +439,6 @@
   }
 
   /* =====================================================
-     CREATE DIRECT GALLERY INPUT
-  ===================================================== */
-
-  function ensureUploadInput(target, type) {
-    if (!target || !["avatar", "cover"].includes(type)) {
-      return null;
-    }
-
-    const existing = Array.from(target.children).find(
-      child =>
-        child.matches?.("input.ksk-profile-upload-input")
-    );
-
-    if (existing) return existing;
-
-    const input = document.createElement("input");
-
-    input.type = "file";
-    input.accept = "image/*";
-    input.className = "ksk-profile-upload-input";
-    input.dataset.kskProfileUpload = type;
-
-    input.setAttribute(
-      "aria-label",
-      type === "avatar"
-        ? t("प्रोफाइल फोटो छान्नुहोस्", "Choose profile photo")
-        : t("Cover फोटो छान्नुहोस्", "Choose cover photo")
-    );
-
-    input.addEventListener("change", () => {
-      handleSelectedPhoto(input, type);
-    });
-
-    target.appendChild(input);
-
-    return input;
-  }
-
-  /* =====================================================
      PROFILE DISPLAY
   ===================================================== */
 
@@ -529,8 +476,6 @@
         card.prepend(cover);
       }
     }
-
-    ensureUploadInput(cover, "cover");
 
     /* COVER IMAGE */
 
@@ -609,54 +554,46 @@
 
         avatarBox.appendChild(hint);
       }
-
-      ensureUploadInput(avatarBox, "avatar");
     }
 
     await updateFooterAvatar();
   }
 
   /* =====================================================
-     GALLERY FALLBACK
+     DIRECT GALLERY OPEN — NOVEMBER 14 METHOD
   ===================================================== */
 
   function openGallery(type) {
-    if (busy) return;
+    if (busy || !["avatar", "cover"].includes(type)) return;
 
-    if (!["avatar", "cover"].includes(type)) {
-      console.warn(
-        "KSK Profile Media: Invalid gallery type.",
-        type
-      );
-      return;
-    }
+    const input = document.createElement("input");
 
-    const selector = type === "avatar"
-      ? ".profile-section .profile-card .profile-avatar"
-      : ".profile-section .profile-card .ksk-profile-cover";
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp";
+    input.className = "ksk-profile-upload-input";
+    input.setAttribute(
+      "aria-label",
+      type === "avatar"
+        ? t("प्रोफाइल फोटो छान्नुहोस्", "Choose profile photo")
+        : t("Cover फोटो छान्नुहोस्", "Choose cover photo")
+    );
 
-    const target = $(selector);
+    input.addEventListener("change", () => {
+      handleSelectedPhoto(input, type);
+      input.remove();
+    }, { once: true });
 
-    if (!target) return;
+    input.addEventListener("cancel", () => {
+      input.remove();
+    }, { once: true });
 
-    const input = ensureUploadInput(target, type);
+    document.body.appendChild(input);
 
-    try {
-      input?.click();
-    } catch (error) {
-      console.error(
-        "KSK Profile Media: Native gallery could not be opened.",
-        error
-      );
-
-      toast(
-        t(
-          "फोटो Gallery खोल्न सकिएन। फेरि प्रयास गर्नुहोस्।",
-          "Could not open the photo gallery. Please try again."
-        ),
-        "error"
-      );
-    }
+    /*
+     * Keep this call directly inside the original photo tap event.
+     * This is the November 14 gallery-opening method.
+     */
+    input.click();
   }
 
   /* =====================================================
@@ -1319,15 +1256,6 @@
     const target = event.target;
 
     if (!target?.closest) return;
-
-    /*
-     * Do not intercept the real file input.
-     * Let Android open its native file chooser.
-     */
-
-    if (target.closest(".ksk-profile-upload-input")) {
-      return;
-    }
 
     /* EDIT PROFILE */
 
