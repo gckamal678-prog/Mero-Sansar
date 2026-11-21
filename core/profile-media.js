@@ -1070,6 +1070,32 @@
 
           </div>
 
+          <div class="form-group">
+            <strong>
+              ${t("जन्ममिति", "Birthday")}
+            </strong>
+
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-open-profile-birthday>
+              ${t("जन्ममिति सम्पादन गर्नुहोस्", "Edit Birthday")}
+            </button>
+          </div>
+
+          <div class="form-group">
+            <strong>
+              ${t("काम र अध्ययन", "Work & Education")}
+            </strong>
+
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-open-profile-experiences>
+              ${t("काम तथा अध्ययन विवरण", "Manage Work & Education")}
+            </button>
+          </div>
+
           <p class="ksk-crop-note">
             ${t(
               "Avatar वा Cover परिवर्तन गर्न प्रोफाइल पेजमा फोटोमा सिधै ट्याप गर्नुहोस्।",
@@ -1104,6 +1130,55 @@
     if (!modal) return;
 
     const form = $("#kskProfileMediaForm", modal.element);
+
+    form?.addEventListener("click", event => {
+      const birthdayButton = event.target.closest(
+        "[data-open-profile-birthday]"
+      );
+
+      if (birthdayButton) {
+        event.preventDefault();
+
+        const api = global.KSKProfilePage;
+
+        if (typeof api?.openBirthdayEditor !== "function") {
+          toast(
+            t(
+              "Birthday सेवा उपलब्ध छैन।",
+              "Birthday service is unavailable."
+            ),
+            "error"
+          );
+          return;
+        }
+
+        api.openBirthdayEditor();
+        return;
+      }
+
+      const experienceButton = event.target.closest(
+        "[data-open-profile-experiences]"
+      );
+
+      if (experienceButton) {
+        event.preventDefault();
+
+        const api = global.KSKProfilePage;
+
+        if (typeof api?.openExperienceManager !== "function") {
+          toast(
+            t(
+              "Work/Education सेवा उपलब्ध छैन।",
+              "Work/Education service is unavailable."
+            ),
+            "error"
+          );
+          return;
+        }
+
+        api.openExperienceManager();
+      }
+    });
 
     form?.addEventListener("submit", async event => {
 
