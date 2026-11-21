@@ -1,4 +1,3 @@
-
 "use strict";
 
 /*
@@ -7,7 +6,7 @@
  *
  * RESPONSIBILITY:
  * - Profile Avatar and Cover Photo
- * - Native Gallery input
+ * - Direct Gallery opening
  * - Image crop, zoom and positioning
  * - Profile information editing
  * - Profile media display
@@ -18,7 +17,10 @@
  */
 
 (function (global) {
-  "use strict";
+
+  /* =====================================================
+     CORE
+  ===================================================== */
 
   const $ = (selector, root = document) =>
     root.querySelector(selector);
@@ -29,6 +31,7 @@
 
   const objectURLs = new Map();
 
+
   /* =====================================================
      LANGUAGE
   ===================================================== */
@@ -37,9 +40,11 @@
     return global.KSKLanguage?.getLanguage?.() === "en";
   }
 
+
   function t(nepali, english) {
     return isEnglish() ? english : nepali;
   }
+
 
   /* =====================================================
      PROFILE DATA
@@ -48,6 +53,7 @@
   function profile() {
     return global.KSKData?.getProfile?.() || {};
   }
+
 
   /* =====================================================
      TOAST
@@ -63,25 +69,30 @@
     }
   }
 
+
   /* =====================================================
      MODAL
   ===================================================== */
 
   function openModal(options) {
+
     if (!global.KSKModal?.openModal) {
       toast(
         t("यो सुविधा अहिले उपलब्ध छैन।", "This feature is unavailable."),
         "error"
       );
+
       return null;
     }
 
     return global.KSKModal.openModal(options);
   }
 
+
   function closeModal() {
     global.KSKModal?.closeModal?.();
   }
+
 
   /* =====================================================
      HELPERS
@@ -100,7 +111,9 @@
     );
   }
 
+
   function getMediaId(value) {
+
     const text = String(value || "");
 
     if (
@@ -113,9 +126,10 @@
     return "";
   }
 
-  function getImageSource(value) {
-    const id = getMediaId(value);
 
+  function getImageSource(value) {
+
+    const id = getMediaId(value);
     if (id) return getImageURL(id);
 
     const source = String(value || "").trim();
@@ -127,7 +141,9 @@
     return Promise.resolve("");
   }
 
+
   async function getImageURL(id) {
+
     if (!id) return "";
 
     if (objectURLs.has(id)) {
@@ -135,30 +151,34 @@
     }
 
     try {
+
       const url = await global.KSKMedia?.getImageURL?.(id);
 
-      if (url) objectURLs.set(id, url);
+      if (url) {
+        objectURLs.set(id, url);
+      }
 
       return url || "";
 
     } catch (error) {
-      console.error(
-        "KSK Profile Media: Image loading failed.",
-        error
-      );
+
+      console.error("KSK Profile Media: Image loading failed.", error);
 
       return "";
     }
   }
+
 
   /* =====================================================
      STYLES
   ===================================================== */
 
   function injectStyles() {
+
     if ($("#kskProfileMediaStyles")) return;
 
     const style = document.createElement("style");
+
     style.id = "kskProfileMediaStyles";
 
     style.textContent = `
@@ -356,11 +376,13 @@
     document.head.appendChild(style);
   }
 
+
   /* =====================================================
      FOOTER AVATAR
   ===================================================== */
 
   async function updateFooterAvatar() {
+
     const button = $(
       '.nav-item[data-page="profile"] .nav-icon'
     );
@@ -368,15 +390,19 @@
     if (!button) return;
 
     const user = profile();
+
     const source = user.avatarMediaId || user.avatar || "";
+
     const url = await getImageSource(source);
 
     if (!button.isConnected) return;
 
     if (!url) {
+
       if (button.querySelector("img")) {
         button.textContent = "👤";
       }
+
       return;
     }
 
@@ -387,6 +413,7 @@
     button.innerHTML = "";
 
     const img = document.createElement("img");
+
     img.className = "ksk-nav-avatar";
     img.src = url;
     img.alt = "Profile";
@@ -394,55 +421,13 @@
     button.appendChild(img);
   }
 
-  /* =====================================================
-     SELECTED PHOTO HANDLER
-  ===================================================== */
-
-  function handleSelectedPhoto(input, type) {
-    const file = input.files?.[0];
-
-    if (!file) return;
-
-    if (!String(file.type || "").startsWith("image/")) {
-      toast(
-        t(
-          "कृपया फोटो फाइल छान्नुहोस्।",
-          "Please select an image."
-        ),
-        "warning"
-      );
-
-      input.value = "";
-      return;
-    }
-
-    if (file.size > 12 * 1024 * 1024) {
-      toast(
-        t(
-          "फोटो १२ MB भन्दा सानो हुनुपर्छ।",
-          "Image must be smaller than 12 MB."
-        ),
-        "warning"
-      );
-
-      input.value = "";
-      return;
-    }
-
-    /*
-     * Keep the File object before resetting input.
-     * Same photo can then be selected again.
-     */
-
-    input.value = "";
-    openCropEditor(file, type);
-  }
 
   /* =====================================================
      PROFILE DISPLAY
   ===================================================== */
 
   async function updateProfileDisplay() {
+
     const card = $(".profile-section .profile-card");
 
     if (!card) {
@@ -452,17 +437,18 @@
 
     const user = profile();
 
+
     /* COVER CONTAINER */
 
     let cover = $(".ksk-profile-cover", card);
 
     if (!cover) {
+
       cover = document.createElement("div");
 
       cover.className = "ksk-profile-cover";
       cover.setAttribute("role", "button");
       cover.setAttribute("tabindex", "0");
-
       cover.setAttribute(
         "aria-label",
         t("Cover फोटो परिवर्तन गर्नुहोस्", "Change cover photo")
@@ -477,6 +463,7 @@
       }
     }
 
+
     /* COVER IMAGE */
 
     const coverSource = user.coverMediaId || user.cover || "";
@@ -484,31 +471,38 @@
 
     if (!cover.isConnected) return;
 
-    const currentImage = $("img", cover);
-    const emptyCover = $(".ksk-profile-cover-empty", cover);
-
     if (coverURL) {
+
+      const currentImage = $("img", cover);
+
       if (currentImage?.src !== coverURL) {
-        currentImage?.remove();
-        emptyCover?.remove();
+
+        cover.innerHTML = "";
 
         const img = document.createElement("img");
+
         img.src = coverURL;
         img.alt = "Cover Photo";
 
-        cover.prepend(img);
+        cover.appendChild(img);
       }
-    } else {
-      currentImage?.remove();
 
-      if (!emptyCover) {
-        const empty = document.createElement("div");
-        empty.className = "ksk-profile-cover-empty";
-        empty.textContent = "🌄";
+    } else if (!$(".ksk-profile-cover-empty", cover)) {
 
-        cover.prepend(empty);
-      }
+      cover.innerHTML = `
+        <div class="ksk-profile-cover-empty">🌄</div>
+      `;
     }
+
+    if (!$(".ksk-profile-photo-hint", cover)) {
+      const hint = document.createElement("span");
+
+      hint.className = "ksk-profile-photo-hint";
+      hint.textContent = "📷";
+
+      cover.appendChild(hint);
+    }
+
 
     /* AVATAR */
 
@@ -521,12 +515,15 @@
     if (!card.isConnected) return;
 
     if (avatarInner && avatarURL) {
+
       const currentImage = $("img", avatarInner);
 
       if (currentImage?.src !== avatarURL) {
+
         avatarInner.innerHTML = "";
 
         const img = document.createElement("img");
+
         img.src = avatarURL;
         img.alt = "Profile Avatar";
 
@@ -535,18 +532,17 @@
     }
 
     if (avatarBox) {
+
       avatarBox.setAttribute("role", "button");
       avatarBox.setAttribute("tabindex", "0");
 
       avatarBox.setAttribute(
         "aria-label",
-        t(
-          "प्रोफाइल फोटो परिवर्तन गर्नुहोस्",
-          "Change profile photo"
-        )
+        t("प्रोफाइल फोटो परिवर्तन गर्नुहोस्", "Change profile photo")
       );
 
       if (!$(".ksk-profile-avatar-hint", avatarBox)) {
+
         const hint = document.createElement("span");
 
         hint.className = "ksk-profile-avatar-hint";
@@ -559,50 +555,70 @@
     await updateFooterAvatar();
   }
 
+
   /* =====================================================
-     DIRECT GALLERY OPEN — NOVEMBER 14 METHOD
+     HIDDEN GALLERY INPUT
   ===================================================== */
 
   function openGallery(type) {
-    if (busy || !["avatar", "cover"].includes(type)) return;
+
+    if (busy) return;
 
     const input = document.createElement("input");
 
     input.type = "file";
     input.accept = "image/jpeg,image/png,image/webp";
     input.className = "ksk-profile-upload-input";
-    input.setAttribute(
-      "aria-label",
-      type === "avatar"
-        ? t("प्रोफाइल फोटो छान्नुहोस्", "Choose profile photo")
-        : t("Cover फोटो छान्नुहोस्", "Choose cover photo")
-    );
+    input.setAttribute("aria-label", "Choose photo");
 
     input.addEventListener("change", () => {
-      handleSelectedPhoto(input, type);
-      input.remove();
-    }, { once: true });
 
-    input.addEventListener("cancel", () => {
+      const file = input.files?.[0];
+
       input.remove();
+
+      if (!file) return;
+
+      if (!String(file.type).startsWith("image/")) {
+
+        toast(
+          t("कृपया फोटो फाइल छान्नुहोस्।", "Please select an image."),
+          "warning"
+        );
+
+        return;
+      }
+
+      if (file.size > 12 * 1024 * 1024) {
+
+        toast(
+          t("फोटो १२ MB भन्दा सानो हुनुपर्छ।", "Image must be smaller than 12 MB."),
+          "warning"
+        );
+
+        return;
+      }
+
+      openCropEditor(file, type);
     }, { once: true });
 
     document.body.appendChild(input);
 
-    /*
-     * Keep this call directly inside the original photo tap event.
-     * This is the November 14 gallery-opening method.
-     */
+    // Direct user interaction opens the device gallery.
     input.click();
   }
 
+
   /* =====================================================
-     IMAGE LOADER
+     IMAGE CROP ENGINE
   ===================================================== */
 
   function loadImage(file) {
+
     return new Promise((resolve, reject) => {
+
       const url = URL.createObjectURL(file);
+
       const image = new Image();
 
       image.onload = () => resolve({ image, url });
@@ -616,11 +632,9 @@
     });
   }
 
-  /* =====================================================
-     IMAGE CROP EDITOR
-  ===================================================== */
 
   function openCropEditor(file, type) {
+
     const isAvatar = type === "avatar";
 
     const aspect = isAvatar ? 1 : 3;
@@ -633,6 +647,7 @@
       : t("Cover फोटो मिलाउनुहोस्", "Crop Cover Photo");
 
     const modal = openModal({
+
       title,
 
       content: `
@@ -649,7 +664,6 @@
               <label for="kskCropZoom">
                 ${t("Zoom", "Zoom")}
               </label>
-
               <input
                 id="kskCropZoom"
                 type="range"
@@ -663,7 +677,6 @@
               <label for="kskCropX">
                 ${t("दायाँ / बायाँ", "Horizontal position")}
               </label>
-
               <input
                 id="kskCropX"
                 type="range"
@@ -676,7 +689,6 @@
               <label for="kskCropY">
                 ${t("माथि / तल", "Vertical position")}
               </label>
-
               <input
                 id="kskCropY"
                 type="range"
@@ -729,12 +741,7 @@
 
     if (!canvas || !context) {
       closeModal();
-
-      toast(
-        t("फोटो तयार गर्न सकिएन।", "Could not prepare image."),
-        "error"
-      );
-
+      toast(t("फोटो तयार गर्न सकिएन।", "Could not prepare image."), "error");
       return;
     }
 
@@ -742,15 +749,16 @@
     canvas.height = outputHeight;
 
     loadImage(file).then(({ image, url }) => {
+
       activeCropURL = url;
 
       if (!modal.element.isConnected) {
         URL.revokeObjectURL(url);
-        activeCropURL = "";
         return;
       }
 
       function drawCrop() {
+
         const imageWidth = image.naturalWidth;
         const imageHeight = image.naturalHeight;
 
@@ -778,12 +786,7 @@
         const sourceY =
           maxY / 2 + (maxY / 2) * yPosition;
 
-        context.clearRect(
-          0,
-          0,
-          outputWidth,
-          outputHeight
-        );
+        context.clearRect(0, 0, outputWidth, outputHeight);
 
         context.drawImage(
           image,
@@ -805,20 +808,21 @@
       });
 
       saveButton?.addEventListener("click", async () => {
+
         if (busy) return;
 
         busy = true;
+
         saveButton.disabled = true;
 
         try {
+
           const blob = await new Promise((resolve, reject) => {
+
             canvas.toBlob(
               result => {
-                if (result) {
-                  resolve(result);
-                } else {
-                  reject(new Error("फोटो Crop गर्न सकिएन।"));
-                }
+                if (result) resolve(result);
+                else reject(new Error("फोटो Crop गर्न सकिएन।"));
               },
               "image/jpeg",
               0.9
@@ -827,31 +831,26 @@
 
           const croppedFile = new File(
             [blob],
-            isAvatar
-              ? "profile-avatar.jpg"
-              : "profile-cover.jpg",
+            isAvatar ? "profile-avatar.jpg" : "profile-cover.jpg",
             { type: "image/jpeg" }
           );
 
           closeModal();
 
           busy = false;
-
           await saveProfilePhoto(croppedFile, type);
 
         } catch (error) {
+
           console.error("KSK Crop failed:", error);
 
           toast(
-            error.message ||
-            t(
-              "फोटो तयार गर्न सकिएन।",
-              "Could not prepare photo."
-            ),
+            error.message || t("फोटो तयार गर्न सकिएन।", "Could not prepare photo."),
             "error"
           );
 
         } finally {
+
           busy = false;
 
           if (activeCropURL) {
@@ -859,13 +858,12 @@
             activeCropURL = "";
           }
         }
+
       });
 
     }).catch(error => {
-      console.error(
-        "KSK Crop image loading failed:",
-        error
-      );
+
+      console.error("KSK Crop image loading failed:", error);
 
       closeModal();
 
@@ -876,91 +874,67 @@
     });
   }
 
+
   /* =====================================================
      SAVE AVATAR / COVER TO SUPABASE
   ===================================================== */
 
   async function saveProfilePhoto(file, type) {
+
     if (busy) return;
 
     if (!["avatar", "cover"].includes(type)) {
-      toast(
-        t("फोटोको प्रकार मान्य छैन।", "Invalid photo type."),
-        "error"
-      );
+      toast(t("फोटोको प्रकार मान्य छैन।", "Invalid photo type."), "error");
       return;
     }
 
-    if (
-      !(file instanceof Blob) ||
-      !file.type.startsWith("image/")
-    ) {
-      toast(
-        t(
-          "कृपया मान्य फोटो छान्नुहोस्।",
-          "Please choose a valid image."
-        ),
-        "error"
-      );
+    if (!(file instanceof Blob) || !file.type.startsWith("image/")) {
+      toast(t("कृपया मान्य फोटो छान्नुहोस्।", "Please choose a valid image."), "error");
       return;
     }
 
     if (file.size > 8 * 1024 * 1024) {
-      toast(
-        t(
-          "फोटो ८ MB भन्दा सानो हुनुपर्छ।",
-          "The image must be smaller than 8 MB."
-        ),
-        "error"
-      );
+      toast(t("फोटो ८ MB भन्दा सानो हुनुपर्छ।", "The image must be smaller than 8 MB."), "error");
       return;
     }
 
     busy = true;
 
     try {
+
       const auth = global.KSKSupabaseAuth;
       const profileAPI = global.KSKSupabaseProfile;
 
       if (!auth || !profileAPI) {
-        throw new Error(
-          t(
-            "Supabase Profile सेवा लोड भएको छैन।",
-            "Supabase Profile service is not loaded."
-          )
-        );
+        throw new Error(t(
+          "Supabase Profile सेवा लोड भएको छैन।",
+          "Supabase Profile service is not loaded."
+        ));
       }
 
       await auth.initialize();
 
       if (!auth.isAuthenticated()) {
-        throw new Error(
-          t(
-            "फोटो परिवर्तन गर्न पहिले लगइन गर्नुहोस्।",
-            "Please sign in before changing your photo."
-          )
-        );
+        throw new Error(t(
+          "फोटो परिवर्तन गर्न पहिले लगइन गर्नुहोस्।",
+          "Please sign in before changing your photo."
+        ));
       }
 
       const client = auth.getClient();
       const user = auth.getUser();
 
       if (!client || !user?.id) {
-        throw new Error(
-          t(
-            "प्रयोगकर्ता विवरण प्राप्त भएन।",
-            "Could not get the signed-in user."
-          )
-        );
+        throw new Error(t(
+          "प्रयोगकर्ता विवरण प्राप्त भएन।",
+          "Could not get the signed-in user."
+        ));
       }
 
-      const extension =
-        file.type === "image/png" ? "png" :
+      const extension = file.type === "image/png" ? "png" :
         file.type === "image/webp" ? "webp" : "jpg";
 
-      const path =
-        user.id + "/" +
-        type + "-" +
+      const path = user.id + "/" + type + "-" +
         Date.now() + "-" +
         Math.random().toString(36).slice(2, 8) +
         "." + extension;
@@ -982,41 +956,27 @@
       const publicURL = publicData?.publicUrl;
 
       if (!publicURL) {
-        throw new Error(
-          t(
-            "फोटोको URL प्राप्त भएन।",
-            "Could not create the photo URL."
-          )
-        );
+        throw new Error(t(
+          "फोटोको URL प्राप्त भएन।",
+          "Could not create the photo URL."
+        ));
       }
 
       const updated = type === "avatar"
-        ? await profileAPI.updateMyProfile({
-            avatar: publicURL
-          })
-        : await profileAPI.updateMyProfile({
-            cover: publicURL
-          });
+        ? await profileAPI.updateMyProfile({ avatar: publicURL })
+        : await profileAPI.updateMyProfile({ cover: publicURL });
 
       if (!updated) {
-        throw new Error(
-          t(
-            "प्रोफाइलमा फोटोको URL सुरक्षित भएन।",
-            "The photo URL was not saved to your profile."
-          )
-        );
+        throw new Error(t(
+          "प्रोफाइलमा फोटोको URL सुरक्षित भएन।",
+          "The photo URL was not saved to your profile."
+        ));
       }
 
       global.KSKData?.saveProfile?.(
         type === "avatar"
-          ? {
-              avatar: publicURL,
-              avatarMediaId: ""
-            }
-          : {
-              cover: publicURL,
-              coverMediaId: ""
-            }
+          ? { avatar: publicURL, avatarMediaId: "" }
+          : { cover: publicURL, coverMediaId: "" }
       );
 
       objectURLs.clear();
@@ -1029,29 +989,18 @@
 
       toast(
         type === "avatar"
-          ? t(
-              "प्रोफाइल फोटो परिवर्तन भयो।",
-              "Profile photo updated."
-            )
-          : t(
-              "Cover फोटो परिवर्तन भयो।",
-              "Cover photo updated."
-            ),
+          ? t("प्रोफाइल फोटो परिवर्तन भयो।", "Profile photo updated.")
+          : t("Cover फोटो परिवर्तन भयो।", "Cover photo updated."),
         "success"
       );
 
     } catch (error) {
-      console.error(
-        "KSK Profile Photo Save Failed:",
-        error
-      );
+
+      console.error("KSK Profile Photo Save Failed:", error);
 
       toast(
         error?.message ||
-        t(
-          "फोटो सुरक्षित गर्न सकिएन।",
-          "Could not save photo."
-        ),
+        t("फोटो सुरक्षित गर्न सकिएन।", "Could not save photo."),
         "error"
       );
 
@@ -1060,16 +1009,19 @@
     }
   }
 
+
   /* =====================================================
      PROFILE INFORMATION EDITOR
   ===================================================== */
 
   function openEditor() {
+
     if (busy) return;
 
     const user = profile();
 
     const modal = openModal({
+
       title: t("प्रोफाइल सम्पादन", "Edit Profile"),
 
       content: `
@@ -1154,6 +1106,7 @@
     const form = $("#kskProfileMediaForm", modal.element);
 
     form?.addEventListener("submit", async event => {
+
       event.preventDefault();
 
       if (busy) return;
@@ -1162,52 +1115,46 @@
 
       const saveButton = $("#kskPMSave", modal.element);
 
-      if (saveButton) {
-        saveButton.disabled = true;
-      }
+      if (saveButton) saveButton.disabled = true;
 
       try {
+
         const auth = global.KSKSupabaseAuth;
         const profileAPI = global.KSKSupabaseProfile;
 
         if (!auth || !profileAPI) {
-          throw new Error(
-            t(
-              "Supabase Profile सेवा लोड भएको छैन।",
-              "Supabase Profile service is not loaded."
-            )
-          );
+          throw new Error(t(
+            "Supabase Profile सेवा लोड भएको छैन।",
+            "Supabase Profile service is not loaded."
+          ));
         }
 
         await auth.initialize();
 
         if (!auth.isAuthenticated()) {
-          throw new Error(
-            t(
-              "प्रोफाइल सम्पादन गर्न पहिले लगइन गर्नुहोस्।",
-              "Please sign in before editing your profile."
-            )
-          );
+          throw new Error(t(
+            "प्रोफाइल सम्पादन गर्न पहिले लगइन गर्नुहोस्।",
+            "Please sign in before editing your profile."
+          ));
         }
 
         const payload = {
-          name:
-            $("#kskPMName", modal.element)?.value.trim() || "",
-          bio:
-            $("#kskPMBio", modal.element)?.value.trim() || "",
-          location:
-            $("#kskPMLocation", modal.element)?.value.trim() || ""
+
+          name: $("#kskPMName", modal.element)?.value.trim() || "",
+
+          bio: $("#kskPMBio", modal.element)?.value.trim() || "",
+
+          location: $("#kskPMLocation", modal.element)?.value.trim() || ""
+
         };
 
         const updated = await profileAPI.updateMyProfile(payload);
 
         if (!updated) {
-          throw new Error(
-            t(
-              "प्रोफाइल सुरक्षित भएन।",
-              "Profile could not be saved."
-            )
-          );
+          throw new Error(t(
+            "प्रोफाइल सुरक्षित भएन।",
+            "Profile could not be saved."
+          ));
         }
 
         global.KSKData?.saveProfile?.(payload);
@@ -1227,50 +1174,38 @@
         );
 
       } catch (error) {
+
         console.error("KSK Profile Save Failed:", error);
 
         toast(
           error?.message ||
           t(
             "प्रोफाइल सुरक्षित भएन। फेरि प्रयास गर्नुहोस्।",
-            "Profile could not be saved. Please try again."
+            "Profile could not be saved."
           ),
           "error"
         );
 
       } finally {
+
         busy = false;
 
-        if (saveButton) {
-          saveButton.disabled = false;
-        }
+        if (saveButton) saveButton.disabled = false;
       }
     });
   }
+
 
   /* =====================================================
      CLICK INTERCEPTION
   ===================================================== */
 
   function handleClick(event) {
+
     const target = event.target;
 
     if (!target?.closest) return;
 
-    /* EDIT PROFILE */
-
-    const editButton = target.closest(
-      "[data-edit-profile]"
-    );
-
-    if (editButton) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-
-      openEditor();
-      return;
-    }
 
     /* AVATAR GALLERY */
 
@@ -1279,13 +1214,15 @@
     );
 
     if (avatar) {
+
       event.preventDefault();
-      event.stopPropagation();
       event.stopImmediatePropagation();
 
       openGallery("avatar");
+
       return;
     }
+
 
     /* COVER GALLERY */
 
@@ -1294,20 +1231,36 @@
     );
 
     if (cover) {
+
       event.preventDefault();
-      event.stopPropagation();
       event.stopImmediatePropagation();
 
       openGallery("cover");
+
       return;
     }
+
+
+    /* EDIT PROFILE */
+
+    const editButton = target.closest("[data-edit-profile]");
+
+    if (editButton) {
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      openEditor();
+    }
   }
+
 
   /* =====================================================
      KEYBOARD ACCESSIBILITY
   ===================================================== */
 
   function handleKeydown(event) {
+
     if (
       event.key !== "Enter" &&
       event.key !== " "
@@ -1320,8 +1273,11 @@
     if (!target?.matches) return;
 
     if (target.matches(".ksk-profile-cover")) {
+
       event.preventDefault();
+
       openGallery("cover");
+
       return;
     }
 
@@ -1330,10 +1286,13 @@
         ".profile-section .profile-card .profile-avatar"
       )
     ) {
+
       event.preventDefault();
+
       openGallery("avatar");
     }
   }
+
 
   /* =====================================================
      REFRESH
@@ -1343,11 +1302,13 @@
     updateProfileDisplay();
   }
 
+
   /* =====================================================
      INITIALIZE
   ===================================================== */
 
   function initialize() {
+
     if (initialized) return;
 
     initialized = true;
@@ -1374,6 +1335,7 @@
     global.addEventListener(
       "ksk:data-change",
       event => {
+
         if (event.detail?.collection === "profile") {
           updateProfileDisplay();
         }
@@ -1385,28 +1347,38 @@
     console.info("KSK Profile Media UI initialized.");
   }
 
+
   /* =====================================================
      PUBLIC API
   ===================================================== */
 
   global.KSKProfileMediaUI = Object.freeze({
+
     initialize,
+
     refresh,
+
     openEditor,
+
     openGallery
+
   });
+
 
   /* =====================================================
      AUTO START
   ===================================================== */
 
   if (document.readyState === "loading") {
+
     document.addEventListener(
       "DOMContentLoaded",
       initialize,
       { once: true }
     );
+
   } else {
+
     initialize();
   }
 
