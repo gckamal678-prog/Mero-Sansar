@@ -85,7 +85,7 @@
         align-items:center;
         gap:11px;
         min-width:0;
-        padding:22px 16px 18px;
+        padding:6px 4px 10px;
         text-align:center;
         overflow:hidden;
       }
@@ -261,43 +261,6 @@
 
       .profile-section .profile-tools-card {
         min-width:0;
-        padding:16px;
-        border:1px solid var(--color-border);
-        border-radius:17px;
-        background:var(--color-surface);
-      }
-
-      .profile-section .profile-tools-heading {
-        display:flex;
-        align-items:flex-start;
-        gap:10px;
-        margin:0 0 14px;
-      }
-
-      .profile-section .profile-tools-heading::before {
-        content:"🧰";
-        width:36px;
-        height:36px;
-        flex:0 0 36px;
-        display:grid;
-        place-items:center;
-        border-radius:11px;
-        background:var(--color-surface-secondary);
-        font-size:17px;
-      }
-
-      .profile-section .profile-tools-heading h3 {
-        margin:0;
-        color:var(--color-text);
-        font-size:15px;
-        font-weight:850;
-      }
-
-      .profile-section .profile-tools-heading p {
-        margin:4px 0 0;
-        color:var(--color-muted);
-        font-size:11px;
-        line-height:1.5;
       }
 
       .profile-section .profile-tool-grid {
@@ -338,13 +301,6 @@
         outline-offset:3px;
       }
 
-      .profile-section .profile-tool-note {
-        margin:12px 2px 0;
-        color:var(--color-muted);
-        font-size:10px;
-        line-height:1.5;
-      }
-
       /* PROFILE TABS */
 
       .profile-section .profile-tabs {
@@ -382,43 +338,13 @@
       .profile-section .profile-at-glance {
         width:100%;
         min-width:0;
-        padding:16px;
-        border:1px solid var(--color-border);
-        border-radius:16px;
-        background:var(--color-surface);
-      }
-
-      .profile-section .profile-at-glance-heading {
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:10px;
-        margin-bottom:12px;
-      }
-
-      .profile-section .profile-at-glance-heading h3 {
-        margin:0;
-        color:var(--color-text);
-        font-size:17px;
-        font-weight:850;
-      }
-
-      .profile-section .profile-at-glance-see-all {
-        border:0;
-        padding:6px 0 6px 8px;
-        background:transparent;
-        color:var(--color-primary);
-        font:inherit;
-        font-size:12px;
-        font-weight:750;
-        cursor:pointer;
       }
 
       .profile-section .profile-glance-row {
         display:flex;
         align-items:flex-start;
         gap:13px;
-        padding:12px 0;
+        padding:12px 2px;
         border-bottom:1px solid var(--color-border);
       }
 
@@ -456,20 +382,37 @@
         font-size:11px;
       }
 
-      .profile-section .profile-glance-edit {
+      .profile-section .profile-glance-actions {
+        display:flex;
+        align-items:center;
+        gap:4px;
         flex:0 0 auto;
+      }
+
+      .profile-section .profile-glance-edit {
+        width:30px;
+        height:30px;
+        flex:0 0 30px;
+        display:grid;
+        place-items:center;
         border:0;
-        padding:5px;
+        padding:0;
+        border-radius:8px;
         background:transparent;
         color:var(--color-primary);
         font:inherit;
-        font-size:11px;
-        font-weight:750;
+        font-size:16px;
+        font-weight:800;
+        line-height:1;
         cursor:pointer;
       }
 
+      .profile-section .profile-glance-edit:hover {
+        background:var(--color-primary-soft);
+      }
+
       .profile-section .profile-glance-empty {
-        padding:12px 0;
+        padding:12px 2px;
         color:var(--color-muted);
         font-size:12px;
       }
@@ -489,15 +432,12 @@
 
       .profile-section .profile-detail-card {
         min-width:0;
-        padding:15px;
-        border:1px solid var(--color-border);
-        border-radius:15px;
-        background:var(--color-surface);
       }
 
       .profile-section .profile-detail-heading {
         display:flex;
         align-items:center;
+        flex-wrap:wrap;
         gap:9px;
         margin-bottom:12px;
         color:var(--color-text);
@@ -621,10 +561,6 @@
 
       .profile-section .profile-detail-btn.danger {
         color:#dc2626;
-      }
-
-      .profile-section .profile-detail-heading {
-        flex-wrap:wrap;
       }
 
       .profile-section .profile-experience-actions {
@@ -780,7 +716,6 @@
 
       .profile-section .profile-about-card {
         min-width:0;
-        padding:15px;
       }
 
       .profile-section .profile-about-list {
@@ -837,7 +772,7 @@
         }
 
         .profile-section .profile-card {
-          padding:18px 12px 15px;
+          padding:4px 2px 8px;
         }
 
         .profile-section .profile-avatar .avatar {
@@ -850,10 +785,6 @@
 
         .profile-section .profile-card h2 {
           font-size:19px;
-        }
-
-        .profile-section .profile-tools-card {
-          padding:12px;
         }
       }
 
@@ -1608,8 +1539,9 @@
         edit: ownProfile
           ? `<button type="button"
                class="profile-glance-edit"
-               data-edit-birthday>
-               ${t("सम्पादन", "Edit")}
+               data-edit-birthday
+               aria-label="${t("जन्ममिति सम्पादन", "Edit birthday")}">
+               <span aria-hidden="true">✎</span>
              </button>`
           : ""
       });
@@ -1619,8 +1551,9 @@
         value: t("जन्ममिति थप्नुहोस्", "Add birthday"),
         edit: `<button type="button"
                  class="profile-glance-edit"
-                 data-edit-birthday>
-                 ${t("थप्नुहोस्", "Add")}
+                 data-edit-birthday
+                 aria-label="${t("जन्ममिति थप्नुहोस्", "Add birthday")}">
+                 <span aria-hidden="true">+</span>
                </button>`
       });
     }
@@ -1635,8 +1568,9 @@
         edit: ownProfile
           ? `<button type="button"
                class="profile-glance-edit"
-               data-edit-experience="${escapeHTML(work.id)}">
-               ${t("सम्पादन", "Edit")}
+               data-edit-experience="${escapeHTML(work.id)}"
+               aria-label="${t("कामको विवरण सम्पादन", "Edit work")}">
+               <span aria-hidden="true">✎</span>
              </button>`
           : ""
       });
@@ -1646,8 +1580,9 @@
         value: t("कामको विवरण थप्नुहोस्", "Add work"),
         edit: `<button type="button"
                  class="profile-glance-edit"
-                 data-add-experience="work">
-                 ${t("थप्नुहोस्", "Add")}
+                 data-add-experience="work"
+                 aria-label="${t("कामको विवरण थप्नुहोस्", "Add work")}">
+                 <span aria-hidden="true">+</span>
                </button>`
       });
     }
@@ -1662,8 +1597,9 @@
         edit: ownProfile
           ? `<button type="button"
                class="profile-glance-edit"
-               data-edit-experience="${escapeHTML(study.id)}">
-               ${t("सम्पादन", "Edit")}
+               data-edit-experience="${escapeHTML(study.id)}"
+               aria-label="${t("अध्ययनको विवरण सम्पादन", "Edit education")}">
+               <span aria-hidden="true">✎</span>
              </button>`
           : ""
       });
@@ -1673,25 +1609,29 @@
         value: t("अध्ययनको विवरण थप्नुहोस्", "Add education"),
         edit: `<button type="button"
                  class="profile-glance-edit"
-                 data-add-experience="study">
-                 ${t("थप्नुहोस्", "Add")}
+                 data-add-experience="study"
+                 aria-label="${t("अध्ययनको विवरण थप्नुहोस्", "Add education")}">
+                 <span aria-hidden="true">+</span>
+               </button>`
+      });
+    }
+
+    if (rows.length) {
+      rows.push({
+        icon: "📋",
+        value: t("थप विवरण", "More details"),
+        edit: `<button
+                 type="button"
+                 class="profile-glance-edit"
+                 data-see-all-profile-details
+                 aria-label="${t("सबै प्रोफाइल विवरण हेर्नुहोस्", "See all profile details")}">
+                 <span aria-hidden="true">⋯</span>
                </button>`
       });
     }
 
     return `
       <section class="profile-at-glance">
-        <div class="profile-at-glance-heading">
-          <h3>${t("एक नजरमा", "At a glance")}</h3>
-
-          <button
-            type="button"
-            class="profile-at-glance-see-all"
-            data-see-all-profile-details>
-            ${t("सबै हेर्नुहोस्", "See all")}
-          </button>
-        </div>
-
         ${rows.length
           ? rows.map(row => `
               <div class="profile-glance-row">
@@ -1708,7 +1648,10 @@
                   }
                 </div>
 
-                ${row.edit || ""}
+                ${row.edit
+                  ? `<div class="profile-glance-actions">${row.edit}</div>`
+                  : ""
+                }
               </div>
             `).join("")
           : `
@@ -2091,10 +2034,6 @@
     }
 
     const isWork = normalizedType === "work";
-
-    const title = isWork
-      ? t("कामको विवरण", "Work Experience")
-      : t("अध्ययनको विवरण", "Education");
 
     const organizationLabel = isWork
       ? t("कम्पनी / संस्थाको नाम", "Company / Organization")
@@ -2667,7 +2606,7 @@
     return `
       <section class="profile-section${ownProfile ? "" : " is-public-profile"}" data-profile-section>
 
-        <section class="card profile-card" aria-label="${t(
+        <section class="profile-card" aria-label="${t(
           ownProfile ? "मेरो प्रोफाइल" : "प्रोफाइल",
           ownProfile ? "My profile" : "Profile"
         )}">
@@ -2728,17 +2667,7 @@
         </section>
 
         ${ownProfile ? `
-          <section class="card profile-tools-card">
-            <div class="profile-tools-heading">
-              <div>
-                <h3>${t("प्रोफाइलका सुविधा", "Profile Tools")}</h3>
-                <p>${t(
-                  "आफ्नो प्रोफाइल र सामग्री व्यवस्थापन गर्नुहोस्।",
-                  "Manage your profile and saved content."
-                )}</p>
-              </div>
-            </div>
-
+          <section class="profile-tools-card">
             <div class="profile-tool-grid" data-profile-extras>
               <button type="button" data-copy-profile-link>
                 🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
@@ -2748,13 +2677,6 @@
                 🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
               </button>
             </div>
-
-            <p class="profile-tool-note">
-              ${t(
-                "QR, उपलब्धि र Insights का विकल्पहरू यही सेक्सनमा देखिन्छन्।",
-                "QR, achievements and insights appear in this section."
-              )}
-            </p>
           </section>
         ` : ""}
 
@@ -2817,7 +2739,7 @@
           class="profile-tab-panel${activeTab === "about" ? "" : " hidden"}"
           data-profile-panel="about"
           role="tabpanel">
-          <div class="card profile-about-card">
+          <div class="profile-about-card">
             ${renderAbout(user)}
           </div>
         </div>
