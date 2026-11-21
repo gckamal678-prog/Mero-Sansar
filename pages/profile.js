@@ -9,7 +9,7 @@
 
   if (global.KSKProfilePage) return;
 
-  const VALID_TABS = new Set(["posts", "photos", "about"]);
+  const VALID_TABS = new Set(["posts", "photos", "about", "settings"]);
   const STYLE_ID = "ksk-profile-upgrade-styles";
 
   let remoteProfile = null;
@@ -17,6 +17,7 @@
   let viewingUserId = "";
   let profilePosts = [];
   let profilePostsPromise = null;
+  let profilePostsLoadedFor = "";
   let profileRequestToken = 0;
   let profileLoadState = "idle";
 
@@ -85,15 +86,15 @@
         align-items:center;
         gap:11px;
         min-width:0;
-        padding:6px 4px 10px;
+        padding:0;
         text-align:center;
-        overflow:hidden;
-      }
+        overflow:visible;
 
-      .profile-section .ksk-profile-cover-wrap {
-        width:100%;
-        position:relative;
-        margin-bottom:2px;
+        /* Remove the unnecessary outer profile box */
+        background:transparent !important;
+        border:0 !important;
+        border-radius:0 !important;
+        box-shadow:none !important;
       }
 
       .profile-section .ksk-profile-cover {
@@ -104,28 +105,49 @@
         border-radius:14px;
         background:linear-gradient(135deg,#243b55,#141e30);
         cursor:pointer;
+        margin-bottom:2px;
         display:block;
         outline-offset:3px;
       }
 
+      .profile-section .ksk-profile-cover img {
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        display:block;
+      }
+
+      /* Edit profile pencil on cover */
       .profile-section .ksk-profile-cover-edit {
         position:absolute;
         top:10px;
         right:10px;
-        z-index:4;
-        width:38px;
-        height:38px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        padding:0;
-        border:1px solid rgba(255,255,255,.45);
+        z-index:5;
+
+        width:42px;
+        height:42px;
+        display:grid;
+        place-items:center;
+
+        border:1px solid rgba(255,255,255,.35);
         border-radius:50%;
-        background:rgba(15,23,42,.82);
+        background:rgba(15,23,42,.78);
         color:#fff;
-        font:inherit;
-        font-size:19px;
+
+        font-size:22px;
+        line-height:1;
         cursor:pointer;
+        backdrop-filter:blur(8px);
+        box-shadow:0 3px 12px rgba(0,0,0,.25);
+      }
+
+      .profile-section .ksk-profile-cover-edit:active {
+        transform:scale(.94);
+      }
+
+      .profile-section .ksk-profile-cover-edit:focus-visible {
+        outline:3px solid var(--color-primary);
+        outline-offset:3px;
       }
 
       .profile-section .ksk-profile-cover:focus-visible,
@@ -149,13 +171,6 @@
         font-size:12px;
         font-weight:750;
         letter-spacing:.2px;
-      }
-
-      .profile-section .ksk-profile-cover img {
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
       }
 
       .profile-section .profile-card .profile-avatar {
@@ -240,37 +255,41 @@
       /* EDIT PROFILE + SETTINGS */
 
       .profile-section .profile-main-actions {
-        width:100%;
-        display:flex;
-        justify-content:flex-start;
-        gap:14px;
-        margin-top:5px;
+        width:min(100%,480px);
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:10px;
+        margin-top:7px;
       }
 
       .profile-section .profile-action-btn {
         min-width:0;
-        min-height:36px;
-        display:inline-flex;
+        min-height:50px;
+        display:flex;
         align-items:center;
-        gap:7px;
-        padding:6px 0;
-        border:0;
-        border-radius:0;
-        background:transparent;
+        justify-content:center;
+        gap:9px;
+        padding:11px 12px;
+        border:1px solid var(--color-border);
+        border-radius:14px;
+        background:var(--color-surface-secondary);
         color:var(--color-text);
         font:inherit;
         font-size:13px;
-        font-weight:750;
+        font-weight:800;
         cursor:pointer;
+        transition:transform .18s ease, border-color .18s ease;
       }
 
-      .profile-section .profile-action-btn:active,
-      .profile-section .profile-tool-grid button:active {
-        opacity:.7;
+      .profile-section .profile-action-btn:active {
+        transform:scale(.98);
       }
 
       .profile-section .profile-action-btn.primary {
-        color:var(--color-primary);
+        border-color:transparent;
+        background:var(--color-primary);
+        color:#fff;
+        box-shadow:0 5px 14px rgba(37,99,235,.18);
       }
 
       .profile-section .profile-action-btn span:first-child {
@@ -283,38 +302,70 @@
         min-width:0;
       }
 
-      .profile-section .profile-tool-grid {
-        display:flex;
-        flex-wrap:wrap;
-        align-items:center;
-        gap:12px 22px;
-      }
+      /* PROFILE SETTINGS — SIMPLE VERTICAL LIST */
 
-      .profile-section .profile-tool-grid button {
+      .profile-section .profile-tool-grid {
+        width:100%;
         min-width:0;
-        min-height:36px;
-        display:inline-flex;
-        align-items:center;
-        gap:7px;
-        padding:6px 0;
+
+        display:flex;
+        flex-direction:column;
+        gap:0;
+
         border:0;
         border-radius:0;
         background:transparent;
+        padding:0;
+      }
+
+      .profile-section .profile-tool-grid button {
+        width:100%;
+        min-width:0;
+        min-height:48px;
+
+        display:flex;
+        align-items:center;
+        justify-content:flex-start;
+        gap:12px;
+
+        padding:12px 8px;
+
+        border:0;
+        border-bottom:1px solid var(--color-border);
+        border-radius:0;
+
+        background:transparent;
         color:var(--color-text);
+
         font:inherit;
-        font-size:12px;
-        font-weight:750;
+        font-size:14px;
+        font-weight:700;
         line-height:1.4;
         text-align:left;
+
         overflow-wrap:anywhere;
         cursor:pointer;
+
+        transition:background .15s ease;
+      }
+
+      .profile-section .profile-tool-grid button:last-child {
+        border-bottom:0;
       }
 
       .profile-section .profile-tool-grid button:hover {
-        color:var(--color-primary);
+        background:var(--color-primary-soft);
       }
 
-      .profile-section .profile-tool-grid button:focus-visible,
+      .profile-section .profile-tool-grid button:active {
+        transform:scale(.99);
+      }
+
+      .profile-section .profile-tool-grid button:focus-visible {
+        outline:2px solid var(--color-primary);
+        outline-offset:2px;
+      }
+
       .profile-section .profile-action-btn:focus-visible {
         outline:2px solid var(--color-primary);
         outline-offset:3px;
@@ -324,24 +375,21 @@
 
       .profile-section .profile-tabs {
         width:100%;
-        display:flex;
-        align-items:stretch;
-        gap:16px;
-        padding:0;
-        border:0;
-        border-bottom:1px solid var(--color-border);
-        border-radius:0;
-        background:transparent;
+        display:grid;
+        grid-template-columns:repeat(4,minmax(0,1fr));
+        gap:5px;
+        padding:5px;
+        border:1px solid var(--color-border);
+        border-radius:13px;
+        background:var(--color-surface);
       }
 
       .profile-section .profile-tab {
         min-width:0;
         min-height:42px;
-        flex:1;
         padding:8px 5px;
-        border:0;
-        border-bottom:2px solid transparent;
-        border-radius:0;
+        border:1px solid transparent;
+        border-radius:10px;
         background:transparent;
         color:var(--color-muted);
         font-size:12px;
@@ -350,8 +398,8 @@
       }
 
       .profile-section .profile-tab.is-active {
-        border-bottom-color:var(--color-primary);
-        background:transparent;
+        border-color:var(--color-primary);
+        background:var(--color-primary-soft);
         color:var(--color-primary);
       }
 
@@ -378,9 +426,8 @@
         width:34px;
         height:34px;
         flex:0 0 34px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
+        display:grid;
+        place-items:center;
         color:var(--color-text);
         font-size:23px;
       }
@@ -416,9 +463,8 @@
         width:30px;
         height:30px;
         flex:0 0 30px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
+        display:grid;
+        place-items:center;
         border:0;
         padding:0;
         border-radius:8px;
@@ -472,9 +518,8 @@
       .profile-section .profile-detail-heading > span {
         width:34px;
         height:34px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
+        display:grid;
+        place-items:center;
         border-radius:10px;
         background:var(--color-surface-secondary);
         font-size:17px;
@@ -515,9 +560,8 @@
         width:36px;
         height:36px;
         flex:0 0 36px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
+        display:grid;
+        place-items:center;
         border-radius:10px;
         background:var(--color-surface-secondary);
       }
@@ -765,9 +809,8 @@
         width:36px;
         height:36px;
         flex:0 0 36px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
+        display:grid;
+        place-items:center;
         border-radius:11px;
         background:var(--color-surface-secondary);
       }
@@ -1132,10 +1175,14 @@
         remoteProfile = normalizeRemoteProfile(result);
         profileLoadState = "loaded";
 
-        if (isOtherUser) {
-          await loadProfilePosts(requestedId, requestToken);
-        } else {
+        if (!isOtherUser) {
           saveRemoteProfileToCache(remoteProfile);
+        }
+
+        const postsUserId = isOtherUser ? requestedId : currentId;
+
+        if (postsUserId) {
+          await loadProfilePosts(postsUserId, requestToken);
         }
 
         if (requestToken === profileRequestToken) {
@@ -1169,8 +1216,16 @@
   async function loadProfilePosts(userId, requestToken) {
     const api = global.KSKSupabasePosts;
 
-    if (!api?.getFeed || !userId) {
+    const isOwnProfilePosts =
+      String(userId) === String(getCurrentUserId());
+
+    const loader = isOwnProfilePosts
+      ? api?.getMyPosts
+      : api?.getFeed;
+
+    if (typeof loader !== "function" || !userId) {
       profilePosts = [];
+      profilePostsLoadedFor = "";
       return [];
     }
 
@@ -1178,7 +1233,7 @@
       return profilePostsPromise;
     }
 
-    profilePostsPromise = api.getFeed({ limit: 100 })
+    profilePostsPromise = loader.call(api, { limit: 100 })
       .then(response => {
         if (requestToken !== profileRequestToken) return [];
 
@@ -1196,6 +1251,8 @@
           String(post?.authorId || "") === String(userId)
         );
 
+        profilePostsLoadedFor = String(userId);
+
         return profilePosts;
       })
       .catch(error => {
@@ -1205,6 +1262,7 @@
         );
 
         profilePosts = [];
+        profilePostsLoadedFor = "";
         return [];
       })
       .finally(() => {
@@ -1232,6 +1290,7 @@
     remoteLoadPromise = null;
     profilePosts = [];
     profilePostsPromise = null;
+    profilePostsLoadedFor = "";
     profileLoadState = "idle";
     profileRequestToken += 1;
     profileDetailsLoadedFor = "";
@@ -1448,13 +1507,24 @@
 
   /* ABOUT */
 
-  function renderAbout(user) {
+  function renderAbout(user, ownProfile) {
     const joinedAt = user?.joinedAt
       ? global.KSKUtils?.formatDateTime?.(
           user.joinedAt,
           isEnglish() ? "en" : "ne"
         ) || user.joinedAt
       : "";
+
+    const birthdayData = ownProfile
+      ? birthdaySettings
+      : profileBirthday;
+
+    const birthdayText = formatBirthday(
+      birthdayData,
+      ownProfile
+        ? Boolean(birthdayData?.showBirthYear)
+        : Boolean(birthdayData?.birthYear)
+    );
 
     const rows = [
       user?.bio
@@ -1472,6 +1542,33 @@
             value: user.location
           }
         : null,
+
+      birthdayText
+        ? {
+            icon: "🎂",
+            label: t("जन्ममिति", "Birthday"),
+            value: birthdayText
+          }
+        : null,
+
+      ...profileExperiences.map(item => {
+        const isWork = item.type === "work";
+
+        const details = [
+          item.roleTitle,
+          item.organizationName
+        ].filter(Boolean).join(" · ");
+
+        return details
+          ? {
+              icon: isWork ? "💼" : "🎓",
+              label: isWork
+                ? t("काम", "Work")
+                : t("शिक्षा", "Education"),
+              value: details
+            }
+          : null;
+      }),
 
       joinedAt
         ? {
@@ -1507,10 +1604,6 @@
     `;
   }
 
-  /* =========================================================
-     FACEBOOK STYLE — AT A GLANCE
-  ========================================================= */
-
   function getFeaturedExperience(type) {
     const items = Array.isArray(profileExperiences)
       ? profileExperiences.filter(item => item.type === type)
@@ -1524,42 +1617,6 @@
       return String(b.startDate || "")
         .localeCompare(String(a.startDate || ""));
     })[0] || null;
-  }
-
-  function renderAtAGlance(user, ownProfile) {
-    if (!user?.location) return "";
-
-    return `
-      <section class="profile-at-glance">
-        <div class="profile-glance-row">
-          <span class="profile-glance-icon" aria-hidden="true">📍</span>
-          <div class="profile-glance-content">
-            ${escapeHTML(
-              `${t("बसोबास", "Lives in")} ${user.location}`
-            )}
-          </div>
-        </div>
-      </section>
-    `;
-  }
-
-  function openAtAGlanceDetails(ownProfile) {
-    const content = `
-      ${renderBirthdaySection(ownProfile)}
-      ${renderExperienceSection(ownProfile)}
-    `;
-
-    openProfileDetailsDialog(
-      t("प्रोफाइल विवरण", "Profile Details"),
-      content
-    );
-  }
-
-  function openExperienceManager() {
-    openProfileDetailsDialog(
-      t("काम र अध्ययन", "Work & Education"),
-      renderExperienceSection(true)
-    );
   }
 
   /* =========================================================
@@ -2424,6 +2481,7 @@
       remoteLoadPromise = null;
       profilePosts = [];
       profilePostsPromise = null;
+      profilePostsLoadedFor = "";
       profileLoadState = "idle";
       profileRequestToken += 1;
       profileDetailsLoadedFor = "";
@@ -2475,9 +2533,21 @@
       loadProfileDetails(viewingUserId, false);
     }
 
-    const allPosts = Array.isArray(options.posts)
-      ? options.posts
-      : (ownProfile ? getPosts() : profilePosts);
+    const allPosts = ownProfile
+      ? (
+          profilePostsLoadedFor === String(currentUserId)
+            ? profilePosts
+            : (
+                Array.isArray(options.posts)
+                  ? options.posts
+                  : getPosts()
+              )
+        )
+      : (
+          Array.isArray(options.posts)
+            ? options.posts
+            : profilePosts
+        );
 
     const posts = getProfilePosts(user, allPosts);
     const photos = posts.filter(isPhotoPost);
@@ -2494,22 +2564,22 @@
           ownProfile ? "My profile" : "Profile"
         )}">
 
-          <div class="ksk-profile-cover-wrap">
-            <div
-              class="ksk-profile-cover"
-              role="${ownProfile ? "button" : "img"}"
-              ${ownProfile ? 'tabindex="0"' : ""}
-              aria-label="${t("Cover फोटो", "Cover photo")}"
-            >
-              <div class="ksk-profile-cover-empty">
-                <span class="ksk-profile-cover-icon">🌄</span>
-                <span class="ksk-profile-cover-label">
-                  ${ownProfile
-                    ? t("Cover फोटो राख्नुहोस्", "Add cover photo")
-                    : t("Cover फोटो", "Cover photo")
-                  }
-                </span>
-              </div>
+          <div
+            class="ksk-profile-cover"
+            role="${ownProfile ? "button" : "img"}"
+            ${ownProfile ? 'tabindex="0"' : ""}
+            aria-label="${t("Cover फोटो", "Cover photo")}"
+          >
+
+            <div class="ksk-profile-cover-empty">
+              <span class="ksk-profile-cover-icon">🌄</span>
+
+              <span class="ksk-profile-cover-label">
+                ${ownProfile
+                  ? t("Cover फोटो राख्नुहोस्", "Add cover photo")
+                  : t("Cover फोटो", "Cover photo")
+                }
+              </span>
             </div>
 
             ${ownProfile ? `
@@ -2518,10 +2588,10 @@
                 class="ksk-profile-cover-edit"
                 data-edit-profile
                 aria-label="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
-                title="${t("प्रोफाइल सम्पादन", "Edit Profile")}">
-                ✎
-              </button>
+                title="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
+              >✍️</button>
             ` : ""}
+
           </div>
 
           <div
@@ -2546,30 +2616,7 @@
             ${posts.length} ${t("पोस्ट", "Posts")}
           </div>
 
-          ${ownProfile ? `
-            <div class="profile-main-actions">
-              <button class="profile-action-btn" type="button" data-open-settings>
-                <span>⚙️</span>
-                <span>${t("सेटिङ", "Settings")}</span>
-              </button>
-            </div>
-          ` : ""}
-
         </section>
-
-        ${ownProfile ? `
-          <section class="profile-tools-card">
-            <div class="profile-tool-grid" data-profile-extras>
-              <button type="button" data-copy-profile-link>
-                🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
-              </button>
-
-              <button type="button" data-page="saved">
-                🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
-              </button>
-            </div>
-          </section>
-        ` : ""}
 
         <div class="profile-tabs" role="tablist">
           <button
@@ -2598,9 +2645,18 @@
             data-profile-tab="about">
             ${t("परिचय", "About")}
           </button>
-        </div>
 
-        ${renderAtAGlance(user, ownProfile)}
+          ${ownProfile ? `
+            <button
+              class="profile-tab${activeTab === "settings" ? " is-active" : ""}"
+              type="button"
+              role="tab"
+              aria-selected="${activeTab === "settings"}"
+              data-profile-tab="settings">
+              ${t("सेटिङ", "Settings")}
+            </button>
+          ` : ""}
+        </div>
 
         <div
           class="profile-tab-panel${activeTab === "posts" ? "" : " hidden"}"
@@ -2631,9 +2687,43 @@
           data-profile-panel="about"
           role="tabpanel">
           <div class="profile-about-card">
-            ${renderAbout(user)}
+            ${renderAbout(user, ownProfile)}
           </div>
         </div>
+
+        ${ownProfile ? `
+          <div
+            class="profile-tab-panel${activeTab === "settings" ? "" : " hidden"}"
+            data-profile-panel="settings"
+            role="tabpanel">
+
+            <div class="profile-tool-grid" data-profile-extras>
+
+              <button
+                type="button"
+                data-copy-profile-link>
+                <span aria-hidden="true">🔗</span>
+                <span>${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}</span>
+              </button>
+
+              <button
+                type="button"
+                data-page="saved">
+                <span aria-hidden="true">🔖</span>
+                <span>${t("सेभ गरिएका पोस्ट", "Saved Posts")}</span>
+              </button>
+
+              <button
+                type="button"
+                data-page="insights">
+                <span aria-hidden="true">📊</span>
+                <span>${t("मेरो तथ्याङ्क", "My Insights")}</span>
+              </button>
+
+            </div>
+
+          </div>
+        ` : ""}
 
       </section>
     `;
@@ -2701,20 +2791,6 @@
 
     if (tab) {
       switchTab(tab);
-      return;
-    }
-
-    const seeAllDetailsButton = target.closest(
-      "[data-see-all-profile-details]"
-    );
-
-    if (seeAllDetailsButton) {
-      event.preventDefault();
-
-      openAtAGlanceDetails(
-        isOwnProfile(getProfile())
-      );
-
       return;
     }
 
@@ -2841,8 +2917,6 @@
     getMyBirthdaySettings,
     updateMyBirthdaySettings,
     getProfileBirthday,
-    openBirthdayEditor,
-    openExperienceManager,
 
     getMyExperiences,
     getProfileExperiences,
