@@ -1527,163 +1527,18 @@
   }
 
   function renderAtAGlance(user, ownProfile) {
-    const birthdayData = ownProfile
-      ? birthdaySettings
-      : profileBirthday;
-
-    const birthdayText = ownProfile
-      ? formatBirthday(
-          birthdayData,
-          Boolean(birthdayData?.showBirthYear)
-        )
-      : formatBirthday(
-          birthdayData,
-          Boolean(birthdayData?.birthYear)
-        );
-
-    const work = getFeaturedExperience("work");
-    const study = getFeaturedExperience("study");
-
-    const rows = [];
-
-    if (user?.location) {
-      rows.push({
-        icon: "📍",
-        value: `${t("बसोबास", "Lives in")} ${user.location}`
-      });
-    }
-
-    if (birthdayText) {
-      rows.push({
-        icon: "🎂",
-        value: `${t("जन्म", "Born")} ${birthdayText}`,
-        edit: ownProfile
-          ? `<button type="button"
-               class="profile-glance-edit"
-               data-edit-birthday
-               aria-label="${t("जन्ममिति सम्पादन", "Edit birthday")}">
-               <span aria-hidden="true">✎</span>
-             </button>`
-          : ""
-      });
-    } else if (ownProfile) {
-      rows.push({
-        icon: "🎂",
-        value: t("जन्ममिति थप्नुहोस्", "Add birthday"),
-        edit: `<button type="button"
-                 class="profile-glance-edit"
-                 data-edit-birthday
-                 aria-label="${t("जन्ममिति थप्नुहोस्", "Add birthday")}">
-                 <span aria-hidden="true">+</span>
-               </button>`
-      });
-    }
-
-    if (work) {
-      rows.push({
-        icon: "💼",
-        value: `${t("काम गर्नुहुन्छ", "Works at")} ${
-          work.organizationName || work.roleTitle || ""
-        }`,
-        sub: work.roleTitle || "",
-        edit: ownProfile
-          ? `<button type="button"
-               class="profile-glance-edit"
-               data-edit-experience="${escapeHTML(work.id)}"
-               aria-label="${t("कामको विवरण सम्पादन", "Edit work")}">
-               <span aria-hidden="true">✎</span>
-             </button>`
-          : ""
-      });
-    } else if (ownProfile) {
-      rows.push({
-        icon: "💼",
-        value: t("कामको विवरण थप्नुहोस्", "Add work"),
-        edit: `<button type="button"
-                 class="profile-glance-edit"
-                 data-add-experience="work"
-                 aria-label="${t("कामको विवरण थप्नुहोस्", "Add work")}">
-                 <span aria-hidden="true">+</span>
-               </button>`
-      });
-    }
-
-    if (study) {
-      rows.push({
-        icon: "🎓",
-        value: `${t("अध्ययन", "Studied at")} ${
-          study.organizationName || study.roleTitle || ""
-        }`,
-        sub: study.roleTitle || "",
-        edit: ownProfile
-          ? `<button type="button"
-               class="profile-glance-edit"
-               data-edit-experience="${escapeHTML(study.id)}"
-               aria-label="${t("अध्ययनको विवरण सम्पादन", "Edit education")}">
-               <span aria-hidden="true">✎</span>
-             </button>`
-          : ""
-      });
-    } else if (ownProfile) {
-      rows.push({
-        icon: "🎓",
-        value: t("अध्ययनको विवरण थप्नुहोस्", "Add education"),
-        edit: `<button type="button"
-                 class="profile-glance-edit"
-                 data-add-experience="study"
-                 aria-label="${t("अध्ययनको विवरण थप्नुहोस्", "Add education")}">
-                 <span aria-hidden="true">+</span>
-               </button>`
-      });
-    }
-
-    if (rows.length) {
-      rows.push({
-        icon: "📋",
-        value: t("थप विवरण", "More details"),
-        edit: `<button
-                 type="button"
-                 class="profile-glance-edit"
-                 data-see-all-profile-details
-                 aria-label="${t("सबै प्रोफाइल विवरण हेर्नुहोस्", "See all profile details")}">
-                 <span aria-hidden="true">⋯</span>
-               </button>`
-      });
-    }
+    if (!user?.location) return "";
 
     return `
       <section class="profile-at-glance">
-        ${rows.length
-          ? rows.map(row => `
-              <div class="profile-glance-row">
-                <span class="profile-glance-icon"
-                      aria-hidden="true">
-                  ${row.icon}
-                </span>
-
-                <div class="profile-glance-content">
-                  ${escapeHTML(row.value)}
-                  ${row.sub
-                    ? `<small>${escapeHTML(row.sub)}</small>`
-                    : ""
-                  }
-                </div>
-
-                ${row.edit
-                  ? `<div class="profile-glance-actions">${row.edit}</div>`
-                  : ""
-                }
-              </div>
-            `).join("")
-          : `
-            <div class="profile-glance-empty">
-              ${t(
-                "प्रोफाइल विवरण उपलब्ध छैन।",
-                "No profile details available."
-              )}
-            </div>
-          `
-        }
+        <div class="profile-glance-row">
+          <span class="profile-glance-icon" aria-hidden="true">📍</span>
+          <div class="profile-glance-content">
+            ${escapeHTML(
+              `${t("बसोबास", "Lives in")} ${user.location}`
+            )}
+          </div>
+        </div>
       </section>
     `;
   }
@@ -1697,6 +1552,13 @@
     openProfileDetailsDialog(
       t("प्रोफाइल विवरण", "Profile Details"),
       content
+    );
+  }
+
+  function openExperienceManager() {
+    openProfileDetailsDialog(
+      t("काम र अध्ययन", "Work & Education"),
+      renderExperienceSection(true)
     );
   }
 
@@ -2979,6 +2841,8 @@
     getMyBirthdaySettings,
     updateMyBirthdaySettings,
     getProfileBirthday,
+    openBirthdayEditor,
+    openExperienceManager,
 
     getMyExperiences,
     getProfileExperiences,
