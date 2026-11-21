@@ -1,7 +1,9 @@
+
 /* =========================================================
-   MERO SANSAR — WHATSAPP CHAT UI + COMPOSER
-   FULL REPLACEMENT
+   MERO SANSAR — MESSAGES BOX-FREE UI
    File: pages/messages-ui.js
+   Scope: Messages page presentation and composer enhancement.
+   Does not replace or modify the Messages/Supabase API.
 ========================================================= */
 
 (function () {
@@ -9,8 +11,6 @@
 
   if (window.__MERO_SANSAR_WA_CHAT_UI__) return;
   window.__MERO_SANSAR_WA_CHAT_UI__ = true;
-
-  // पुरानो composer-fix script सँग दोहोरो काम हुन नदिने
   window.MS_COMPOSER_FIX_V3 = true;
 
   const STYLE_ID = "mero-sansar-wa-chat-style";
@@ -36,26 +36,226 @@
 
     const style = document.createElement("style");
     style.id = STYLE_ID;
-
     style.textContent = `
-      /* ================================================
-         MERO SANSAR — CHAT UI
-         Theme-aware WhatsApp style layout
-      ================================================ */
+      /* MESSAGES PAGE — NO OUTER OR INNER CARDS */
+      #otherPage:has(#otherPageText > .ksk-msg-page) {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 8px 0 18px !important;
+        overflow: visible !important;
+      }
+
+      #otherPage:has(#otherPageText > .ksk-msg-page) .other-page-heading {
+        display: none !important;
+      }
+
+      #otherPage:has(#otherPageText > .ksk-msg-page) .page-content-card {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        overflow: visible !important;
+      }
+
+      #otherPageText:has(> .ksk-msg-page) {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+      }
+
+      #otherPageText > .ksk-msg-page {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 8px 0 24px !important;
+        overflow: visible !important;
+        color: var(--color-text, #e5e7eb) !important;
+        box-sizing: border-box !important;
+      }
+
+      #otherPageText > .ksk-msg-page > h3 {
+        display: block !important;
+        position: relative !important;
+        margin: 0 0 14px !important;
+        padding: 4px 0 2px !important;
+        font-size: 19px !important;
+        font-weight: 750 !important;
+        line-height: 1.5 !important;
+        overflow: visible !important;
+        white-space: normal !important;
+      }
+
+      .ksk-msg-page,
+      .ksk-msg-page *,
+      .ksk-msg-page *::before,
+      .ksk-msg-page *::after {
+        box-sizing: border-box !important;
+      }
+
+      /* CONVERSATION SEARCH — ICON + UNDERLINE, NOT A BOX */
+      .ksk-msg-page > .ksk-msg-toolbar {
+        position: relative !important;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        gap: 10px !important;
+        width: 100% !important;
+        margin: 8px 0 14px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+      }
+
+      .ksk-msg-page > .ksk-msg-toolbar > [data-message-search] {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 48px !important;
+        margin: 0 !important;
+        padding: 10px 12px 10px 42px !important;
+        border: 0 !important;
+        border-bottom: 1px solid var(--color-border, #334155) !important;
+        border-radius: 0 !important;
+        outline: 0 !important;
+        box-shadow: none !important;
+        background-color: transparent !important;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") !important;
+        background-repeat: no-repeat !important;
+        background-position: 10px center !important;
+        color: var(--color-text, #e5e7eb) !important;
+        font: inherit !important;
+      }
+
+      .ksk-msg-page > .ksk-msg-toolbar > [data-message-search]:focus {
+        border-bottom-color: var(--color-primary, #60a5fa) !important;
+        box-shadow: none !important;
+        outline: 0 !important;
+      }
+
+      .ksk-msg-page > .ksk-msg-toolbar > [data-action="open-group-form"] {
+        min-height: 40px !important;
+        margin: 0 !important;
+        border: 0 !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+      }
+
+      /* FILTERS — SIMPLE TEXT TABS, NO CARDS */
+      .ksk-msg-tabs {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        width: 100% !important;
+        margin: 8px 0 14px !important;
+        padding: 0 0 8px !important;
+        overflow-x: auto !important;
+        border: 0 !important;
+        background: transparent !important;
+        scrollbar-width: none;
+      }
+
+      .ksk-msg-tabs::-webkit-scrollbar {
+        display: none !important;
+      }
+
+      .ksk-msg-tab {
+        flex: 0 0 auto !important;
+        min-height: 40px !important;
+        padding: 8px 14px !important;
+        border: 0 !important;
+        border-radius: 22px !important;
+        background: transparent !important;
+        color: var(--color-muted, #94a3b8) !important;
+        box-shadow: none !important;
+        font: inherit !important;
+      }
+
+      .ksk-msg-tab.is-active {
+        background: var(--color-primary, #3b82f6) !important;
+        color: #fff !important;
+      }
+
+      /* CONVERSATION LIST — FLAT ROWS, NO BOXES */
+      .ksk-msg-list {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+      }
 
       .ksk-msg-row {
         position: relative !important;
-        align-items: flex-start !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 12px !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 12px 0 !important;
+        border: 0 !important;
+        border-bottom: 1px solid var(--color-border, #334155) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: var(--color-text, #e5e7eb) !important;
         overflow: visible !important;
       }
 
       .ksk-msg-row-main {
         flex: 1 1 auto !important;
         min-width: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
       }
 
-      /* CONVERSATION MENU */
+      .ksk-msg-row-title {
+        font-weight: 700 !important;
+      }
 
+      .ksk-msg-row-subtitle {
+        margin-top: 4px !important;
+        color: var(--color-muted, #94a3b8) !important;
+        font-size: 13px !important;
+        overflow-wrap: anywhere !important;
+      }
+
+      .ksk-msg-avatar {
+        flex: 0 0 46px !important;
+        width: 46px !important;
+        height: 46px !important;
+        min-width: 46px !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        background: var(--color-surface-secondary, #1e293b) !important;
+        box-shadow: none !important;
+      }
+
+      /* THREE-DOT CONVERSATION MENU — NO PANEL BOX */
       .ksk-msg-row-menu {
         position: relative !important;
         flex: 0 0 36px !important;
@@ -69,133 +269,86 @@
         justify-content: center !important;
         width: 36px !important;
         height: 36px !important;
-        border: 1px solid var(--color-border) !important;
+        border: 0 !important;
         border-radius: 50% !important;
-        background: var(--color-surface) !important;
-        color: var(--color-text) !important;
+        background: transparent !important;
+        color: var(--color-text, #e5e7eb) !important;
         font-size: 22px !important;
         cursor: pointer !important;
         list-style: none !important;
       }
 
-      .ksk-msg-row-menu > summary::-webkit-details-marker {
+      .ksk-msg-row-menu > summary::-webkit-details-marker,
+      .ksk-wa-chat-options > summary::-webkit-details-marker {
         display: none !important;
       }
 
-      .ksk-msg-row-menu-panel {
+      .ksk-msg-row-menu-panel,
+      .ksk-wa-chat-options-panel {
         position: absolute !important;
         top: 40px !important;
         right: 0 !important;
-        z-index: 200 !important;
-        min-width: 150px !important;
-        padding: 7px !important;
-        border: 1px solid var(--color-border) !important;
-        border-radius: var(--radius-md) !important;
-        background: var(--color-surface) !important;
-        box-shadow: var(--shadow-md) !important;
+        z-index: 300 !important;
+        display: grid !important;
+        min-width: 155px !important;
+        padding: 5px 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: var(--color-background, #0f172a) !important;
+        box-shadow: none !important;
       }
 
       .ksk-msg-row-menu-panel .ksk-msg-actions {
         display: grid !important;
         grid-template-columns: 1fr !important;
-        gap: 3px !important;
+        gap: 0 !important;
       }
 
-      .ksk-msg-row-menu-panel .ksk-msg-action {
+      .ksk-msg-row-menu-panel .ksk-msg-action,
+      .ksk-wa-chat-options-panel button {
         width: 100% !important;
-        min-height: 38px !important;
-        padding: 8px 10px !important;
+        min-height: 40px !important;
+        padding: 9px 12px !important;
         border: 0 !important;
-        border-radius: var(--radius-sm) !important;
+        border-bottom: 1px solid var(--color-border, #334155) !important;
+        border-radius: 0 !important;
         background: transparent !important;
-        color: var(--color-text) !important;
+        color: var(--color-text, #e5e7eb) !important;
         text-align: left !important;
+        font: inherit !important;
+        box-shadow: none !important;
       }
 
-      .ksk-msg-row-menu-panel .ksk-msg-action:hover {
-        background: var(--color-surface-hover) !important;
-      }
-
-      /* =================================================
-         MERO SANSAR — MESSAGES PAGE LAYOUT FIX
-      ================================================= */
-
-      /* Remove the outer Messages heading and divider */
-      #otherPage:has(#otherPageText > .ksk-msg-page)
-      .other-page-heading {
-        display: none !important;
-      }
-
-      /* Give the Messages page the available screen height */
-      #otherPage:has(#otherPageText > .ksk-msg-page) {
+      /* CHAT VIEW — FULL WIDTH, NO CONTAINER BOX */
+      #otherPage:has(#otherPageText > .ksk-msg-page > .ksk-msg-detail) {
         display: flex !important;
         flex-direction: column !important;
         min-height: 0 !important;
-      }
-
-      #otherPage:has(#otherPageText > .ksk-msg-page)
-      .page-content-card {
-        display: flex !important;
-        flex: 1 1 auto !important;
-        flex-direction: column !important;
-        min-height: 0 !important;
-        height: calc(
-          100dvh -
-          var(--app-header-height, 66px) -
-          var(--app-bottom-height, 78px) -
-          36px
-        ) !important;
+        height: calc(100dvh - var(--app-header-height, 66px) - var(--app-bottom-height, 78px) - 32px) !important;
         padding: 0 !important;
         overflow: hidden !important;
       }
 
-      /* Stretch the actual rendered page */
-      #otherPageText:has(> .ksk-msg-page) {
-        display: flex !important;
-        flex: 1 1 auto !important;
-        flex-direction: column !important;
-        width: 100% !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        overflow: hidden !important;
-      }
-
-      #otherPageText > .ksk-msg-page {
-        display: flex !important;
-        flex: 1 1 auto !important;
-        flex-direction: column !important;
-        width: 100% !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
-      }
-
-      /* Chat view must not scroll as a whole */
+      #otherPage:has(#otherPageText > .ksk-msg-page > .ksk-msg-detail) .page-content-card,
+      #otherPageText:has(> .ksk-msg-page > .ksk-msg-detail),
       #otherPageText > .ksk-msg-page:has(> .ksk-msg-detail) {
-        overflow: hidden !important;
-      }
-
-      #otherPageText > .ksk-msg-page
-      > .ksk-msg-detail {
-        flex: 1 1 0 !important;
+        display: flex !important;
+        flex: 1 1 auto !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        min-width: 0 !important;
         min-height: 0 !important;
         height: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
         overflow: hidden !important;
       }
 
-      /* CHAT CONTAINER */
-
-      .ksk-msg-detail,
-      .ksk-msg-detail * {
-        box-sizing: border-box !important;
-      }
-
-      .ksk-msg-page:has(> .ksk-msg-detail) > .ksk-msg-detail {
+      .ksk-msg-detail {
         display: flex !important;
         flex: 1 1 0 !important;
         flex-direction: column !important;
@@ -206,68 +359,61 @@
         max-height: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: var(--color-text, #e5e7eb) !important;
         overflow: hidden !important;
-        border: 1px solid var(--color-border) !important;
-        border-radius: var(--radius-md) !important;
-        background: var(--color-surface) !important;
-        color: var(--color-text) !important;
       }
 
-      /* FIXED CHAT HEADER */
-
-      .ksk-msg-detail > .ksk-msg-chat-header {
-        position: relative !important;
-        z-index: 10 !important;
+      .ksk-msg-chat-header {
         display: flex !important;
-        flex: 0 0 65px !important;
+        flex: 0 0 62px !important;
         align-items: center !important;
         gap: 10px !important;
         width: 100% !important;
         min-width: 0 !important;
-        min-height: 65px !important;
+        min-height: 62px !important;
         margin: 0 !important;
-        padding: 8px 12px !important;
+        padding: 6px 0 !important;
         border: 0 !important;
-        border-bottom: 1px solid var(--color-border) !important;
-        background: var(--color-surface) !important;
+        border-bottom: 1px solid var(--color-border, #334155) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
       }
 
-      .ksk-msg-chat-header .ksk-msg-back {
+      .ksk-msg-back,
+      .ksk-msg-profile-button,
+      .ksk-wa-chat-options > summary {
         display: inline-flex !important;
-        flex: 0 0 38px !important;
         align-items: center !important;
         justify-content: center !important;
-        width: 38px !important;
-        min-width: 38px !important;
-        height: 38px !important;
-        margin: 0 !important;
-        padding: 0 !important;
+        flex-shrink: 0 !important;
         border: 0 !important;
         border-radius: 50% !important;
         background: transparent !important;
-        color: var(--color-text) !important;
-        font-size: 23px !important;
+        box-shadow: none !important;
+      }
+
+      .ksk-msg-back {
+        width: 38px !important;
+        height: 38px !important;
+        padding: 0 !important;
       }
 
       .ksk-msg-profile-button {
-        display: inline-flex !important;
-        flex: 0 0 46px !important;
-        align-items: center !important;
-        justify-content: center !important;
         width: 46px !important;
-        min-width: 46px !important;
         height: 46px !important;
         padding: 0 !important;
         overflow: hidden !important;
-        border: 0 !important;
-        border-radius: 50% !important;
-        background: transparent !important;
       }
 
       .ksk-msg-profile-button .ksk-msg-avatar {
-        width: 46px !important;
-        height: 46px !important;
-        min-width: 46px !important;
+        width: 44px !important;
+        height: 44px !important;
+        min-width: 44px !important;
       }
 
       .ksk-msg-chat-header-main {
@@ -278,7 +424,7 @@
       .ksk-msg-chat-header-main strong {
         display: block !important;
         overflow: hidden !important;
-        color: var(--color-text) !important;
+        color: var(--color-text, #e5e7eb) !important;
         font-size: 16px !important;
         white-space: nowrap !important;
         text-overflow: ellipsis !important;
@@ -286,11 +432,9 @@
 
       .ksk-msg-chat-status {
         margin-top: 2px !important;
-        color: var(--color-muted) !important;
+        color: var(--color-muted, #94a3b8) !important;
         font-size: 12px !important;
       }
-
-      /* THREE DOT CHAT MENU */
 
       .ksk-wa-chat-options {
         position: relative !important;
@@ -299,72 +443,29 @@
       }
 
       .ksk-wa-chat-options > summary {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
         width: 38px !important;
         height: 38px !important;
-        border: 0 !important;
-        border-radius: 50% !important;
-        background: transparent !important;
-        color: var(--color-text) !important;
+        color: var(--color-text, #e5e7eb) !important;
         font-size: 24px !important;
         cursor: pointer !important;
         list-style: none !important;
       }
 
-      .ksk-wa-chat-options > summary::-webkit-details-marker {
-        display: none !important;
-      }
-
-      .ksk-wa-chat-options[open] > summary {
-        background: var(--color-surface-hover) !important;
-      }
-
       .ksk-wa-chat-options-panel {
-        position: absolute !important;
-        top: 43px !important;
-        right: 0 !important;
-        z-index: 300 !important;
-        display: grid !important;
-        min-width: 190px !important;
-        padding: 7px !important;
-        border: 1px solid var(--color-border) !important;
-        border-radius: var(--radius-md) !important;
-        background: var(--color-surface) !important;
-        box-shadow: var(--shadow-md) !important;
+        top: 42px !important;
       }
 
-      .ksk-wa-chat-options-panel button {
-        width: 100% !important;
-        min-height: 42px !important;
-        padding: 10px 12px !important;
-        border: 0 !important;
-        border-radius: var(--radius-sm) !important;
-        background: transparent !important;
-        color: var(--color-text) !important;
-        text-align: left !important;
-        font: inherit !important;
-        font-size: 14px !important;
-        cursor: pointer !important;
-      }
-
-      .ksk-wa-chat-options-panel button:hover {
-        background: var(--color-surface-hover) !important;
-      }
-
-      /* MESSAGE SEARCH */
-
+      /* MESSAGE SEARCH IN CHAT — UNDERLINE, NO BOX */
       .ksk-msg-detail > .ksk-msg-toolbar {
         display: flex !important;
         flex: 0 0 auto !important;
         align-items: center !important;
         gap: 8px !important;
         margin: 0 !important;
-        padding: 8px 10px !important;
+        padding: 7px 0 !important;
         border: 0 !important;
-        border-bottom: 1px solid var(--color-border) !important;
-        background: var(--color-surface) !important;
+        border-bottom: 1px solid var(--color-border, #334155) !important;
+        background: transparent !important;
       }
 
       .ksk-msg-detail .ksk-msg-search {
@@ -373,16 +474,17 @@
         min-width: 0 !important;
         min-height: 40px !important;
         margin: 0 !important;
-        padding: 9px 13px !important;
-        border: 1px solid var(--color-border) !important;
-        border-radius: var(--radius-pill) !important;
-        background: var(--color-surface-secondary) !important;
-        color: var(--color-text) !important;
-        font-size: 14px !important;
+        padding: 8px 10px !important;
+        border: 0 !important;
+        border-bottom: 1px solid var(--color-border, #334155) !important;
+        border-radius: 0 !important;
+        outline: 0 !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        color: var(--color-text, #e5e7eb) !important;
       }
 
-      /* ONLY MESSAGE AREA SCROLLS */
-
+      /* ONLY THE MESSAGE HISTORY SCROLLS */
       .ksk-msg-detail > .ksk-msg-history {
         display: flex !important;
         flex: 1 1 0 !important;
@@ -395,47 +497,50 @@
         height: auto !important;
         max-height: none !important;
         margin: 0 !important;
-        padding: 12px !important;
+        padding: 12px 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
         overflow-x: hidden !important;
         overflow-y: auto !important;
         overscroll-behavior: contain !important;
         -webkit-overflow-scrolling: touch !important;
-        background: var(--color-background) !important;
       }
 
+      /* MESSAGE CONTENT WITHOUT BUBBLE BOXES */
       .ksk-msg-history-item {
         position: relative !important;
         display: block !important;
         flex: 0 0 auto !important;
         width: fit-content !important;
-        max-width: min(82%, 520px) !important;
-        min-width: 65px !important;
+        max-width: min(86%, 520px) !important;
+        min-width: 0 !important;
         min-height: 0 !important;
         height: auto !important;
         margin: 0 !important;
-        padding: 8px 11px 6px !important;
-        overflow-wrap: anywhere !important;
-        border: 1px solid var(--color-border) !important;
-        border-radius: 12px !important;
-        background: var(--color-surface) !important;
-        color: var(--color-text) !important;
+        padding: 7px 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: var(--color-text, #e5e7eb) !important;
         font-size: 14px !important;
-        line-height: 1.45 !important;
+        line-height: 1.5 !important;
+        overflow-wrap: anywhere !important;
         user-select: none !important;
         -webkit-user-select: none !important;
       }
 
       .ksk-msg-history-item.from-me {
         align-self: flex-end !important;
-        border-color: var(--color-primary) !important;
-        border-top-right-radius: 3px !important;
-        background: var(--color-primary-soft) !important;
-        color: var(--color-text) !important;
+        color: var(--color-primary, #60a5fa) !important;
+        text-align: right !important;
       }
 
       .ksk-msg-history-item.from-them {
         align-self: flex-start !important;
-        border-top-left-radius: 3px !important;
+        color: var(--color-text, #e5e7eb) !important;
+        text-align: left !important;
       }
 
       .ksk-msg-history-item.deleted {
@@ -444,8 +549,8 @@
 
       .ksk-msg-history-time {
         display: block !important;
-        margin-top: 5px !important;
-        color: var(--color-muted) !important;
+        margin-top: 3px !important;
+        color: var(--color-muted, #94a3b8) !important;
         font-size: 10px !important;
         text-align: right !important;
       }
@@ -457,48 +562,89 @@
         height: auto !important;
         margin-top: 6px !important;
         object-fit: contain !important;
-        border-radius: var(--radius-sm) !important;
+        border: 0 !important;
+        border-radius: 6px !important;
+        box-shadow: none !important;
       }
 
       .ksk-msg-bubble-actions {
         display: none !important;
         flex-wrap: wrap !important;
-        gap: 5px !important;
-        margin-top: 9px !important;
-        padding-top: 7px !important;
-        border-top: 1px solid var(--color-border) !important;
+        gap: 6px !important;
+        margin-top: 7px !important;
+        padding: 6px 0 0 !important;
+        border: 0 !important;
+        background: transparent !important;
       }
 
-      .ksk-msg-history-item.ksk-wa-actions-open
-      .ksk-msg-bubble-actions {
+      .ksk-msg-history-item.ksk-wa-actions-open .ksk-msg-bubble-actions {
         display: flex !important;
       }
 
       .ksk-msg-bubble-actions button {
-        flex: 1 1 auto !important;
         min-height: 34px !important;
-        padding: 6px 9px !important;
-        border: 1px solid var(--color-border) !important;
-        border-radius: var(--radius-sm) !important;
-        background: var(--color-surface-secondary) !important;
-        color: var(--color-text) !important;
+        padding: 6px 8px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: var(--color-primary, #60a5fa) !important;
         font-size: 12px !important;
       }
 
-      /* REPLY PREVIEW */
+      /* REPLY PREVIEW AND SEARCH RESULTS — FLAT */
+      .ksk-msg-detail > .ksk-msg-reply-preview,
+      .ksk-msg-search-result,
+      .ksk-msg-search-results,
+      .ksk-msg-form,
+      .ksk-msg-friend-options,
+      .ksk-msg-friend-option,
+      .ksk-msg-empty,
+      .ksk-msg-note {
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
 
       .ksk-msg-detail > .ksk-msg-reply-preview {
         flex: 0 0 auto !important;
-        margin: 5px 9px 0 !important;
-        padding: 8px 10px !important;
-        border-left: 3px solid var(--color-primary) !important;
-        border-radius: var(--radius-sm) !important;
-        background: var(--color-surface-secondary) !important;
-        color: var(--color-text) !important;
+        margin: 5px 0 0 !important;
+        padding: 7px 10px !important;
+        border-left: 2px solid var(--color-primary, #60a5fa) !important;
+        color: var(--color-text, #e5e7eb) !important;
       }
 
-      /* FIXED BOTTOM COMPOSER */
+      .ksk-msg-search-results {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0 !important;
+        margin: 8px 0 !important;
+      }
 
+      .ksk-msg-search-result {
+        padding: 9px 0 !important;
+        border-bottom: 1px solid var(--color-border, #334155) !important;
+        color: var(--color-text, #e5e7eb) !important;
+      }
+
+      .ksk-msg-form {
+        margin: 10px 0 !important;
+        padding: 8px 0 !important;
+      }
+
+      .ksk-msg-friend-option {
+        padding: 9px 0 !important;
+        border-bottom: 1px solid var(--color-border, #334155) !important;
+      }
+
+      .ksk-msg-empty,
+      .ksk-msg-note {
+        margin: 12px 0 !important;
+        padding: 12px 0 !important;
+        text-align: center !important;
+      }
+
+      /* COMPOSER — FLAT, NO OUTER SHELL BOX */
       .ksk-msg-detail > .ksk-msg-send-form {
         position: relative !important;
         z-index: 5 !important;
@@ -509,12 +655,14 @@
         gap: 7px !important;
         width: 100% !important;
         min-width: 0 !important;
-        min-height: 64px !important;
+        min-height: 58px !important;
         margin: 0 !important;
-        padding: 8px 9px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+        padding: 7px 0 calc(7px + env(safe-area-inset-bottom, 0px)) !important;
         border: 0 !important;
-        border-top: 1px solid var(--color-border) !important;
-        background: var(--color-surface) !important;
+        border-top: 1px solid var(--color-border, #334155) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
       }
 
       .ksk-wa-composer {
@@ -523,11 +671,12 @@
         align-items: flex-end !important;
         gap: 3px !important;
         min-width: 0 !important;
-        min-height: 48px !important;
-        padding: 4px 5px !important;
-        border: 1px solid var(--color-border) !important;
-        border-radius: var(--radius-pill) !important;
-        background: var(--color-surface-secondary) !important;
+        min-height: 44px !important;
+        padding: 2px 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
       }
 
       .ksk-wa-tool {
@@ -543,7 +692,7 @@
         border: 0 !important;
         border-radius: 50% !important;
         background: transparent !important;
-        color: var(--color-muted) !important;
+        color: var(--color-muted, #94a3b8) !important;
         cursor: pointer !important;
       }
 
@@ -571,17 +720,18 @@
         resize: none !important;
         overflow-y: auto !important;
         border: 0 !important;
+        border-bottom: 1px solid var(--color-border, #334155) !important;
+        border-radius: 0 !important;
         outline: 0 !important;
         box-shadow: none !important;
-        border-radius: 0 !important;
         background: transparent !important;
-        color: var(--color-text) !important;
+        color: var(--color-text, #e5e7eb) !important;
         font-size: 14px !important;
         line-height: 20px !important;
       }
 
       .ksk-msg-detail .ksk-msg-compose:focus {
-        border: 0 !important;
+        border-bottom-color: var(--color-primary, #60a5fa) !important;
         outline: 0 !important;
         box-shadow: none !important;
       }
@@ -591,27 +741,25 @@
         flex: 0 0 auto !important;
         align-items: center !important;
         gap: 2px !important;
-        width: auto !important;
-        min-width: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
       }
 
       .ksk-wa-send {
         display: inline-flex !important;
-        flex: 0 0 45px !important;
+        flex: 0 0 42px !important;
         align-items: center !important;
         justify-content: center !important;
-        width: 45px !important;
-        min-width: 45px !important;
-        height: 45px !important;
+        width: 42px !important;
+        min-width: 42px !important;
+        height: 42px !important;
         margin: 0 !important;
         padding: 0 !important;
         border: 0 !important;
         border-radius: 50% !important;
-        background: var(--color-primary) !important;
+        background: var(--color-primary, #3b82f6) !important;
         color: #fff !important;
-        font-size: 22px !important;
+        font-size: 21px !important;
         font-weight: 800 !important;
         cursor: pointer !important;
       }
@@ -621,33 +769,17 @@
         display: none !important;
       }
 
-      /* RESPONSIVE */
-
       @media (max-width: 520px) {
-        .ksk-msg-page:has(> .ksk-msg-detail) > .ksk-msg-detail {
-          border-right: 0 !important;
-          border-left: 0 !important;
-          border-radius: 0 !important;
-        }
-
-        .ksk-msg-history-item {
-          max-width: 86% !important;
-        }
-
         .ksk-msg-detail > .ksk-msg-history {
-          padding: 9px !important;
+          padding: 9px 0 !important;
         }
 
         .ksk-msg-detail > .ksk-msg-send-form {
-          gap: 5px !important;
-          padding-right: 6px !important;
-          padding-left: 6px !important;
+          gap: 4px !important;
         }
 
         .ksk-wa-composer {
           gap: 1px !important;
-          padding-right: 3px !important;
-          padding-left: 3px !important;
         }
 
         .ksk-wa-tool {
@@ -657,25 +789,23 @@
         }
 
         .ksk-wa-send {
-          flex-basis: 43px !important;
-          width: 43px !important;
-          min-width: 43px !important;
-          height: 43px !important;
+          flex-basis: 40px !important;
+          width: 40px !important;
+          min-width: 40px !important;
+          height: 40px !important;
         }
       }
 
-      /* KEYBOARD / SHORT VIEWPORT */
-
       @media (max-height: 520px) {
-        .ksk-msg-detail > .ksk-msg-chat-header {
+        .ksk-msg-chat-header {
           flex-basis: 54px !important;
           min-height: 54px !important;
         }
 
         .ksk-msg-detail > .ksk-msg-send-form {
-          min-height: 56px !important;
-          padding-top: 5px !important;
-          padding-bottom: 5px !important;
+          min-height: 52px !important;
+          padding-top: 4px !important;
+          padding-bottom: 4px !important;
         }
       }
     `;
@@ -693,12 +823,9 @@
     return button;
   }
 
-  /* MOVE EXISTING ACTIONS INTO THREE-DOT MENU.
-     Existing Pin/Archive/Mute handlers remain attached. */
   function repairConversationMenus() {
     document.querySelectorAll(".ksk-msg-row").forEach(row => {
       const actions = row.querySelector(":scope > .ksk-msg-actions");
-
       if (!actions || row.dataset.menuReady === "yes") return;
 
       const menu = document.createElement("details");
@@ -711,11 +838,9 @@
 
       const panel = document.createElement("div");
       panel.className = "ksk-msg-row-menu-panel";
-
       panel.appendChild(actions);
       menu.append(summary, panel);
       row.appendChild(menu);
-
       row.dataset.menuReady = "yes";
     });
   }
@@ -723,12 +848,10 @@
   function resizeComposer(form) {
     const area = form.querySelector(".ksk-msg-compose");
     const send = form.querySelector(".ksk-wa-send");
-
     if (!area || !send) return;
 
     area.style.height = "38px";
     area.style.height = Math.min(area.scrollHeight, 110) + "px";
-
     send.hidden = !area.value.trim();
   }
 
@@ -739,7 +862,6 @@
     const oldActions = form.querySelector(".ksk-msg-compose-actions");
     const send = oldActions?.querySelector('[type="submit"]');
     const originalFile = oldActions?.querySelector('input[type="file"][data-media-file]');
-
     if (!area || !oldActions || !send) return;
 
     form.dataset.waReady = "yes";
@@ -762,18 +884,10 @@
     cameraInput.className = "ksk-wa-file-input";
     cameraInput.setAttribute("aria-label", "Take a photo");
 
-    const galleryButton = makeButton(
-      "ksk-wa-tool",
-      "Gallery",
-      GALLERY_ICON
-    );
+    const galleryButton = makeButton("ksk-wa-tool", "Gallery", GALLERY_ICON);
     galleryButton.dataset.waGallery = "yes";
 
-    const cameraButton = makeButton(
-      "ksk-wa-tool",
-      "Camera",
-      CAMERA_ICON
-    );
+    const cameraButton = makeButton("ksk-wa-tool", "Camera", CAMERA_ICON);
     cameraButton.dataset.waCamera = "yes";
 
     area.placeholder = "Message";
@@ -784,17 +898,9 @@
     send.textContent = "➤";
     send.setAttribute("aria-label", "Send message");
 
-    shell.append(
-      galleryButton,
-      cameraButton,
-      area,
-      galleryInput,
-      cameraInput
-    );
-
+    shell.append(galleryButton, cameraButton, area, galleryInput, cameraInput);
     oldActions.replaceChildren(send);
     form.replaceChildren(shell, oldActions);
-
     resizeComposer(form);
   }
 
@@ -803,26 +909,17 @@
     repairConversationMenus();
 
     document.querySelectorAll(".ksk-msg-detail").forEach(detail => {
-      const header = detail.querySelector(
-        ":scope > .ksk-msg-chat-header"
-      );
-
+      const header = detail.querySelector(":scope > .ksk-msg-chat-header");
       if (header) {
-        const block = header.querySelector(
-          ':scope > [data-action="block-user"]'
-        );
-
+        const block = header.querySelector(':scope > [data-action="block-user"]');
         if (block && !header.querySelector(".ksk-wa-chat-options")) {
           const menu = document.createElement("details");
           menu.className = "ksk-wa-chat-options";
-
           const summary = document.createElement("summary");
           summary.textContent = "⋮";
           summary.setAttribute("aria-label", "Chat options");
-
           const panel = document.createElement("div");
           panel.className = "ksk-wa-chat-options-panel";
-
           block.textContent = "Block";
           panel.appendChild(block);
           menu.append(summary, panel);
@@ -830,25 +927,17 @@
         }
       }
 
-      const form = detail.querySelector(
-        ":scope > form[data-send-form]"
-      );
-
+      const form = detail.querySelector(':scope > form[data-send-form]');
       if (form) buildComposer(form);
     });
   }
 
   function showMessageActions(bubble) {
-    if (!bubble || !bubble.querySelector(".ksk-msg-bubble-actions")) {
-      return;
-    }
+    if (!bubble || !bubble.querySelector(".ksk-msg-bubble-actions")) return;
 
-    document.querySelectorAll(
-      ".ksk-msg-history-item.ksk-wa-actions-open"
-    ).forEach(item => {
+    document.querySelectorAll(".ksk-msg-history-item.ksk-wa-actions-open").forEach(item => {
       if (item !== bubble) item.classList.remove("ksk-wa-actions-open");
     });
-
     bubble.classList.add("ksk-wa-actions-open");
   }
 
@@ -860,16 +949,12 @@
     heldBubble = null;
   }
 
-  /* LONG PRESS MESSAGE ACTIONS */
-
   document.addEventListener("pointerdown", event => {
-    const bubble = event.target.closest(".ksk-msg-history-item");
-
-    if (!bubble || event.target.closest("button,a,input,video")) return;
+    const bubble = event.target.closest?.(".ksk-msg-history-item");
+    if (!bubble || event.target.closest?.("button,a,input,video")) return;
 
     stopHold();
     heldBubble = bubble;
-
     holdTimer = setTimeout(() => {
       if (heldBubble === bubble) {
         showMessageActions(bubble);
@@ -883,130 +968,89 @@
   document.addEventListener("pointermove", stopHold, { passive: true });
 
   document.addEventListener("contextmenu", event => {
-    const bubble = event.target.closest(".ksk-msg-history-item");
+    const bubble = event.target.closest?.(".ksk-msg-history-item");
     if (!bubble) return;
-
     event.preventDefault();
     showMessageActions(bubble);
   });
 
-  /* GALLERY / CAMERA / MENU INTERACTIONS */
-
   document.addEventListener("click", event => {
-    const menuSummary = event.target.closest(
-      ".ksk-msg-row-menu > summary"
-    );
-
+    const menuSummary = event.target.closest?.(".ksk-msg-row-menu > summary");
     if (menuSummary) {
       const currentMenu = menuSummary.parentElement;
-
-      document.querySelectorAll(
-        ".ksk-msg-row-menu[open]"
-      ).forEach(menu => {
+      document.querySelectorAll(".ksk-msg-row-menu[open]").forEach(menu => {
         if (menu !== currentMenu) menu.removeAttribute("open");
       });
-
       return;
     }
 
-    const gallery = event.target.closest("[data-wa-gallery]");
+    const gallery = event.target.closest?.("[data-wa-gallery]");
     if (gallery) {
       gallery.closest("[data-send-form]")
-        ?.querySelector('input[data-media-file]:not([capture])')
-        ?.click();
+        ?.querySelector('input[data-media-file]:not([capture])')?.click();
       return;
     }
 
-    const camera = event.target.closest("[data-wa-camera]");
+    const camera = event.target.closest?.("[data-wa-camera]");
     if (camera) {
       camera.closest("[data-send-form]")
-        ?.querySelector('input[data-media-file][capture]')
-        ?.click();
+        ?.querySelector('input[data-media-file][capture]')?.click();
       return;
     }
 
-    if (event.target.closest(".ksk-msg-bubble-actions")) {
+    if (event.target.closest?.(".ksk-msg-bubble-actions")) {
       const bubble = event.target.closest(".ksk-msg-history-item");
-      if (bubble) {
-        setTimeout(() => {
-          bubble.classList.remove("ksk-wa-actions-open");
-        }, 150);
-      }
+      if (bubble) setTimeout(() => bubble.classList.remove("ksk-wa-actions-open"), 150);
       return;
     }
 
-    if (!event.target.closest(".ksk-msg-history-item")) {
-      document.querySelectorAll(
-        ".ksk-msg-history-item.ksk-wa-actions-open"
-      ).forEach(item => {
+    if (!event.target.closest?.(".ksk-msg-history-item")) {
+      document.querySelectorAll(".ksk-msg-history-item.ksk-wa-actions-open").forEach(item => {
         item.classList.remove("ksk-wa-actions-open");
       });
     }
 
-    if (!event.target.closest(".ksk-msg-row-menu")) {
-      document.querySelectorAll(
-        ".ksk-msg-row-menu[open]"
-      ).forEach(menu => menu.removeAttribute("open"));
+    if (!event.target.closest?.(".ksk-msg-row-menu")) {
+      document.querySelectorAll(".ksk-msg-row-menu[open]").forEach(menu => menu.removeAttribute("open"));
+    }
+
+    if (!event.target.closest?.(".ksk-wa-chat-options")) {
+      document.querySelectorAll(".ksk-wa-chat-options[open]").forEach(menu => menu.removeAttribute("open"));
     }
   });
 
-  /* TEXTAREA RESIZE */
-
   document.addEventListener("input", event => {
-    if (!event.target.matches(".ksk-msg-compose")) return;
-
+    if (!event.target.matches?.(".ksk-msg-compose")) return;
     const form = event.target.closest("[data-send-form]");
     if (form) resizeComposer(form);
   });
 
-  /* FILE SELECTED:
-     Keep the original data-media-file event flowing to messages.js.
-     Do not stop propagation or upload a second time. */
-
   document.addEventListener("change", event => {
-    if (!event.target.matches(".ksk-wa-file-input")) return;
-
+    if (!event.target.matches?.(".ksk-wa-file-input")) return;
     const form = event.target.closest("[data-send-form]");
     const send = form?.querySelector(".ksk-wa-send");
-
-    if (send && event.target.files?.length) {
-      send.hidden = false;
-    }
+    if (send && event.target.files?.length) send.hidden = false;
   });
-
-  /* CLOSE MENUS AND MESSAGE ACTIONS */
 
   document.addEventListener("keydown", event => {
     if (event.key !== "Escape") return;
 
-    document.querySelectorAll(
-      ".ksk-msg-history-item.ksk-wa-actions-open"
-    ).forEach(item => {
+    document.querySelectorAll(".ksk-msg-history-item.ksk-wa-actions-open").forEach(item => {
       item.classList.remove("ksk-wa-actions-open");
     });
 
-    document.querySelectorAll(
-      ".ksk-msg-row-menu[open],.ksk-wa-chat-options[open]"
-    ).forEach(menu => menu.removeAttribute("open"));
+    document.querySelectorAll(".ksk-msg-row-menu[open],.ksk-wa-chat-options[open]").forEach(menu => {
+      menu.removeAttribute("open");
+    });
   });
-
-  /* REPAIR DYNAMICALLY RENDERED CHAT UI */
 
   function start() {
     if (!document.body) return;
-
     repairChat();
-
     if (observer) return;
 
-    observer = new MutationObserver(() => {
-      repairChat();
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+    observer = new MutationObserver(() => repairChat());
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   if (document.readyState === "loading") {
@@ -1014,5 +1058,4 @@
   } else {
     start();
   }
-
 })();
