@@ -9,6 +9,8 @@
  * - Post deep-link navigation: #post=POST_ID
  * - Opens Home and focuses the requested post
  * - Waits for asynchronous Supabase Feed loading
+ * - Shows application header only on Home / Dashboard
+ * - Hides Profile page heading
  */
 
 (function (global) {
@@ -204,9 +206,60 @@
       });
   }
 
+  /* PAGE HEADER AND TITLE */
+
+  function updatePageChrome(page) {
+    const currentPage = normalizePage(page);
+
+    /*
+     * Main application header:
+     * Only Home / Dashboard displays it.
+     */
+    const appHeader = document.querySelector(
+      ".app-header"
+    );
+
+    if (appHeader) {
+      appHeader.hidden = currentPage !== "home";
+    }
+
+    /*
+     * Profile page:
+     * Hide the generic "Profile" heading.
+     * Keep headings on other pages.
+     */
+    const title = document.getElementById(
+      "otherPageTitle"
+    );
+
+    const heading = title?.closest(
+      ".other-page-heading"
+    ) || title?.parentElement;
+
+    if (heading) {
+      heading.hidden = currentPage === "profile";
+    } else if (title) {
+      title.hidden = currentPage === "profile";
+    }
+
+    document.body.classList.toggle(
+      "ksk-current-page-profile",
+      currentPage === "profile"
+    );
+
+    document.body.classList.toggle(
+      "ksk-app-header-hidden",
+      currentPage !== "home"
+    );
+
+    return true;
+  }
+
   /* PAGE VISIBILITY */
 
   function showHomePage() {
+    updatePageChrome("home");
+
     document
       .getElementById("homePage")
       ?.classList.remove("hidden");
@@ -230,6 +283,8 @@
 
       return false;
     }
+
+    updatePageChrome(page);
 
     home?.classList.add("hidden");
     other.classList.remove("hidden");
@@ -371,6 +426,8 @@
     if (options.render !== false) {
       return refreshCurrentPage();
     }
+
+    updatePageChrome(next);
 
     return true;
   }
@@ -550,6 +607,7 @@
   function initializeNavigation(root = document) {
     if (initialized) {
       updateActiveNavigation();
+      updatePageChrome(getCurrentPage());
       return true;
     }
 
@@ -610,6 +668,7 @@
     initialized = true;
 
     updateActiveNavigation();
+    updatePageChrome(getCurrentPage());
 
     // App initialization पछि पोस्ट खोल्ने।
     if (linkedPostId) {
@@ -625,6 +684,7 @@
 
   function refreshNavigation() {
     updateActiveNavigation();
+    updatePageChrome(getCurrentPage());
     return true;
   }
 
@@ -652,6 +712,32 @@
 
     initialized = false;
     clickRoot = null;
+
+    // Navigation बन्द हुँदा Header लुकाएर नराख्ने।
+    const appHeader = document.querySelector(
+      ".app-header"
+    );
+
+    if (appHeader) {
+      appHeader.hidden = false;
+    }
+
+    document.body.classList.remove(
+      "ksk-current-page-profile",
+      "ksk-app-header-hidden"
+    );
+
+    const title = document.getElementById(
+      "otherPageTitle"
+    );
+
+    const heading = title?.closest(
+      ".other-page-heading"
+    ) || title?.parentElement;
+
+    if (heading) {
+      heading.hidden = false;
+    }
 
     return true;
   }
