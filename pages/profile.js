@@ -9,7 +9,7 @@
 
   if (global.KSKProfilePage) return;
 
-  const VALID_TABS = new Set(["posts", "photos", "about", "settings"]);
+  const VALID_TABS = new Set(["posts", "photos", "about"]);
   const STYLE_ID = "ksk-profile-upgrade-styles";
 
   let remoteProfile = null;
@@ -85,15 +85,9 @@
         align-items:center;
         gap:11px;
         min-width:0;
-        padding:0;
+        padding:6px 4px 10px;
         text-align:center;
-        overflow:visible;
-
-        /* Remove the unnecessary outer profile box */
-        background:transparent !important;
-        border:0 !important;
-        border-radius:0 !important;
-        box-shadow:none !important;
+        overflow:hidden;
       }
 
       .profile-section .ksk-profile-cover {
@@ -106,46 +100,6 @@
         cursor:pointer;
         margin-bottom:2px;
         display:block;
-        outline-offset:3px;
-      }
-
-      .profile-section .ksk-profile-cover img {
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
-      }
-
-      /* Edit profile pencil on cover */
-      .profile-section .ksk-profile-cover-edit {
-        position:absolute;
-        top:10px;
-        right:10px;
-        z-index:5;
-
-        width:42px;
-        height:42px;
-        display:grid;
-        place-items:center;
-
-        border:1px solid rgba(255,255,255,.35);
-        border-radius:50%;
-        background:rgba(15,23,42,.78);
-        color:#fff;
-
-        font-size:22px;
-        line-height:1;
-        cursor:pointer;
-        backdrop-filter:blur(8px);
-        box-shadow:0 3px 12px rgba(0,0,0,.25);
-      }
-
-      .profile-section .ksk-profile-cover-edit:active {
-        transform:scale(.94);
-      }
-
-      .profile-section .ksk-profile-cover-edit:focus-visible {
-        outline:3px solid var(--color-primary);
         outline-offset:3px;
       }
 
@@ -170,6 +124,13 @@
         font-size:12px;
         font-weight:750;
         letter-spacing:.2px;
+      }
+
+      .profile-section .ksk-profile-cover img {
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        display:block;
       }
 
       .profile-section .profile-card .profile-avatar {
@@ -280,7 +241,8 @@
         transition:transform .18s ease, border-color .18s ease;
       }
 
-      .profile-section .profile-action-btn:active {
+      .profile-section .profile-action-btn:active,
+      .profile-section .profile-tool-grid button:active {
         transform:scale(.98);
       }
 
@@ -301,70 +263,39 @@
         min-width:0;
       }
 
-      /* PROFILE SETTINGS — SIMPLE VERTICAL LIST */
-
       .profile-section .profile-tool-grid {
-        width:100%;
-        min-width:0;
-
-        display:flex;
-        flex-direction:column;
-        gap:0;
-
-        border:0;
-        border-radius:0;
-        background:transparent;
-        padding:0;
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:9px;
       }
 
       .profile-section .profile-tool-grid button {
-        width:100%;
         min-width:0;
-        min-height:48px;
-
+        min-height:58px;
         display:flex;
         align-items:center;
-        justify-content:flex-start;
-        gap:12px;
-
-        padding:12px 8px;
-
-        border:0;
-        border-bottom:1px solid var(--color-border);
-        border-radius:0;
-
-        background:transparent;
+        gap:9px;
+        padding:11px 12px;
+        border:1px solid var(--color-border);
+        border-radius:13px;
+        background:var(--color-surface-secondary);
         color:var(--color-text);
-
         font:inherit;
-        font-size:14px;
-        font-weight:700;
+        font-size:12px;
+        font-weight:750;
         line-height:1.4;
         text-align:left;
-
         overflow-wrap:anywhere;
         cursor:pointer;
-
-        transition:background .15s ease;
-      }
-
-      .profile-section .profile-tool-grid button:last-child {
-        border-bottom:0;
+        transition:transform .18s ease, border-color .18s ease, background .18s ease;
       }
 
       .profile-section .profile-tool-grid button:hover {
+        border-color:var(--color-primary);
         background:var(--color-primary-soft);
       }
 
-      .profile-section .profile-tool-grid button:active {
-        transform:scale(.99);
-      }
-
-      .profile-section .profile-tool-grid button:focus-visible {
-        outline:2px solid var(--color-primary);
-        outline-offset:2px;
-      }
-
+      .profile-section .profile-tool-grid button:focus-visible,
       .profile-section .profile-action-btn:focus-visible {
         outline:2px solid var(--color-primary);
         outline-offset:3px;
@@ -375,7 +306,7 @@
       .profile-section .profile-tabs {
         width:100%;
         display:grid;
-        grid-template-columns:repeat(4,minmax(0,1fr));
+        grid-template-columns:repeat(3,minmax(0,1fr));
         gap:5px;
         padding:5px;
         border:1px solid var(--color-border);
@@ -854,6 +785,12 @@
 
         .profile-section .profile-card h2 {
           font-size:19px;
+        }
+      }
+
+      @media(max-width:340px) {
+        .profile-section .profile-tool-grid {
+          grid-template-columns:1fr;
         }
       }
     `;
@@ -1498,65 +1435,38 @@
         ) || user.joinedAt
       : "";
 
-    const birthdayData = isOwnProfile(user)
-      ? birthdaySettings
-      : profileBirthday;
-
-    const birthdayText = formatBirthday(
-      birthdayData,
-      isOwnProfile(user)
-        ? Boolean(birthdayData?.showBirthYear)
-        : Boolean(birthdayData?.birthYear)
-    );
-
-    const work = getFeaturedExperience("work");
-    const study = getFeaturedExperience("study");
-
     const rows = [
-      user?.bio && {
-        icon: "📝",
-        label: t("परिचय", "Bio"),
-        value: user.bio
-      },
+      user?.bio
+        ? {
+            icon: "📝",
+            label: t("परिचय", "Bio"),
+            value: user.bio
+          }
+        : null,
 
-      user?.location && {
-        icon: "📍",
-        label: t("बसोबास", "Location"),
-        value: user.location
-      },
+      user?.location
+        ? {
+            icon: "📍",
+            label: t("स्थान", "Location"),
+            value: user.location
+          }
+        : null,
 
-      birthdayText && {
-        icon: "🎂",
-        label: t("जन्ममिति", "Birthday"),
-        value: birthdayText
-      },
-
-      work && {
-        icon: "💼",
-        label: t("काम", "Work"),
-        value: [
-          work.roleTitle,
-          work.organizationName
-        ].filter(Boolean).join(" — ")
-      },
-
-      study && {
-        icon: "🎓",
-        label: t("शिक्षा", "Education"),
-        value: [
-          study.roleTitle,
-          study.organizationName
-        ].filter(Boolean).join(" — ")
-      },
-
-      joinedAt && {
-        icon: "📅",
-        label: t("सदस्य बनेको मिति", "Joined"),
-        value: joinedAt
-      }
+      joinedAt
+        ? {
+            icon: "📅",
+            label: t("सदस्य बनेको मिति", "Joined"),
+            value: joinedAt
+          }
+        : null
     ].filter(Boolean);
 
-    if (!rows.length) return "";
+    if (!rows.length) {
+      return `<div class="empty-state">${t(
+        "अहिलेसम्म About जानकारी थपिएको छैन।",
+        "No About information yet."
+      )}</div>`;
+    }
 
     return `
       <div class="profile-about-list">
@@ -1576,6 +1486,10 @@
     `;
   }
 
+  /* =========================================================
+     FACEBOOK STYLE — AT A GLANCE
+  ========================================================= */
+
   function getFeaturedExperience(type) {
     const items = Array.isArray(profileExperiences)
       ? profileExperiences.filter(item => item.type === type)
@@ -1589,6 +1503,180 @@
       return String(b.startDate || "")
         .localeCompare(String(a.startDate || ""));
     })[0] || null;
+  }
+
+  function renderAtAGlance(user, ownProfile) {
+    const birthdayData = ownProfile
+      ? birthdaySettings
+      : profileBirthday;
+
+    const birthdayText = ownProfile
+      ? formatBirthday(
+          birthdayData,
+          Boolean(birthdayData?.showBirthYear)
+        )
+      : formatBirthday(
+          birthdayData,
+          Boolean(birthdayData?.birthYear)
+        );
+
+    const work = getFeaturedExperience("work");
+    const study = getFeaturedExperience("study");
+
+    const rows = [];
+
+    if (user?.location) {
+      rows.push({
+        icon: "📍",
+        value: `${t("बसोबास", "Lives in")} ${user.location}`
+      });
+    }
+
+    if (birthdayText) {
+      rows.push({
+        icon: "🎂",
+        value: `${t("जन्म", "Born")} ${birthdayText}`,
+        edit: ownProfile
+          ? `<button type="button"
+               class="profile-glance-edit"
+               data-edit-birthday
+               aria-label="${t("जन्ममिति सम्पादन", "Edit birthday")}">
+               <span aria-hidden="true">✎</span>
+             </button>`
+          : ""
+      });
+    } else if (ownProfile) {
+      rows.push({
+        icon: "🎂",
+        value: t("जन्ममिति थप्नुहोस्", "Add birthday"),
+        edit: `<button type="button"
+                 class="profile-glance-edit"
+                 data-edit-birthday
+                 aria-label="${t("जन्ममिति थप्नुहोस्", "Add birthday")}">
+                 <span aria-hidden="true">+</span>
+               </button>`
+      });
+    }
+
+    if (work) {
+      rows.push({
+        icon: "💼",
+        value: `${t("काम गर्नुहुन्छ", "Works at")} ${
+          work.organizationName || work.roleTitle || ""
+        }`,
+        sub: work.roleTitle || "",
+        edit: ownProfile
+          ? `<button type="button"
+               class="profile-glance-edit"
+               data-edit-experience="${escapeHTML(work.id)}"
+               aria-label="${t("कामको विवरण सम्पादन", "Edit work")}">
+               <span aria-hidden="true">✎</span>
+             </button>`
+          : ""
+      });
+    } else if (ownProfile) {
+      rows.push({
+        icon: "💼",
+        value: t("कामको विवरण थप्नुहोस्", "Add work"),
+        edit: `<button type="button"
+                 class="profile-glance-edit"
+                 data-add-experience="work"
+                 aria-label="${t("कामको विवरण थप्नुहोस्", "Add work")}">
+                 <span aria-hidden="true">+</span>
+               </button>`
+      });
+    }
+
+    if (study) {
+      rows.push({
+        icon: "🎓",
+        value: `${t("अध्ययन", "Studied at")} ${
+          study.organizationName || study.roleTitle || ""
+        }`,
+        sub: study.roleTitle || "",
+        edit: ownProfile
+          ? `<button type="button"
+               class="profile-glance-edit"
+               data-edit-experience="${escapeHTML(study.id)}"
+               aria-label="${t("अध्ययनको विवरण सम्पादन", "Edit education")}">
+               <span aria-hidden="true">✎</span>
+             </button>`
+          : ""
+      });
+    } else if (ownProfile) {
+      rows.push({
+        icon: "🎓",
+        value: t("अध्ययनको विवरण थप्नुहोस्", "Add education"),
+        edit: `<button type="button"
+                 class="profile-glance-edit"
+                 data-add-experience="study"
+                 aria-label="${t("अध्ययनको विवरण थप्नुहोस्", "Add education")}">
+                 <span aria-hidden="true">+</span>
+               </button>`
+      });
+    }
+
+    if (rows.length) {
+      rows.push({
+        icon: "📋",
+        value: t("थप विवरण", "More details"),
+        edit: `<button
+                 type="button"
+                 class="profile-glance-edit"
+                 data-see-all-profile-details
+                 aria-label="${t("सबै प्रोफाइल विवरण हेर्नुहोस्", "See all profile details")}">
+                 <span aria-hidden="true">⋯</span>
+               </button>`
+      });
+    }
+
+    return `
+      <section class="profile-at-glance">
+        ${rows.length
+          ? rows.map(row => `
+              <div class="profile-glance-row">
+                <span class="profile-glance-icon"
+                      aria-hidden="true">
+                  ${row.icon}
+                </span>
+
+                <div class="profile-glance-content">
+                  ${escapeHTML(row.value)}
+                  ${row.sub
+                    ? `<small>${escapeHTML(row.sub)}</small>`
+                    : ""
+                  }
+                </div>
+
+                ${row.edit
+                  ? `<div class="profile-glance-actions">${row.edit}</div>`
+                  : ""
+                }
+              </div>
+            `).join("")
+          : `
+            <div class="profile-glance-empty">
+              ${t(
+                "प्रोफाइल विवरण उपलब्ध छैन।",
+                "No profile details available."
+              )}
+            </div>
+          `
+        }
+      </section>
+    `;
+  }
+
+  function openAtAGlanceDetails(ownProfile) {
+    const content = `
+      ${renderBirthdaySection(ownProfile)}
+      ${renderExperienceSection(ownProfile)}
+    `;
+
+    openProfileDetailsDialog(
+      t("प्रोफाइल विवरण", "Profile Details"),
+      content
+    );
   }
 
   /* =========================================================
@@ -2529,10 +2617,8 @@
             ${ownProfile ? 'tabindex="0"' : ""}
             aria-label="${t("Cover फोटो", "Cover photo")}"
           >
-
             <div class="ksk-profile-cover-empty">
               <span class="ksk-profile-cover-icon">🌄</span>
-
               <span class="ksk-profile-cover-label">
                 ${ownProfile
                   ? t("Cover फोटो राख्नुहोस्", "Add cover photo")
@@ -2540,17 +2626,6 @@
                 }
               </span>
             </div>
-
-            ${ownProfile ? `
-              <button
-                type="button"
-                class="ksk-profile-cover-edit"
-                data-edit-profile
-                aria-label="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
-                title="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
-              >✍️</button>
-            ` : ""}
-
           </div>
 
           <div
@@ -2575,7 +2650,35 @@
             ${posts.length} ${t("पोस्ट", "Posts")}
           </div>
 
+          ${ownProfile ? `
+            <div class="profile-main-actions">
+              <button class="profile-action-btn primary" type="button" data-edit-profile>
+                <span>✏️</span>
+                <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
+              </button>
+
+              <button class="profile-action-btn" type="button" data-open-settings>
+                <span>⚙️</span>
+                <span>${t("सेटिङ", "Settings")}</span>
+              </button>
+            </div>
+          ` : ""}
+
         </section>
+
+        ${ownProfile ? `
+          <section class="profile-tools-card">
+            <div class="profile-tool-grid" data-profile-extras>
+              <button type="button" data-copy-profile-link>
+                🔗 ${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}
+              </button>
+
+              <button type="button" data-page="saved">
+                🔖 ${t("सेभ गरिएका पोस्ट", "Saved Posts")}
+              </button>
+            </div>
+          </section>
+        ` : ""}
 
         <div class="profile-tabs" role="tablist">
           <button
@@ -2604,18 +2707,9 @@
             data-profile-tab="about">
             ${t("परिचय", "About")}
           </button>
-
-          ${ownProfile ? `
-            <button
-              class="profile-tab${activeTab === "settings" ? " is-active" : ""}"
-              type="button"
-              role="tab"
-              aria-selected="${activeTab === "settings"}"
-              data-profile-tab="settings">
-              ${t("सेटिङ", "Settings")}
-            </button>
-          ` : ""}
         </div>
+
+        ${renderAtAGlance(user, ownProfile)}
 
         <div
           class="profile-tab-panel${activeTab === "posts" ? "" : " hidden"}"
@@ -2649,40 +2743,6 @@
             ${renderAbout(user)}
           </div>
         </div>
-
-        ${ownProfile ? `
-          <div
-            class="profile-tab-panel${activeTab === "settings" ? "" : " hidden"}"
-            data-profile-panel="settings"
-            role="tabpanel">
-
-            <div class="profile-tool-grid" data-profile-extras>
-
-              <button
-                type="button"
-                data-copy-profile-link>
-                <span aria-hidden="true">🔗</span>
-                <span>${t("प्रोफाइल लिंक कपी", "Copy Profile Link")}</span>
-              </button>
-
-              <button
-                type="button"
-                data-page="saved">
-                <span aria-hidden="true">🔖</span>
-                <span>${t("सेभ गरिएका पोस्ट", "Saved Posts")}</span>
-              </button>
-
-              <button
-                type="button"
-                data-page="insights">
-                <span aria-hidden="true">📊</span>
-                <span>${t("मेरो तथ्याङ्क", "My Insights")}</span>
-              </button>
-
-            </div>
-
-          </div>
-        ` : ""}
 
       </section>
     `;
@@ -2750,6 +2810,20 @@
 
     if (tab) {
       switchTab(tab);
+      return;
+    }
+
+    const seeAllDetailsButton = target.closest(
+      "[data-see-all-profile-details]"
+    );
+
+    if (seeAllDetailsButton) {
+      event.preventDefault();
+
+      openAtAGlanceDetails(
+        isOwnProfile(getProfile())
+      );
+
       return;
     }
 
