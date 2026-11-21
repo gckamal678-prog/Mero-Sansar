@@ -1,3 +1,4 @@
+
 "use strict";
 
 /*
@@ -6,7 +7,7 @@
  *
  * RESPONSIBILITY:
  * - Profile Avatar and Cover Photo
- * - Direct Gallery opening
+ * - Native Gallery input
  * - Image crop, zoom and positioning
  * - Profile information editing
  * - Profile media display
@@ -18,10 +19,6 @@
 
 (function (global) {
   "use strict";
-
-  /* =====================================================
-     CORE
-  ===================================================== */
 
   const $ = (selector, root = document) =>
     root.querySelector(selector);
@@ -76,7 +73,6 @@
         t("यो सुविधा अहिले उपलब्ध छैन।", "This feature is unavailable."),
         "error"
       );
-
       return null;
     }
 
@@ -141,9 +137,7 @@
     try {
       const url = await global.KSKMedia?.getImageURL?.(id);
 
-      if (url) {
-        objectURLs.set(id, url);
-      }
+      if (url) objectURLs.set(id, url);
 
       return url || "";
 
@@ -165,7 +159,6 @@
     if ($("#kskProfileMediaStyles")) return;
 
     const style = document.createElement("style");
-
     style.id = "kskProfileMediaStyles";
 
     style.textContent = `
@@ -265,22 +258,26 @@
       }
 
       /*
-       * Keep file input connected and focusable.
-       * Do not move it off-screen or disable pointer events.
-       * This helps mobile WebViews open the native picker.
+       * REAL NATIVE FILE INPUT
+       * Transparent input covers the complete photo area.
+       * User taps the actual input directly.
        */
 
       .ksk-profile-upload-input {
-        position:fixed !important;
-        width:2px !important;
-        height:2px !important;
-        opacity:0.01 !important;
-        left:0 !important;
-        top:0 !important;
-        z-index:2147483647 !important;
+        position:absolute !important;
+        inset:0 !important;
+        display:block !important;
+        width:100% !important;
+        height:100% !important;
+        min-width:100% !important;
+        min-height:100% !important;
+        opacity:0 !important;
+        z-index:20 !important;
         margin:0 !important;
         padding:0 !important;
         border:0 !important;
+        cursor:pointer !important;
+        touch-action:manipulation !important;
       }
 
       .ksk-nav-avatar {
@@ -385,9 +382,7 @@
     if (!button) return;
 
     const user = profile();
-
     const source = user.avatarMediaId || user.avatar || "";
-
     const url = await getImageSource(source);
 
     if (!button.isConnected) return;
@@ -396,7 +391,6 @@
       if (button.querySelector("img")) {
         button.textContent = "👤";
       }
-
       return;
     }
 
@@ -407,12 +401,94 @@
     button.innerHTML = "";
 
     const img = document.createElement("img");
-
     img.className = "ksk-nav-avatar";
     img.src = url;
     img.alt = "Profile";
 
     button.appendChild(img);
+  }
+
+  /* =====================================================
+     SELECTED PHOTO HANDLER
+  ===================================================== */
+
+  function handleSelectedPhoto(input, type) {
+    const file = input.files?.[0];
+
+    if (!file) return;
+
+    if (!String(file.type || "").startsWith("image/")) {
+      toast(
+        t(
+          "कृपया फोटो फाइल छान्नुहोस्।",
+          "Please select an image."
+        ),
+        "warning"
+      );
+
+      input.value = "";
+      return;
+    }
+
+    if (file.size > 12 * 1024 * 1024) {
+      toast(
+        t(
+          "फोटो १२ MB भन्दा सानो हुनुपर्छ।",
+          "Image must be smaller than 12 MB."
+        ),
+        "warning"
+      );
+
+      input.value = "";
+      return;
+    }
+
+    /*
+     * Keep the File object before resetting input.
+     * Same photo can then be selected again.
+     */
+
+    input.value = "";
+    openCropEditor(file, type);
+  }
+
+  /* =====================================================
+     CREATE DIRECT GALLERY INPUT
+  ===================================================== */
+
+  function ensureUploadInput(target, type) {
+    if (!target || !["avatar", "cover"].includes(type)) {
+      return null;
+    }
+
+    const existing = Array.from(target.children).find(
+      child =>
+        child.matches?.("input.ksk-profile-upload-input")
+    );
+
+    if (existing) return existing;
+
+    const input = document.createElement("input");
+
+    input.type = "file";
+    input.accept = "image/*";
+    input.className = "ksk-profile-upload-input";
+    input.dataset.kskProfileUpload = type;
+
+    input.setAttribute(
+      "aria-label",
+      type === "avatar"
+        ? t("प्रोफाइल फोटो छान्नुहोस्", "Choose profile photo")
+        : t("Cover फोटो छान्नुहोस्", "Choose cover photo")
+    );
+
+    input.addEventListener("change", () => {
+      handleSelectedPhoto(input, type);
+    });
+
+    target.appendChild(input);
+
+    return input;
   }
 
   /* =====================================================
@@ -454,6 +530,8 @@
       }
     }
 
+    ensureUploadInput(cover, "cover");
+
     /* COVER IMAGE */
 
     const coverSource = user.coverMediaId || user.cover || "";
@@ -470,7 +548,6 @@
         emptyCover?.remove();
 
         const img = document.createElement("img");
-
         img.src = coverURL;
         img.alt = "Cover Photo";
 
@@ -481,7 +558,6 @@
 
       if (!emptyCover) {
         const empty = document.createElement("div");
-
         empty.className = "ksk-profile-cover-empty";
         empty.textContent = "🌄";
 
@@ -506,7 +582,6 @@
         avatarInner.innerHTML = "";
 
         const img = document.createElement("img");
-
         img.src = avatarURL;
         img.alt = "Profile Avatar";
 
@@ -534,121 +609,53 @@
 
         avatarBox.appendChild(hint);
       }
+
+      ensureUploadInput(avatarBox, "avatar");
     }
 
     await updateFooterAvatar();
   }
 
   /* =====================================================
-     HIDDEN GALLERY INPUT — MOBILE FIX
+     GALLERY FALLBACK
   ===================================================== */
 
   function openGallery(type) {
     if (busy) return;
 
     if (!["avatar", "cover"].includes(type)) {
-      console.warn("KSK Profile Media: Invalid gallery type.", type);
+      console.warn(
+        "KSK Profile Media: Invalid gallery type.",
+        type
+      );
       return;
     }
 
-    const input = document.createElement("input");
+    const selector = type === "avatar"
+      ? ".profile-section .profile-card .profile-avatar"
+      : ".profile-section .profile-card .ksk-profile-cover";
 
-    input.type = "file";
-    input.accept = "image/jpeg,image/png,image/webp";
-    input.className = "ksk-profile-upload-input";
-    input.setAttribute("aria-label", "Choose photo");
-    input.setAttribute("tabindex", "-1");
+    const target = $(selector);
 
-    let handled = false;
+    if (!target) return;
 
-    function cleanup() {
-      if (input.isConnected) {
-        input.remove();
-      }
-    }
-
-    input.addEventListener("change", () => {
-      if (handled) return;
-
-      handled = true;
-
-      const file = input.files?.[0];
-
-      cleanup();
-
-      if (!file) return;
-
-      if (!String(file.type).startsWith("image/")) {
-        toast(
-          t(
-            "कृपया फोटो फाइल छान्नुहोस्।",
-            "Please select an image."
-          ),
-          "warning"
-        );
-
-        return;
-      }
-
-      if (file.size > 12 * 1024 * 1024) {
-        toast(
-          t(
-            "फोटो १२ MB भन्दा सानो हुनुपर्छ।",
-            "Image must be smaller than 12 MB."
-          ),
-          "warning"
-        );
-
-        return;
-      }
-
-      openCropEditor(file, type);
-
-    }, { once: true });
-
-    input.addEventListener("cancel", () => {
-      cleanup();
-    }, { once: true });
-
-    document.body.appendChild(input);
-
-    /*
-     * IMPORTANT:
-     * This function is called directly from the user's tap.
-     * Do not use setTimeout or await before opening the picker.
-     */
+    const input = ensureUploadInput(target, type);
 
     try {
-      if (typeof input.showPicker === "function") {
-        input.showPicker();
-      } else {
-        input.click();
-      }
-
-    } catch (pickerError) {
-      console.warn(
-        "KSK Profile Media: showPicker unavailable; using click fallback.",
-        pickerError
+      input?.click();
+    } catch (error) {
+      console.error(
+        "KSK Profile Media: Native gallery could not be opened.",
+        error
       );
 
-      try {
-        input.click();
-      } catch (clickError) {
-        console.error(
-          "KSK Profile Media: Gallery could not be opened.",
-          clickError
-        );
-
-        cleanup();
-
-        toast(
-          t(
-            "फोटो Gallery खोल्न सकिएन। फेरि प्रयास गर्नुहोस्।",
-            "Could not open the photo gallery. Please try again."
-          ),
-          "error"
-        );
-      }
+      toast(
+        t(
+          "फोटो Gallery खोल्न सकिएन। फेरि प्रयास गर्नुहोस्।",
+          "Could not open the photo gallery. Please try again."
+        ),
+        "error"
+      );
     }
   }
 
@@ -659,7 +666,6 @@
   function loadImage(file) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
-
       const image = new Image();
 
       image.onload = () => resolve({ image, url });
@@ -835,7 +841,12 @@
         const sourceY =
           maxY / 2 + (maxY / 2) * yPosition;
 
-        context.clearRect(0, 0, outputWidth, outputHeight);
+        context.clearRect(
+          0,
+          0,
+          outputWidth,
+          outputHeight
+        );
 
         context.drawImage(
           image,
@@ -860,7 +871,6 @@
         if (busy) return;
 
         busy = true;
-
         saveButton.disabled = true;
 
         try {
@@ -880,7 +890,9 @@
 
           const croppedFile = new File(
             [blob],
-            isAvatar ? "profile-avatar.jpg" : "profile-cover.jpg",
+            isAvatar
+              ? "profile-avatar.jpg"
+              : "profile-cover.jpg",
             { type: "image/jpeg" }
           );
 
@@ -939,16 +951,20 @@
         t("फोटोको प्रकार मान्य छैन।", "Invalid photo type."),
         "error"
       );
-
       return;
     }
 
-    if (!(file instanceof Blob) || !file.type.startsWith("image/")) {
+    if (
+      !(file instanceof Blob) ||
+      !file.type.startsWith("image/")
+    ) {
       toast(
-        t("कृपया मान्य फोटो छान्नुहोस्।", "Please choose a valid image."),
+        t(
+          "कृपया मान्य फोटो छान्नुहोस्।",
+          "Please choose a valid image."
+        ),
         "error"
       );
-
       return;
     }
 
@@ -960,7 +976,6 @@
         ),
         "error"
       );
-
       return;
     }
 
@@ -1039,8 +1054,12 @@
       }
 
       const updated = type === "avatar"
-        ? await profileAPI.updateMyProfile({ avatar: publicURL })
-        : await profileAPI.updateMyProfile({ cover: publicURL });
+        ? await profileAPI.updateMyProfile({
+            avatar: publicURL
+          })
+        : await profileAPI.updateMyProfile({
+            cover: publicURL
+          });
 
       if (!updated) {
         throw new Error(
@@ -1053,8 +1072,14 @@
 
       global.KSKData?.saveProfile?.(
         type === "avatar"
-          ? { avatar: publicURL, avatarMediaId: "" }
-          : { cover: publicURL, coverMediaId: "" }
+          ? {
+              avatar: publicURL,
+              avatarMediaId: ""
+            }
+          : {
+              cover: publicURL,
+              coverMediaId: ""
+            }
       );
 
       objectURLs.clear();
@@ -1229,9 +1254,12 @@
         }
 
         const payload = {
-          name: $("#kskPMName", modal.element)?.value.trim() || "",
-          bio: $("#kskPMBio", modal.element)?.value.trim() || "",
-          location: $("#kskPMLocation", modal.element)?.value.trim() || ""
+          name:
+            $("#kskPMName", modal.element)?.value.trim() || "",
+          bio:
+            $("#kskPMBio", modal.element)?.value.trim() || "",
+          location:
+            $("#kskPMLocation", modal.element)?.value.trim() || ""
         };
 
         const updated = await profileAPI.updateMyProfile(payload);
@@ -1292,6 +1320,15 @@
 
     if (!target?.closest) return;
 
+    /*
+     * Do not intercept the real file input.
+     * Let Android open its native file chooser.
+     */
+
+    if (target.closest(".ksk-profile-upload-input")) {
+      return;
+    }
+
     /* EDIT PROFILE */
 
     const editButton = target.closest(
@@ -1304,7 +1341,6 @@
       event.stopImmediatePropagation();
 
       openEditor();
-
       return;
     }
 
@@ -1320,7 +1356,6 @@
       event.stopImmediatePropagation();
 
       openGallery("avatar");
-
       return;
     }
 
@@ -1336,7 +1371,6 @@
       event.stopImmediatePropagation();
 
       openGallery("cover");
-
       return;
     }
   }
@@ -1359,9 +1393,7 @@
 
     if (target.matches(".ksk-profile-cover")) {
       event.preventDefault();
-
       openGallery("cover");
-
       return;
     }
 
@@ -1371,7 +1403,6 @@
       )
     ) {
       event.preventDefault();
-
       openGallery("avatar");
     }
   }
