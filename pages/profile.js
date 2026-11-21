@@ -2286,6 +2286,13 @@
     `;
   }
 
+  function openExperienceManager() {
+    openProfileDetailsDialog(
+      t("काम र अध्ययन", "Work & Education"),
+      renderExperienceSection(true)
+    );
+  }
+
   /* =========================================================
      FORM SUBMIT
   ========================================================= */
@@ -2888,6 +2895,24 @@
     }
   }
 
+  global.addEventListener("ksk:posts-cloud-change", () => {
+    const currentId = getCurrentUserId();
+
+    if (
+      global.KSKNavigation?.getCurrentPage?.() !== "profile" ||
+      !currentId ||
+      (viewingUserId && viewingUserId !== currentId)
+    ) {
+      return;
+    }
+
+    profilePostsPromise = null;
+    profilePostsLoadedFor = "";
+
+    loadProfilePosts(currentId, profileRequestToken)
+      .then(refreshProfilePage);
+  });
+
   document.addEventListener("click", handleClick);
 
   document.addEventListener(
@@ -2917,6 +2942,8 @@
     getMyBirthdaySettings,
     updateMyBirthdaySettings,
     getProfileBirthday,
+    openBirthdayEditor,
+    openExperienceManager,
 
     getMyExperiences,
     getProfileExperiences,
