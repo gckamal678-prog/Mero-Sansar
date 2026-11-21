@@ -1133,55 +1133,10 @@
 
   /* CLICK INTERCEPTION */
 
-  function handleClick(event) {
+  function interceptClick(event) {
     const target = event.target;
 
     if (!target?.closest) return;
-
-    /* EDIT PROFILE — MUST BE FIRST */
-
-    const editButton = target.closest(
-      "[data-edit-profile]"
-    );
-
-    if (editButton) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      openEditor();
-
-      return;
-    }
-
-    /* AVATAR GALLERY */
-
-    const avatar = target.closest(
-      ".profile-section .profile-card .profile-avatar"
-    );
-
-    if (avatar) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      openGallery("avatar");
-
-      return;
-    }
-
-    /* COVER GALLERY */
-
-    const cover = target.closest(
-      ".profile-section .profile-card .ksk-profile-cover"
-    );
-
-    if (cover) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      openGallery("cover");
-
-      return;
-    }
 
     const storyCreate = target.closest(
       "[data-story-create]"
@@ -1265,7 +1220,7 @@
 
     document.addEventListener(
       "click",
-      handleClick,
+      interceptClick,
       true
     );
 
