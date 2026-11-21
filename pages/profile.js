@@ -90,6 +90,12 @@
         overflow:hidden;
       }
 
+      .profile-section .ksk-profile-cover-wrap {
+        width:100%;
+        position:relative;
+        margin-bottom:2px;
+      }
+
       .profile-section .ksk-profile-cover {
         width:100%;
         height:150px;
@@ -98,9 +104,28 @@
         border-radius:14px;
         background:linear-gradient(135deg,#243b55,#141e30);
         cursor:pointer;
-        margin-bottom:2px;
         display:block;
         outline-offset:3px;
+      }
+
+      .profile-section .ksk-profile-cover-edit {
+        position:absolute;
+        top:10px;
+        right:10px;
+        z-index:4;
+        width:38px;
+        height:38px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:0;
+        border:1px solid rgba(255,255,255,.45);
+        border-radius:50%;
+        background:rgba(15,23,42,.82);
+        color:#fff;
+        font:inherit;
+        font-size:19px;
+        cursor:pointer;
       }
 
       .profile-section .ksk-profile-cover:focus-visible,
@@ -215,42 +240,37 @@
       /* EDIT PROFILE + SETTINGS */
 
       .profile-section .profile-main-actions {
-        width:min(100%,480px);
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:10px;
-        margin-top:7px;
+        width:100%;
+        display:flex;
+        justify-content:flex-start;
+        gap:14px;
+        margin-top:5px;
       }
 
       .profile-section .profile-action-btn {
         min-width:0;
-        min-height:50px;
-        display:flex;
+        min-height:36px;
+        display:inline-flex;
         align-items:center;
-        justify-content:center;
-        gap:9px;
-        padding:11px 12px;
-        border:1px solid var(--color-border);
-        border-radius:14px;
-        background:var(--color-surface-secondary);
+        gap:7px;
+        padding:6px 0;
+        border:0;
+        border-radius:0;
+        background:transparent;
         color:var(--color-text);
         font:inherit;
         font-size:13px;
-        font-weight:800;
+        font-weight:750;
         cursor:pointer;
-        transition:transform .18s ease, border-color .18s ease;
       }
 
       .profile-section .profile-action-btn:active,
       .profile-section .profile-tool-grid button:active {
-        transform:scale(.98);
+        opacity:.7;
       }
 
       .profile-section .profile-action-btn.primary {
-        border-color:transparent;
-        background:var(--color-primary);
-        color:#fff;
-        box-shadow:0 5px 14px rgba(37,99,235,.18);
+        color:var(--color-primary);
       }
 
       .profile-section .profile-action-btn span:first-child {
@@ -264,21 +284,22 @@
       }
 
       .profile-section .profile-tool-grid {
-        display:grid;
-        grid-template-columns:repeat(2,minmax(0,1fr));
-        gap:9px;
+        display:flex;
+        flex-wrap:wrap;
+        align-items:center;
+        gap:12px 22px;
       }
 
       .profile-section .profile-tool-grid button {
         min-width:0;
-        min-height:58px;
-        display:flex;
+        min-height:36px;
+        display:inline-flex;
         align-items:center;
-        gap:9px;
-        padding:11px 12px;
-        border:1px solid var(--color-border);
-        border-radius:13px;
-        background:var(--color-surface-secondary);
+        gap:7px;
+        padding:6px 0;
+        border:0;
+        border-radius:0;
+        background:transparent;
         color:var(--color-text);
         font:inherit;
         font-size:12px;
@@ -287,12 +308,10 @@
         text-align:left;
         overflow-wrap:anywhere;
         cursor:pointer;
-        transition:transform .18s ease, border-color .18s ease, background .18s ease;
       }
 
       .profile-section .profile-tool-grid button:hover {
-        border-color:var(--color-primary);
-        background:var(--color-primary-soft);
+        color:var(--color-primary);
       }
 
       .profile-section .profile-tool-grid button:focus-visible,
@@ -305,21 +324,24 @@
 
       .profile-section .profile-tabs {
         width:100%;
-        display:grid;
-        grid-template-columns:repeat(3,minmax(0,1fr));
-        gap:5px;
-        padding:5px;
-        border:1px solid var(--color-border);
-        border-radius:13px;
-        background:var(--color-surface);
+        display:flex;
+        align-items:stretch;
+        gap:16px;
+        padding:0;
+        border:0;
+        border-bottom:1px solid var(--color-border);
+        border-radius:0;
+        background:transparent;
       }
 
       .profile-section .profile-tab {
         min-width:0;
         min-height:42px;
+        flex:1;
         padding:8px 5px;
-        border:1px solid transparent;
-        border-radius:10px;
+        border:0;
+        border-bottom:2px solid transparent;
+        border-radius:0;
         background:transparent;
         color:var(--color-muted);
         font-size:12px;
@@ -328,8 +350,8 @@
       }
 
       .profile-section .profile-tab.is-active {
-        border-color:var(--color-primary);
-        background:var(--color-primary-soft);
+        border-bottom-color:var(--color-primary);
+        background:transparent;
         color:var(--color-primary);
       }
 
@@ -356,8 +378,9 @@
         width:34px;
         height:34px;
         flex:0 0 34px;
-        display:grid;
-        place-items:center;
+        display:flex;
+        align-items:center;
+        justify-content:center;
         color:var(--color-text);
         font-size:23px;
       }
@@ -393,8 +416,9 @@
         width:30px;
         height:30px;
         flex:0 0 30px;
-        display:grid;
-        place-items:center;
+        display:flex;
+        align-items:center;
+        justify-content:center;
         border:0;
         padding:0;
         border-radius:8px;
@@ -448,8 +472,9 @@
       .profile-section .profile-detail-heading > span {
         width:34px;
         height:34px;
-        display:grid;
-        place-items:center;
+        display:flex;
+        align-items:center;
+        justify-content:center;
         border-radius:10px;
         background:var(--color-surface-secondary);
         font-size:17px;
@@ -490,8 +515,9 @@
         width:36px;
         height:36px;
         flex:0 0 36px;
-        display:grid;
-        place-items:center;
+        display:flex;
+        align-items:center;
+        justify-content:center;
         border-radius:10px;
         background:var(--color-surface-secondary);
       }
@@ -739,8 +765,9 @@
         width:36px;
         height:36px;
         flex:0 0 36px;
-        display:grid;
-        place-items:center;
+        display:flex;
+        align-items:center;
+        justify-content:center;
         border-radius:11px;
         background:var(--color-surface-secondary);
       }
@@ -785,12 +812,6 @@
 
         .profile-section .profile-card h2 {
           font-size:19px;
-        }
-      }
-
-      @media(max-width:340px) {
-        .profile-section .profile-tool-grid {
-          grid-template-columns:1fr;
         }
       }
     `;
@@ -2611,21 +2632,34 @@
           ownProfile ? "My profile" : "Profile"
         )}">
 
-          <div
-            class="ksk-profile-cover"
-            role="${ownProfile ? "button" : "img"}"
-            ${ownProfile ? 'tabindex="0"' : ""}
-            aria-label="${t("Cover फोटो", "Cover photo")}"
-          >
-            <div class="ksk-profile-cover-empty">
-              <span class="ksk-profile-cover-icon">🌄</span>
-              <span class="ksk-profile-cover-label">
-                ${ownProfile
-                  ? t("Cover फोटो राख्नुहोस्", "Add cover photo")
-                  : t("Cover फोटो", "Cover photo")
-                }
-              </span>
+          <div class="ksk-profile-cover-wrap">
+            <div
+              class="ksk-profile-cover"
+              role="${ownProfile ? "button" : "img"}"
+              ${ownProfile ? 'tabindex="0"' : ""}
+              aria-label="${t("Cover फोटो", "Cover photo")}"
+            >
+              <div class="ksk-profile-cover-empty">
+                <span class="ksk-profile-cover-icon">🌄</span>
+                <span class="ksk-profile-cover-label">
+                  ${ownProfile
+                    ? t("Cover फोटो राख्नुहोस्", "Add cover photo")
+                    : t("Cover फोटो", "Cover photo")
+                  }
+                </span>
+              </div>
             </div>
+
+            ${ownProfile ? `
+              <button
+                type="button"
+                class="ksk-profile-cover-edit"
+                data-edit-profile
+                aria-label="${t("प्रोफाइल सम्पादन", "Edit Profile")}"
+                title="${t("प्रोफाइल सम्पादन", "Edit Profile")}">
+                ✎
+              </button>
+            ` : ""}
           </div>
 
           <div
@@ -2652,11 +2686,6 @@
 
           ${ownProfile ? `
             <div class="profile-main-actions">
-              <button class="profile-action-btn primary" type="button" data-edit-profile>
-                <span>✏️</span>
-                <span>${t("प्रोफाइल सम्पादन", "Edit Profile")}</span>
-              </button>
-
               <button class="profile-action-btn" type="button" data-open-settings>
                 <span>⚙️</span>
                 <span>${t("सेटिङ", "Settings")}</span>
