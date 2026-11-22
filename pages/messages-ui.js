@@ -287,8 +287,8 @@
         font: inherit !important;
       }
 
-      /* CHAT AREA — USE AVAILABLE PARENT HEIGHT.
-         Do not subtract navigation height a second time. */
+      
+      /* CHAT AREA — FIX VIEWPORT HEIGHT */
 
       #otherPage:has(#otherPageText > .ksk-msg-page > .ksk-msg-detail) {
         position: relative !important;
@@ -299,8 +299,19 @@
         width: 100% !important;
         min-width: 0 !important;
         min-height: 0 !important;
-        height: 100% !important;
-        max-height: 100% !important;
+
+        height: calc(
+          100dvh
+          - var(--app-header-height, 66px)
+          - var(--app-bottom-height, 78px)
+        ) !important;
+
+        max-height: calc(
+          100dvh
+          - var(--app-header-height, 66px)
+          - var(--app-bottom-height, 78px)
+        ) !important;
+
         margin: 0 !important;
         padding: 0 !important;
         border: 0 !important;
@@ -309,6 +320,7 @@
         box-shadow: none !important;
         overflow: hidden !important;
       }
+
 
       #otherPage:has(#otherPageText > .ksk-msg-page > .ksk-msg-detail)
       .page-content-card,
