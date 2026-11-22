@@ -671,10 +671,9 @@
       ================================================ */
 
       .ksk-msg-detail > .ksk-msg-history {
-        display: flex !important;
-        flex: 1 1 0 !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
+       display: flex !important;
+       flex: 1 1 0 !important;
+       flex-direction: column-reverse !important;
 
         gap: 8px !important;
 
