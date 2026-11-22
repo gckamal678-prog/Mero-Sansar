@@ -500,6 +500,28 @@
         gap:12px;
       }
 
+      /* PROFILE — PHOTO ONLY GALLERY */
+
+      .profile-photo-only {
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        overflow: hidden !important;
+      }
+
+      .profile-gallery-image {
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        max-height: 420px !important;
+        object-fit: contain !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+      }
+
       /* BIRTHDAY + WORK/STUDY */
 
       .profile-section .profile-detail-card {
@@ -1421,11 +1443,57 @@
   function renderPostList(posts, options = {}) {
     if (!posts.length) {
       return `<div class="empty-state">${t(
-        "तपाईंले अहिलेसम्म पोस्ट गर्नुभएको छैन।",
-        "You have not published any posts."
+        options.photoOnly
+          ? "अहिलेसम्म कुनै फोटो पोस्ट गरिएको छैन।"
+          : "तपाईंले अहिलेसम्म पोस्ट गर्नुभएको छैन।",
+        options.photoOnly
+          ? "No photos shared yet."
+          : "You have not published any posts."
       )}</div>`;
     }
 
+    /* PHOTOS TAB — IMAGE ONLY */
+    if (options.photoOnly) {
+      return posts.map(post => {
+        const mediaUrl = String(
+          post.mediaUrl ||
+          post.imageUrl ||
+          post.image ||
+          post.photo ||
+          post.mediaData ||
+          ""
+        ).trim();
+
+        const postId = String(post.id || "");
+
+        if (/^(https?:\/\/|data:image\/|blob:)/i.test(mediaUrl)) {
+          return `
+            <article
+              class="card post-card profile-photo-only"
+              data-post-id="${escapeHTML(postId)}"
+            >
+              <img
+                class="profile-gallery-image"
+                src="${escapeHTML(mediaUrl)}"
+                alt="${t("फोटो", "Photo")}"
+                loading="lazy">
+            </article>
+          `;
+        }
+
+        /* Local media: existing media system handles it */
+        return `
+          <article
+            class="card post-card profile-photo-only"
+            data-post-id="${escapeHTML(postId)}"
+          >
+            <div class="post-actions" hidden></div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    /* NORMAL FEED — KEEP EXISTING POST RENDERER */
     if (typeof options.renderPost === "function") {
       return posts.map(post => options.renderPost(post)).join("");
     }
@@ -2708,7 +2776,7 @@
           role="tabpanel">
           <div class="profile-posts">
             ${photos.length
-              ? renderPostList(photos, options)
+              ? renderPostList(photos, { ...options, photoOnly: true })
               : `<div class="empty-state">${t(
                   "अहिलेसम्म कुनै फोटो पोस्ट गरिएको छैन।",
                   "No photos shared yet."
