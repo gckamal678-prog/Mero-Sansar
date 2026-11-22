@@ -147,56 +147,97 @@
         overflow-wrap: anywhere !important;
       }
 
-      /* ================================================
-         SEARCH
-      ================================================ */
+/* ================================================
+   CONVERSATION SEARCH — ICON BESIDE GROUP
+================================================ */
 
-      .ksk-msg-page > .ksk-msg-toolbar {
-        position: relative !important;
+.ksk-msg-page > .ksk-msg-toolbar {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
 
-        display: flex !important;
-        flex-wrap: wrap !important;
-        align-items: center !important;
+  gap: 9px !important;
+  width: 100% !important;
 
-        gap: 10px !important;
-        width: 100% !important;
+  margin: 8px 0 14px !important;
+  padding: 0 !important;
 
-        margin: 8px 0 14px !important;
-        padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
 
-        border: 0 !important;
-        background: transparent !important;
-      }
+/* Group button first */
+.ksk-msg-page > .ksk-msg-toolbar
+.ksk-msg-primary {
+  order: 1 !important;
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+}
 
-      .ksk-msg-page > .ksk-msg-toolbar
-      [data-message-search] {
-        flex: 1 1 100% !important;
+/* Search input becomes an icon */
+.ksk-msg-page > .ksk-msg-toolbar
+[data-message-search] {
+  order: 2 !important;
+  flex: 0 0 40px !important;
 
-        width: 100% !important;
-        min-width: 0 !important;
-        min-height: 46px !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  height: 40px !important;
 
-        margin: 0 !important;
-        padding: 10px 10px 10px 42px !important;
+  margin: 0 !important;
+  padding: 0 0 0 40px !important;
 
-        border: 0 !important;
-        border-bottom: 1px solid var(--color-border, #475569) !important;
-        border-radius: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
 
-        outline: 0 !important;
-        box-shadow: none !important;
+  outline: 0 !important;
+  box-shadow: none !important;
 
-        background-color: transparent !important;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") !important;
-        background-repeat: no-repeat !important;
-        background-position: 10px center !important;
-        background-size: 21px 21px !important;
+  background-color: transparent !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 22px 22px !important;
 
-        color: var(--color-text, #e5e7eb) !important;
-        font: inherit !important;
-      }
+  color: var(--color-text, #e5e7eb) !important;
+  font: inherit !important;
 
-      /* ================================================
+  cursor: pointer !important;
+
+  transition:
+    width .2s ease,
+    max-width .2s ease,
+    border-radius .2s ease !important;
+}
+
+/* Expand when tapped */
+.ksk-msg-page > .ksk-msg-toolbar
+[data-message-search]:focus {
+  flex: 1 1 auto !important;
+
+  width: auto !important;
+  min-width: 100px !important;
+  max-width: 260px !important;
+
+  padding: 8px 12px 8px 40px !important;
+
+  border-bottom: 1px solid var(--color-border, #475569) !important;
+  border-radius: 0 !important;
+
+  background-position: 10px center !important;
+  background-color: transparent !important;
+
+  cursor: text !important;
+}
+
+.ksk-msg-page > .ksk-msg-toolbar
+[data-message-search]::placeholder {
+  color: var(--color-muted, #94a3b8) !important;
+  opacity: 1 !important;
+}
+
          CONVERSATION LIST
       ================================================ */
 
