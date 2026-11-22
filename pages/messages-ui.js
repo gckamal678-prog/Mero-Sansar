@@ -1,16 +1,10 @@
 
 /* =========================================================
-   MERO SANSAR — MESSAGES BOX-FREE UI
+   MERO SANSAR — MESSAGES UI
    File: pages/messages-ui.js
 
-   Responsibility:
-   - Messages page visual layout
-   - Box-free conversations and message history
-   - Borderless composer
-   - Gallery / Camera controls
-   - Conversation and chat menus
-
-   Does not replace Messages API or Supabase logic.
+   UI responsibilities only.
+   Supabase and message actions remain in messages.js.
 ========================================================= */
 
 (function (global) {
@@ -22,9 +16,9 @@
 
   const STYLE_ID = "mero-sansar-wa-chat-style";
 
+  let observer = null;
   let holdTimer = null;
   let heldMessage = null;
-  let observer = null;
 
   const GALLERY_ICON = `
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -42,7 +36,7 @@
   `;
 
   /* =======================================================
-     BOX-FREE DESIGN
+     STYLES
   ======================================================= */
 
   function addStyles() {
@@ -55,8 +49,9 @@
     }
 
     style.textContent = `
+
       /* ================================================
-         MESSAGES PAGE — REMOVE OUTER MAIN CARD
+         PAGE — REMOVE OUTER CARD
       ================================================ */
 
       #otherPage:has(#otherPageText > .ksk-msg-page) {
@@ -64,21 +59,15 @@
         inset: auto !important;
         transform: none !important;
 
-        display: block !important;
         width: 100% !important;
         min-width: 0 !important;
-        min-height: 0 !important;
-        height: auto !important;
-
         margin: 0 !important;
-        padding: 12px 0 20px !important;
+        padding: 0 !important;
 
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
-
-        overflow: visible !important;
       }
 
       #otherPage:has(#otherPageText > .ksk-msg-page)
@@ -88,13 +77,8 @@
 
       #otherPage:has(#otherPageText > .ksk-msg-page)
       .page-content-card {
-        display: block !important;
-
         width: 100% !important;
         min-width: 0 !important;
-        min-height: 0 !important;
-        height: auto !important;
-
         margin: 0 !important;
         padding: 0 !important;
 
@@ -102,49 +86,29 @@
         border-radius: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
-
-        overflow: visible !important;
       }
 
       #otherPageText:has(> .ksk-msg-page) {
-        display: block !important;
-
         width: 100% !important;
         min-width: 0 !important;
-        min-height: 0 !important;
-        height: auto !important;
-
         margin: 0 !important;
         padding: 0 !important;
 
         border: 0 !important;
         background: transparent !important;
-        box-shadow: none !important;
-
-        overflow: visible !important;
       }
 
       #otherPageText > .ksk-msg-page {
-        display: block !important;
-
-        position: relative !important;
-        top: auto !important;
-        transform: none !important;
-
         width: 100% !important;
         min-width: 0 !important;
-        min-height: 0 !important;
-        height: auto !important;
-
         margin: 0 !important;
-        padding: 8px 0 24px !important;
+        padding: 0 !important;
 
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
 
-        color: var(--color-text, #e5e7eb) !important;
         overflow: visible !important;
       }
 
@@ -156,7 +120,7 @@
       }
 
       /* ================================================
-         CONVERSATION TITLE — NEVER CLIP
+         CONVERSATION TITLE
       ================================================ */
 
       #otherPageText > .ksk-msg-page > h3 {
@@ -166,8 +130,8 @@
         width: 100% !important;
         min-height: 32px !important;
 
-        margin: 0 0 14px !important;
-        padding: 3px 0 5px !important;
+        margin: 0 0 12px !important;
+        padding: 4px 0 !important;
 
         border: 0 !important;
         background: transparent !important;
@@ -184,7 +148,7 @@
       }
 
       /* ================================================
-         CONVERSATION SEARCH — SEARCH ICON
+         SEARCH
       ================================================ */
 
       .ksk-msg-page > .ksk-msg-toolbar {
@@ -202,7 +166,6 @@
 
         border: 0 !important;
         background: transparent !important;
-        box-shadow: none !important;
       }
 
       .ksk-msg-page > .ksk-msg-toolbar
@@ -233,80 +196,16 @@
         font: inherit !important;
       }
 
-      .ksk-msg-page > .ksk-msg-toolbar
-      [data-message-search]:focus {
-        border-bottom-color: var(--color-primary, #60a5fa) !important;
-        outline: 0 !important;
-        box-shadow: none !important;
-      }
-
-      .ksk-msg-page > .ksk-msg-toolbar
-      [data-action="open-group-form"] {
-        min-height: 40px !important;
-        margin: 0 !important;
-
-        border: 0 !important;
-        border-radius: 8px !important;
-        box-shadow: none !important;
-      }
-
       /* ================================================
-         FILTER TABS — NO BOX
-      ================================================ */
-
-      .ksk-msg-tabs {
-        display: flex !important;
-        align-items: center !important;
-
-        gap: 8px !important;
-        width: 100% !important;
-
-        margin: 8px 0 14px !important;
-        padding: 0 0 8px !important;
-
-        border: 0 !important;
-        background: transparent !important;
-
-        overflow-x: auto !important;
-        scrollbar-width: none !important;
-      }
-
-      .ksk-msg-tabs::-webkit-scrollbar {
-        display: none !important;
-      }
-
-      .ksk-msg-tab {
-        flex: 0 0 auto !important;
-
-        min-height: 40px !important;
-        padding: 8px 14px !important;
-
-        border: 0 !important;
-        border-radius: 22px !important;
-
-        background: transparent !important;
-        color: var(--color-muted, #94a3b8) !important;
-
-        box-shadow: none !important;
-        font: inherit !important;
-      }
-
-      .ksk-msg-tab.is-active {
-        background: var(--color-primary, #3b82f6) !important;
-        color: #fff !important;
-      }
-
-      /* ================================================
-         CONVERSATION LIST — FLAT
+         CONVERSATION LIST
       ================================================ */
 
       .ksk-msg-list {
         display: flex !important;
         flex-direction: column !important;
-
         gap: 0 !important;
-        width: 100% !important;
 
+        width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
 
@@ -335,59 +234,42 @@
 
         background: transparent !important;
         box-shadow: none !important;
-
-        color: var(--color-text, #e5e7eb) !important;
-        overflow: visible !important;
       }
 
       .ksk-msg-row-main {
         flex: 1 1 auto !important;
         min-width: 0 !important;
-
         padding: 0 !important;
 
         border: 0 !important;
-        border-radius: 0 !important;
         background: transparent !important;
-        box-shadow: none !important;
-      }
-
-      .ksk-msg-row-title {
-        font-weight: 700 !important;
       }
 
       .ksk-msg-row-subtitle {
         margin-top: 4px !important;
-
         color: var(--color-muted, #94a3b8) !important;
         font-size: 13px !important;
-
         overflow-wrap: anywhere !important;
       }
 
       .ksk-msg-avatar {
         flex: 0 0 46px !important;
-
         width: 46px !important;
         height: 46px !important;
         min-width: 46px !important;
 
         border: 0 !important;
         border-radius: 50% !important;
-
-        background: var(--color-surface-secondary, #1e293b) !important;
-        box-shadow: none !important;
       }
 
       /* ================================================
-         THREE DOT MENUS — NO MENU CARD
+         MENUS
       ================================================ */
 
       .ksk-msg-row-menu,
       .ksk-wa-chat-options {
         position: relative !important;
         flex: 0 0 38px !important;
-
         width: 38px !important;
         margin-left: auto !important;
       }
@@ -400,15 +282,13 @@
 
         width: 38px !important;
         height: 38px !important;
-
         padding: 0 !important;
 
         border: 0 !important;
         border-radius: 50% !important;
-
         background: transparent !important;
-        color: var(--color-text, #e5e7eb) !important;
 
+        color: var(--color-text, #e5e7eb) !important;
         font-size: 23px !important;
         cursor: pointer !important;
         list-style: none !important;
@@ -434,7 +314,6 @@
 
         border: 0 !important;
         border-radius: 0 !important;
-
         background: var(--color-background, #0f172a) !important;
         box-shadow: none !important;
       }
@@ -449,7 +328,6 @@
       .ksk-wa-chat-options-panel button {
         width: 100% !important;
         min-height: 40px !important;
-
         padding: 9px 12px !important;
 
         border: 0 !important;
@@ -458,14 +336,12 @@
 
         background: transparent !important;
         color: var(--color-text, #e5e7eb) !important;
-
         text-align: left !important;
         font: inherit !important;
-        box-shadow: none !important;
       }
 
       /* ================================================
-         CHAT VIEW — REMOVE OUTER MAIN CARD
+         CHAT AREA — FIT ABOVE NAVIGATION
       ================================================ */
 
       #otherPage:has(#otherPageText > .ksk-msg-page > .ksk-msg-detail) {
@@ -477,13 +353,13 @@
         flex-direction: column !important;
 
         width: 100% !important;
+        min-width: 0 !important;
         min-height: 0 !important;
 
         height: calc(
           100dvh -
           var(--app-header-height, 66px) -
-          var(--app-bottom-height, 78px) -
-          18px
+          var(--app-bottom-height, 78px)
         ) !important;
 
         margin: 0 !important;
@@ -540,7 +416,6 @@
         background: transparent !important;
         box-shadow: none !important;
 
-        color: var(--color-text, #e5e7eb) !important;
         overflow: hidden !important;
       }
 
@@ -563,10 +438,7 @@
 
         border: 0 !important;
         border-bottom: 1px solid var(--color-border, #334155) !important;
-        border-radius: 0 !important;
-
         background: transparent !important;
-        box-shadow: none !important;
       }
 
       .ksk-msg-back,
@@ -574,14 +446,11 @@
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
-
         flex-shrink: 0 !important;
 
         border: 0 !important;
         border-radius: 50% !important;
-
         background: transparent !important;
-        box-shadow: none !important;
       }
 
       .ksk-msg-back {
@@ -610,7 +479,6 @@
 
       .ksk-msg-chat-header-main strong {
         display: block !important;
-
         overflow: hidden !important;
 
         color: var(--color-text, #e5e7eb) !important;
@@ -627,27 +495,25 @@
       }
 
       /* ================================================
-         CHAT SEARCH — NO BOX
+         CHAT SEARCH
       ================================================ */
 
       .ksk-msg-detail > .ksk-msg-toolbar {
         display: flex !important;
         flex: 0 0 auto !important;
         align-items: center !important;
-
         gap: 8px !important;
+
         margin: 0 !important;
         padding: 7px 0 !important;
 
         border: 0 !important;
         border-bottom: 1px solid var(--color-border, #334155) !important;
-
         background: transparent !important;
       }
 
       .ksk-msg-detail .ksk-msg-search {
         flex: 1 1 auto !important;
-
         width: 1% !important;
         min-width: 0 !important;
         min-height: 40px !important;
@@ -667,13 +533,15 @@
       }
 
       /* ================================================
-         MESSAGE HISTORY — BUBBLE FREE
+         MESSAGE HISTORY
+         messages.js renders the message array reversed.
+         Keep column-reverse so oldest stays at top.
       ================================================ */
 
       .ksk-msg-detail > .ksk-msg-history {
-       display: flex !important;
-       flex: 1 1 0 !important;
-       flex-direction: column-reverse !important;
+        display: flex !important;
+        flex: 1 1 0 !important;
+        flex-direction: column-reverse !important;
 
         gap: 8px !important;
 
@@ -697,46 +565,60 @@
         -webkit-overflow-scrolling: touch !important;
       }
 
+      /* Common bubble */
+
       .ksk-msg-history-item {
         position: relative !important;
-
         display: block !important;
         flex: 0 0 auto !important;
 
         width: fit-content !important;
-        max-width: min(86%, 520px) !important;
+        max-width: min(82%, 520px) !important;
         min-width: 0 !important;
         min-height: 0 !important;
         height: auto !important;
 
         margin: 0 !important;
-        padding: 7px 0 !important;
+        padding: 9px 12px !important;
 
-        border: 0 !important;
-        border-radius: 0 !important;
-        background: transparent !important;
+        border: 1px solid rgba(148, 163, 184, .24) !important;
+        border-radius: 16px !important;
+
+        background: #263449 !important;
         box-shadow: none !important;
-
-        color: var(--color-text, #e5e7eb) !important;
+        color: #f1f5f9 !important;
 
         font-size: 14px !important;
         line-height: 1.5 !important;
-
         overflow-wrap: anywhere !important;
 
         user-select: none !important;
         -webkit-user-select: none !important;
       }
 
+      /* Outgoing — right */
+
       .ksk-msg-history-item.from-me {
         align-self: flex-end !important;
-        color: var(--color-primary, #60a5fa) !important;
-        text-align: right !important;
+
+        border-color: rgba(59, 130, 246, .35) !important;
+        border-radius: 16px 16px 4px 16px !important;
+
+        background: #174477 !important;
+        color: #eff6ff !important;
+        text-align: left !important;
       }
+
+      /* Incoming — left */
 
       .ksk-msg-history-item.from-them {
         align-self: flex-start !important;
-        color: var(--color-text, #e5e7eb) !important;
+
+        border-color: rgba(148, 163, 184, .28) !important;
+        border-radius: 16px 16px 16px 4px !important;
+
+        background: #263449 !important;
+        color: #f1f5f9 !important;
         text-align: left !important;
       }
 
@@ -746,7 +628,7 @@
 
       .ksk-msg-history-time {
         display: block !important;
-        margin-top: 3px !important;
+        margin-top: 4px !important;
 
         color: var(--color-muted, #94a3b8) !important;
         font-size: 10px !important;
@@ -755,27 +637,24 @@
 
       .ksk-msg-media {
         display: block !important;
-
         max-width: 100% !important;
         max-height: 280px !important;
         height: auto !important;
 
         margin-top: 6px !important;
-
         object-fit: contain !important;
 
         border: 0 !important;
-        border-radius: 6px !important;
-        box-shadow: none !important;
+        border-radius: 8px !important;
       }
 
-      /* Message actions appear only when requested */
+      /* Message action buttons */
 
       .ksk-msg-bubble-actions {
         display: none !important;
         flex-wrap: wrap !important;
-
         gap: 6px !important;
+
         margin-top: 7px !important;
         padding: 6px 0 0 !important;
 
@@ -797,12 +676,11 @@
 
         background: transparent !important;
         color: var(--color-primary, #60a5fa) !important;
-
         font-size: 12px !important;
       }
 
       /* ================================================
-         REPLY / SEARCH / GROUP CONTENT — FLAT
+         REPLY / SEARCH / GROUP
       ================================================ */
 
       .ksk-msg-detail > .ksk-msg-reply-preview,
@@ -821,28 +699,23 @@
 
       .ksk-msg-detail > .ksk-msg-reply-preview {
         flex: 0 0 auto !important;
-
         margin: 5px 0 0 !important;
         padding: 7px 10px !important;
 
         border-left: 2px solid var(--color-primary, #60a5fa) !important;
-
         color: var(--color-text, #e5e7eb) !important;
       }
 
       .ksk-msg-search-results {
         display: flex !important;
         flex-direction: column !important;
-
         gap: 0 !important;
         margin: 8px 0 !important;
       }
 
       .ksk-msg-search-result {
         padding: 9px 0 !important;
-
         border-bottom: 1px solid var(--color-border, #334155) !important;
-
         color: var(--color-text, #e5e7eb) !important;
       }
 
@@ -864,7 +737,7 @@
       }
 
       /* ================================================
-         COMPOSER — COMPLETELY BORDERLESS
+         COMPOSER — FIXED AT CHAT BOTTOM
       ================================================ */
 
       .ksk-msg-detail > .ksk-msg-send-form {
@@ -932,13 +805,11 @@
 
         background: transparent !important;
         color: var(--color-muted, #94a3b8) !important;
-
         cursor: pointer !important;
       }
 
       .ksk-wa-tool svg {
         display: block !important;
-
         width: 21px !important;
         height: 21px !important;
 
@@ -967,7 +838,6 @@
 
         border: 0 !important;
         border-radius: 0 !important;
-
         outline: 0 !important;
         box-shadow: none !important;
 
@@ -976,12 +846,6 @@
 
         font-size: 14px !important;
         line-height: 20px !important;
-      }
-
-      .ksk-msg-detail .ksk-msg-compose:focus {
-        border: 0 !important;
-        outline: 0 !important;
-        box-shadow: none !important;
       }
 
       .ksk-msg-compose-actions {
@@ -1018,7 +882,6 @@
 
         font-size: 21px !important;
         font-weight: 800 !important;
-
         cursor: pointer !important;
       }
 
@@ -1032,10 +895,6 @@
       ================================================ */
 
       @media (max-width: 520px) {
-        #otherPage:has(#otherPageText > .ksk-msg-page) {
-          padding-top: 10px !important;
-        }
-
         .ksk-msg-detail > .ksk-msg-history {
           padding: 9px 0 !important;
         }
@@ -1078,7 +937,7 @@
   }
 
   /* =======================================================
-     BUTTON HELPERS
+     BUTTON HELPER
   ======================================================= */
 
   function makeButton(className, label, icon) {
@@ -1094,7 +953,7 @@
   }
 
   /* =======================================================
-     CONVERSATION MENU
+     CONVERSATION MENUS
   ======================================================= */
 
   function repairConversationMenus() {
@@ -1110,10 +969,7 @@
 
       const summary = document.createElement("summary");
       summary.textContent = "⋮";
-      summary.setAttribute(
-        "aria-label",
-        "Conversation options"
-      );
+      summary.setAttribute("aria-label", "Conversation options");
       summary.title = "Conversation options";
 
       const panel = document.createElement("div");
@@ -1148,6 +1004,7 @@
     if (form.dataset.waReady === "yes") return;
 
     const area = form.querySelector(".ksk-msg-compose");
+
     const oldActions = form.querySelector(
       ".ksk-msg-compose-actions"
     );
@@ -1185,10 +1042,7 @@
     cameraInput.capture = "environment";
     cameraInput.dataset.mediaFile = "";
     cameraInput.className = "ksk-wa-file-input";
-    cameraInput.setAttribute(
-      "aria-label",
-      "Take a photo"
-    );
+    cameraInput.setAttribute("aria-label", "Take a photo");
 
     const galleryButton = makeButton(
       "ksk-wa-tool",
@@ -1255,10 +1109,7 @@
 
           const summary = document.createElement("summary");
           summary.textContent = "⋮";
-          summary.setAttribute(
-            "aria-label",
-            "Chat options"
-          );
+          summary.setAttribute("aria-label", "Chat options");
 
           const panel = document.createElement("div");
           panel.className = "ksk-wa-chat-options-panel";
@@ -1324,7 +1175,6 @@
     }
 
     stopHold();
-
     heldMessage = message;
 
     holdTimer = global.setTimeout(() => {
@@ -1413,9 +1263,7 @@
     }
 
     if (
-      event.target.closest?.(
-        ".ksk-msg-bubble-actions"
-      )
+      event.target.closest?.(".ksk-msg-bubble-actions")
     ) {
       const message = event.target.closest(
         ".ksk-msg-history-item"
@@ -1423,9 +1271,7 @@
 
       if (message) {
         global.setTimeout(() => {
-          message.classList.remove(
-            "ksk-wa-actions-open"
-          );
+          message.classList.remove("ksk-wa-actions-open");
         }, 150);
       }
 
@@ -1433,9 +1279,7 @@
     }
 
     if (
-      !event.target.closest?.(
-        ".ksk-msg-history-item"
-      )
+      !event.target.closest?.(".ksk-msg-history-item")
     ) {
       document.querySelectorAll(
         ".ksk-msg-history-item.ksk-wa-actions-open"
@@ -1444,9 +1288,7 @@
       });
     }
 
-    if (
-      !event.target.closest?.(".ksk-msg-row-menu")
-    ) {
+    if (!event.target.closest?.(".ksk-msg-row-menu")) {
       document.querySelectorAll(
         ".ksk-msg-row-menu[open]"
       ).forEach(menu => {
@@ -1454,9 +1296,7 @@
       });
     }
 
-    if (
-      !event.target.closest?.(".ksk-wa-chat-options")
-    ) {
+    if (!event.target.closest?.(".ksk-wa-chat-options")) {
       document.querySelectorAll(
         ".ksk-wa-chat-options[open]"
       ).forEach(menu => {
@@ -1470,30 +1310,17 @@
   ======================================================= */
 
   document.addEventListener("input", event => {
-    if (
-      !event.target.matches?.(".ksk-msg-compose")
-    ) {
-      return;
-    }
+    if (!event.target.matches?.(".ksk-msg-compose")) return;
 
-    const form = event.target.closest(
-      "[data-send-form]"
-    );
+    const form = event.target.closest("[data-send-form]");
 
     if (form) resizeComposer(form);
   });
 
   document.addEventListener("change", event => {
-    if (
-      !event.target.matches?.(".ksk-wa-file-input")
-    ) {
-      return;
-    }
+    if (!event.target.matches?.(".ksk-wa-file-input")) return;
 
-    const form = event.target.closest(
-      "[data-send-form]"
-    );
-
+    const form = event.target.closest("[data-send-form]");
     const send = form?.querySelector(".ksk-wa-send");
 
     if (send && event.target.files?.length) {
