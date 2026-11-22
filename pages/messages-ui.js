@@ -736,159 +736,201 @@
         text-align: center !important;
       }
 
-      /* ================================================
-         COMPOSER — FIXED AT CHAT BOTTOM
-      ================================================ */
+/* =======================================================
+   COMPOSER — DIRECTLY ABOVE BOTTOM NAVIGATION
+======================================================= */
 
-      .ksk-msg-detail > .ksk-msg-send-form {
-        position: relative !important;
-        z-index: 5 !important;
+.ksk-msg-detail > .ksk-msg-send-form {
+  position: fixed !important;
 
-        display: flex !important;
-        flex: 0 0 auto !important;
-        flex-direction: row !important;
-        align-items: flex-end !important;
+  left: 0 !important;
+  right: 0 !important;
 
-        gap: 7px !important;
+  /* Navigation bar को ठीक माथि */
+  bottom: calc(112px + env(safe-area-inset-bottom, 0px)) !important;
 
-        width: 100% !important;
-        min-width: 0 !important;
-        min-height: 58px !important;
+  z-index: 999 !important;
 
-        margin: 0 !important;
-        padding: 7px 0 calc(
-          7px + env(safe-area-inset-bottom, 0px)
-        ) !important;
+  display: flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
 
-        border: 0 !important;
-        border-radius: 0 !important;
+  gap: 7px !important;
 
-        background: transparent !important;
-        box-shadow: none !important;
-      }
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 58px !important;
 
-      .ksk-wa-composer {
-        display: flex !important;
-        flex: 1 1 auto !important;
-        align-items: flex-end !important;
+  margin: 0 !important;
+  padding: 7px 12px !important;
 
-        gap: 3px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
 
-        min-width: 0 !important;
-        min-height: 44px !important;
+  background: #0b1220 !important;
+  box-shadow: none !important;
+}
 
-        margin: 0 !important;
-        padding: 2px 0 !important;
+/* Composer layout */
+.ksk-wa-composer {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  align-items: flex-end !important;
 
-        border: 0 !important;
-        border-radius: 0 !important;
+  gap: 3px !important;
 
-        background: transparent !important;
-        box-shadow: none !important;
-      }
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 44px !important;
 
-      .ksk-wa-tool {
-        display: inline-flex !important;
-        flex: 0 0 34px !important;
-        align-items: center !important;
-        justify-content: center !important;
+  margin: 0 !important;
+  padding: 2px 0 !important;
 
-        width: 34px !important;
-        min-width: 34px !important;
-        height: 38px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
 
-        margin: 0 !important;
-        padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
 
-        border: 0 !important;
-        border-radius: 50% !important;
+/* Gallery and Camera */
+.ksk-wa-tool {
+  display: inline-flex !important;
+  flex: 0 0 34px !important;
+  align-items: center !important;
+  justify-content: center !important;
 
-        background: transparent !important;
-        color: var(--color-muted, #94a3b8) !important;
-        cursor: pointer !important;
-      }
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 38px !important;
 
-      .ksk-wa-tool svg {
-        display: block !important;
-        width: 21px !important;
-        height: 21px !important;
+  margin: 0 !important;
+  padding: 0 !important;
 
-        fill: none !important;
-        stroke: currentColor !important;
-        stroke-width: 1.8 !important;
-        stroke-linecap: round !important;
-        stroke-linejoin: round !important;
-      }
+  border: 0 !important;
+  border-radius: 50% !important;
 
-      .ksk-msg-detail .ksk-msg-compose {
-        display: block !important;
-        flex: 1 1 auto !important;
+  background: transparent !important;
+  color: var(--color-muted, #94a3b8) !important;
+  cursor: pointer !important;
+}
 
-        width: 1% !important;
-        min-width: 0 !important;
-        min-height: 38px !important;
-        height: 38px !important;
-        max-height: 110px !important;
+.ksk-wa-tool svg {
+  display: block !important;
+  width: 21px !important;
+  height: 21px !important;
 
-        margin: 0 !important;
-        padding: 9px 3px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
 
-        resize: none !important;
-        overflow-y: auto !important;
+/* Message input */
+.ksk-msg-detail .ksk-msg-compose {
+  display: block !important;
+  flex: 1 1 auto !important;
 
-        border: 0 !important;
-        border-radius: 0 !important;
-        outline: 0 !important;
-        box-shadow: none !important;
+  width: 1% !important;
+  min-width: 0 !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  max-height: 110px !important;
 
-        background: transparent !important;
-        color: var(--color-text, #e5e7eb) !important;
+  margin: 0 !important;
+  padding: 9px 3px !important;
 
-        font-size: 14px !important;
-        line-height: 20px !important;
-      }
+  resize: none !important;
+  overflow-y: auto !important;
 
-      .ksk-msg-compose-actions {
-        display: flex !important;
-        flex: 0 0 auto !important;
-        align-items: center !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
 
-        gap: 2px !important;
-        margin: 0 !important;
-        padding: 0 !important;
+  background: transparent !important;
+  color: var(--color-text, #e5e7eb) !important;
 
-        border: 0 !important;
-        background: transparent !important;
-      }
+  font-size: 14px !important;
+  line-height: 20px !important;
+}
 
-      .ksk-wa-send {
-        display: inline-flex !important;
-        flex: 0 0 42px !important;
-        align-items: center !important;
-        justify-content: center !important;
+/* Send button */
+.ksk-msg-compose-actions {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
 
-        width: 42px !important;
-        min-width: 42px !important;
-        height: 42px !important;
+  gap: 2px !important;
+  margin: 0 !important;
+  padding: 0 !important;
 
-        margin: 0 !important;
-        padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
 
-        border: 0 !important;
-        border-radius: 50% !important;
+.ksk-wa-send {
+  display: inline-flex !important;
+  flex: 0 0 42px !important;
+  align-items: center !important;
+  justify-content: center !important;
 
-        background: var(--color-primary, #3b82f6) !important;
-        color: #fff !important;
+  width: 42px !important;
+  min-width: 42px !important;
+  height: 42px !important;
 
-        font-size: 21px !important;
-        font-weight: 800 !important;
-        cursor: pointer !important;
-      }
+  margin: 0 !important;
+  padding: 0 !important;
 
-      .ksk-wa-send[hidden],
-      .ksk-wa-file-input {
-        display: none !important;
-      }
+  border: 0 !important;
+  border-radius: 50% !important;
+
+  background: var(--color-primary, #3b82f6) !important;
+  color: #fff !important;
+
+  font-size: 21px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+}
+
+.ksk-wa-send[hidden],
+.ksk-wa-file-input {
+  display: none !important;
+}
+
+/* History: Composer ले अन्तिम मेसेज नछोपोस् */
+.ksk-msg-detail > .ksk-msg-history {
+  padding-bottom: 72px !important;
+}
+
+/* Mobile */
+@media (max-width: 520px) {
+  .ksk-msg-detail > .ksk-msg-send-form {
+    bottom: calc(112px + env(safe-area-inset-bottom, 0px)) !important;
+    gap: 4px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .ksk-wa-composer {
+    gap: 1px !important;
+  }
+
+  .ksk-wa-tool {
+    flex-basis: 30px !important;
+    width: 30px !important;
+    min-width: 30px !important;
+  }
+
+  .ksk-wa-send {
+    flex-basis: 40px !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+  }
+}
 
       /* ================================================
          SMALL SCREENS
