@@ -35,10 +35,6 @@
     </svg>
   `;
 
-  /* =======================================================
-     STYLES
-  ======================================================= */
-
   function addStyles() {
     let style = document.getElementById(STYLE_ID);
 
@@ -50,20 +46,16 @@
 
     style.textContent = `
 
-      /* ================================================
-         PAGE — REMOVE OUTER CARD
-      ================================================ */
+      /* PAGE — REMOVE OUTER CARD */
 
       #otherPage:has(#otherPageText > .ksk-msg-page) {
         position: relative !important;
         inset: auto !important;
         transform: none !important;
-
         width: 100% !important;
         min-width: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
@@ -81,7 +73,6 @@
         min-width: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
@@ -93,7 +84,6 @@
         min-width: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         background: transparent !important;
       }
@@ -103,12 +93,10 @@
         min-width: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
-
         overflow: visible !important;
       }
 
@@ -119,51 +107,37 @@
         box-sizing: border-box !important;
       }
 
-      /* ================================================
-         CONVERSATION TITLE
-      ================================================ */
+      /* CONVERSATION TITLE */
 
       #otherPageText > .ksk-msg-page > h3 {
         display: block !important;
         position: relative !important;
-
         width: 100% !important;
         min-height: 32px !important;
-
         margin: 0 0 12px !important;
         padding: 4px 0 !important;
-
         border: 0 !important;
         background: transparent !important;
-
         color: var(--color-text, #e5e7eb) !important;
-
         font-size: 19px !important;
         font-weight: 750 !important;
         line-height: 1.5 !important;
-
         white-space: normal !important;
         overflow: visible !important;
         overflow-wrap: anywhere !important;
       }
 
-      /* ================================================
-         SEARCH
-      ================================================ */
+      /* SEARCH */
 
       .ksk-msg-page > .ksk-msg-toolbar {
         position: relative !important;
-
         display: flex !important;
         flex-wrap: wrap !important;
         align-items: center !important;
-
         gap: 10px !important;
         width: 100% !important;
-
         margin: 8px 0 14px !important;
         padding: 0 !important;
-
         border: 0 !important;
         background: transparent !important;
       }
@@ -171,44 +145,34 @@
       .ksk-msg-page > .ksk-msg-toolbar
       [data-message-search] {
         flex: 1 1 100% !important;
-
         width: 100% !important;
         min-width: 0 !important;
         min-height: 46px !important;
-
         margin: 0 !important;
         padding: 10px 10px 10px 42px !important;
-
         border: 0 !important;
         border-bottom: 1px solid var(--color-border, #475569) !important;
         border-radius: 0 !important;
-
         outline: 0 !important;
         box-shadow: none !important;
-
         background-color: transparent !important;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") !important;
         background-repeat: no-repeat !important;
         background-position: 10px center !important;
         background-size: 21px 21px !important;
-
         color: var(--color-text, #e5e7eb) !important;
         font: inherit !important;
       }
 
-      /* ================================================
-         CONVERSATION LIST
-      ================================================ */
+      /* CONVERSATION LIST */
 
       .ksk-msg-list {
         display: flex !important;
         flex-direction: column !important;
         gap: 0 !important;
-
         width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
@@ -217,21 +181,16 @@
 
       .ksk-msg-row {
         position: relative !important;
-
         display: flex !important;
         align-items: center !important;
-
         gap: 12px !important;
         width: 100% !important;
         min-width: 0 !important;
-
         margin: 0 !important;
         padding: 12px 0 !important;
-
         border: 0 !important;
         border-bottom: 1px solid var(--color-border, #334155) !important;
         border-radius: 0 !important;
-
         background: transparent !important;
         box-shadow: none !important;
       }
@@ -240,7 +199,6 @@
         flex: 1 1 auto !important;
         min-width: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         background: transparent !important;
       }
@@ -257,14 +215,11 @@
         width: 46px !important;
         height: 46px !important;
         min-width: 46px !important;
-
         border: 0 !important;
         border-radius: 50% !important;
       }
 
-      /* ================================================
-         MENUS
-      ================================================ */
+      /* MENUS */
 
       .ksk-msg-row-menu,
       .ksk-wa-chat-options {
@@ -279,15 +234,12 @@
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-
         width: 38px !important;
         height: 38px !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 50% !important;
         background: transparent !important;
-
         color: var(--color-text, #e5e7eb) !important;
         font-size: 23px !important;
         cursor: pointer !important;
@@ -305,13 +257,10 @@
         top: 40px !important;
         right: 0 !important;
         z-index: 300 !important;
-
         display: flex !important;
         flex-direction: column !important;
-
         min-width: 155px !important;
         padding: 5px 0 !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         background: var(--color-background, #0f172a) !important;
@@ -329,47 +278,35 @@
         width: 100% !important;
         min-height: 40px !important;
         padding: 9px 12px !important;
-
         border: 0 !important;
         border-bottom: 1px solid var(--color-border, #334155) !important;
         border-radius: 0 !important;
-
         background: transparent !important;
         color: var(--color-text, #e5e7eb) !important;
         text-align: left !important;
         font: inherit !important;
       }
 
-      /* ================================================
-         CHAT AREA — FIT ABOVE NAVIGATION
-      ================================================ */
+      /* CHAT AREA — USE AVAILABLE PARENT HEIGHT.
+         Do not subtract navigation height a second time. */
 
       #otherPage:has(#otherPageText > .ksk-msg-page > .ksk-msg-detail) {
         position: relative !important;
         inset: auto !important;
         transform: none !important;
-
         display: flex !important;
         flex-direction: column !important;
-
         width: 100% !important;
         min-width: 0 !important;
         min-height: 0 !important;
-
-        height: calc(
-          100dvh -
-          var(--app-header-height, 66px) -
-          var(--app-bottom-height, 78px)
-        ) !important;
-
+        height: 100% !important;
+        max-height: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
-
         overflow: hidden !important;
       }
 
@@ -380,20 +317,16 @@
         display: flex !important;
         flex: 1 1 auto !important;
         flex-direction: column !important;
-
         width: 100% !important;
         min-width: 0 !important;
         min-height: 0 !important;
         height: 100% !important;
-
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
-
         overflow: hidden !important;
       }
 
@@ -401,41 +334,32 @@
         display: flex !important;
         flex: 1 1 0 !important;
         flex-direction: column !important;
-
         width: 100% !important;
         min-width: 0 !important;
         min-height: 0 !important;
         height: 100% !important;
         max-height: 100% !important;
-
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
-
         overflow: hidden !important;
       }
 
-      /* ================================================
-         CHAT HEADER
-      ================================================ */
+      /* CHAT HEADER */
 
       .ksk-msg-chat-header {
         display: flex !important;
         flex: 0 0 62px !important;
         align-items: center !important;
-
         gap: 10px !important;
         width: 100% !important;
         min-width: 0 !important;
         min-height: 62px !important;
-
         margin: 0 !important;
         padding: 6px 0 !important;
-
         border: 0 !important;
         border-bottom: 1px solid var(--color-border, #334155) !important;
         background: transparent !important;
@@ -447,7 +371,6 @@
         align-items: center !important;
         justify-content: center !important;
         flex-shrink: 0 !important;
-
         border: 0 !important;
         border-radius: 50% !important;
         background: transparent !important;
@@ -480,10 +403,8 @@
       .ksk-msg-chat-header-main strong {
         display: block !important;
         overflow: hidden !important;
-
         color: var(--color-text, #e5e7eb) !important;
         font-size: 16px !important;
-
         white-space: nowrap !important;
         text-overflow: ellipsis !important;
       }
@@ -494,19 +415,20 @@
         font-size: 12px !important;
       }
 
-      /* ================================================
-         CHAT SEARCH
-      ================================================ */
+      .ksk-msg-chat-status [data-typing-indicator] {
+        color: #22c55e !important;
+        font-weight: 700 !important;
+      }
+
+      /* CHAT SEARCH */
 
       .ksk-msg-detail > .ksk-msg-toolbar {
         display: flex !important;
         flex: 0 0 auto !important;
         align-items: center !important;
         gap: 8px !important;
-
         margin: 0 !important;
         padding: 7px 0 !important;
-
         border: 0 !important;
         border-bottom: 1px solid var(--color-border, #334155) !important;
         background: transparent !important;
@@ -517,106 +439,76 @@
         width: 1% !important;
         min-width: 0 !important;
         min-height: 40px !important;
-
         margin: 0 !important;
         padding: 8px 10px !important;
-
         border: 0 !important;
         border-bottom: 1px solid var(--color-border, #334155) !important;
         border-radius: 0 !important;
-
         outline: 0 !important;
         box-shadow: none !important;
-
         background: transparent !important;
         color: var(--color-text, #e5e7eb) !important;
       }
 
-      /* ================================================
-         MESSAGE HISTORY
-         messages.js renders the message array reversed.
-         Keep column-reverse so oldest stays at top.
-      ================================================ */
+      /* MESSAGE HISTORY */
 
       .ksk-msg-detail > .ksk-msg-history {
         display: flex !important;
         flex: 1 1 0 !important;
         flex-direction: column-reverse !important;
-
         gap: 8px !important;
-
         width: 100% !important;
         min-width: 0 !important;
         min-height: 0 !important;
         height: auto !important;
         max-height: none !important;
-
         margin: 0 !important;
         padding: 12px 0 !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         background: transparent !important;
-
         overflow-x: hidden !important;
         overflow-y: auto !important;
-
         overscroll-behavior: contain !important;
         -webkit-overflow-scrolling: touch !important;
       }
-
-      /* Common bubble */
 
       .ksk-msg-history-item {
         position: relative !important;
         display: block !important;
         flex: 0 0 auto !important;
-
         width: fit-content !important;
         max-width: min(82%, 520px) !important;
         min-width: 0 !important;
         min-height: 0 !important;
         height: auto !important;
-
         margin: 0 !important;
         padding: 9px 12px !important;
-
         border: 1px solid rgba(148, 163, 184, .24) !important;
         border-radius: 16px !important;
-
         background: #263449 !important;
         box-shadow: none !important;
         color: #f1f5f9 !important;
-
         font-size: 14px !important;
         line-height: 1.5 !important;
         overflow-wrap: anywhere !important;
-
         user-select: none !important;
         -webkit-user-select: none !important;
       }
 
-      /* Outgoing — right */
-
       .ksk-msg-history-item.from-me {
         align-self: flex-end !important;
-
         border-color: rgba(59, 130, 246, .35) !important;
         border-radius: 16px 16px 4px 16px !important;
-
         background: #174477 !important;
         color: #eff6ff !important;
         text-align: left !important;
       }
 
-      /* Incoming — left */
-
       .ksk-msg-history-item.from-them {
         align-self: flex-start !important;
-
         border-color: rgba(148, 163, 184, .28) !important;
         border-radius: 16px 16px 16px 4px !important;
-
         background: #263449 !important;
         color: #f1f5f9 !important;
         text-align: left !important;
@@ -629,7 +521,6 @@
       .ksk-msg-history-time {
         display: block !important;
         margin-top: 4px !important;
-
         color: var(--color-muted, #94a3b8) !important;
         font-size: 10px !important;
         text-align: right !important;
@@ -640,24 +531,18 @@
         max-width: 100% !important;
         max-height: 280px !important;
         height: auto !important;
-
         margin-top: 6px !important;
         object-fit: contain !important;
-
         border: 0 !important;
         border-radius: 8px !important;
       }
-
-      /* Message action buttons */
 
       .ksk-msg-bubble-actions {
         display: none !important;
         flex-wrap: wrap !important;
         gap: 6px !important;
-
         margin-top: 7px !important;
         padding: 6px 0 0 !important;
-
         border: 0 !important;
         background: transparent !important;
       }
@@ -670,18 +555,14 @@
       .ksk-msg-bubble-actions button {
         min-height: 34px !important;
         padding: 6px 8px !important;
-
         border: 0 !important;
         border-radius: 0 !important;
-
         background: transparent !important;
         color: var(--color-primary, #60a5fa) !important;
         font-size: 12px !important;
       }
 
-      /* ================================================
-         REPLY / SEARCH / GROUP
-      ================================================ */
+      /* REPLY / SEARCH / GROUP */
 
       .ksk-msg-detail > .ksk-msg-reply-preview,
       .ksk-msg-search-result,
@@ -701,7 +582,6 @@
         flex: 0 0 auto !important;
         margin: 5px 0 0 !important;
         padding: 7px 10px !important;
-
         border-left: 2px solid var(--color-primary, #60a5fa) !important;
         color: var(--color-text, #e5e7eb) !important;
       }
@@ -736,33 +616,25 @@
         text-align: center !important;
       }
 
-      /* ================================================
-         COMPOSER — FIXED AT CHAT BOTTOM
-      ================================================ */
+      /* COMPOSER — NO EXTRA EMPTY HEIGHT */
 
       .ksk-msg-detail > .ksk-msg-send-form {
         position: relative !important;
         z-index: 5 !important;
-
         display: flex !important;
         flex: 0 0 auto !important;
         flex-direction: row !important;
         align-items: flex-end !important;
-
         gap: 7px !important;
-
         width: 100% !important;
         min-width: 0 !important;
-        min-height: 58px !important;
-
+        min-height: 0 !important;
         margin: 0 !important;
-        padding: 7px 0 calc(
-          7px + env(safe-area-inset-bottom, 0px)
+        padding: 2px 0 calc(
+          2px + env(safe-area-inset-bottom, 0px)
         ) !important;
-
         border: 0 !important;
         border-radius: 0 !important;
-
         background: transparent !important;
         box-shadow: none !important;
       }
@@ -771,18 +643,13 @@
         display: flex !important;
         flex: 1 1 auto !important;
         align-items: flex-end !important;
-
         gap: 3px !important;
-
         min-width: 0 !important;
-        min-height: 44px !important;
-
+        min-height: 0 !important;
         margin: 0 !important;
-        padding: 2px 0 !important;
-
+        padding: 0 !important;
         border: 0 !important;
         border-radius: 0 !important;
-
         background: transparent !important;
         box-shadow: none !important;
       }
@@ -792,17 +659,13 @@
         flex: 0 0 34px !important;
         align-items: center !important;
         justify-content: center !important;
-
         width: 34px !important;
         min-width: 34px !important;
         height: 38px !important;
-
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 50% !important;
-
         background: transparent !important;
         color: var(--color-muted, #94a3b8) !important;
         cursor: pointer !important;
@@ -812,7 +675,6 @@
         display: block !important;
         width: 21px !important;
         height: 21px !important;
-
         fill: none !important;
         stroke: currentColor !important;
         stroke-width: 1.8 !important;
@@ -823,27 +685,21 @@
       .ksk-msg-detail .ksk-msg-compose {
         display: block !important;
         flex: 1 1 auto !important;
-
         width: 1% !important;
         min-width: 0 !important;
-        min-height: 38px !important;
-        height: 38px !important;
+        min-height: 34px !important;
+        height: 34px !important;
         max-height: 110px !important;
-
         margin: 0 !important;
-        padding: 9px 3px !important;
-
+        padding: 7px 3px !important;
         resize: none !important;
         overflow-y: auto !important;
-
         border: 0 !important;
         border-radius: 0 !important;
         outline: 0 !important;
         box-shadow: none !important;
-
         background: transparent !important;
         color: var(--color-text, #e5e7eb) !important;
-
         font-size: 14px !important;
         line-height: 20px !important;
       }
@@ -852,11 +708,9 @@
         display: flex !important;
         flex: 0 0 auto !important;
         align-items: center !important;
-
         gap: 2px !important;
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         background: transparent !important;
       }
@@ -866,20 +720,15 @@
         flex: 0 0 42px !important;
         align-items: center !important;
         justify-content: center !important;
-
         width: 42px !important;
         min-width: 42px !important;
         height: 42px !important;
-
         margin: 0 !important;
         padding: 0 !important;
-
         border: 0 !important;
         border-radius: 50% !important;
-
         background: var(--color-primary, #3b82f6) !important;
         color: #fff !important;
-
         font-size: 21px !important;
         font-weight: 800 !important;
         cursor: pointer !important;
@@ -889,10 +738,6 @@
       .ksk-wa-file-input {
         display: none !important;
       }
-
-      /* ================================================
-         SMALL SCREENS
-      ================================================ */
 
       @media (max-width: 520px) {
         .ksk-msg-detail > .ksk-msg-history {
@@ -928,33 +773,23 @@
         }
 
         .ksk-msg-detail > .ksk-msg-send-form {
-          min-height: 52px !important;
-          padding-top: 4px !important;
-          padding-bottom: 4px !important;
+          min-height: 0 !important;
+          padding-top: 2px !important;
+          padding-bottom: 2px !important;
         }
       }
     `;
   }
 
-  /* =======================================================
-     BUTTON HELPER
-  ======================================================= */
-
   function makeButton(className, label, icon) {
     const button = document.createElement("button");
-
     button.type = "button";
     button.className = className;
     button.title = label;
     button.setAttribute("aria-label", label);
     button.innerHTML = icon;
-
     return button;
   }
-
-  /* =======================================================
-     CONVERSATION MENUS
-  ======================================================= */
 
   function repairConversationMenus() {
     document.querySelectorAll(".ksk-msg-row").forEach(row => {
@@ -983,19 +818,15 @@
     });
   }
 
-  /* =======================================================
-     COMPOSER
-  ======================================================= */
-
   function resizeComposer(form) {
     const area = form.querySelector(".ksk-msg-compose");
     const send = form.querySelector(".ksk-wa-send");
 
     if (!area || !send) return;
 
-    area.style.height = "38px";
+    area.style.height = "34px";
     area.style.height =
-      Math.min(area.scrollHeight, 110) + "px";
+      Math.max(34, Math.min(area.scrollHeight, 110)) + "px";
 
     send.hidden = !area.value.trim();
   }
@@ -1082,10 +913,6 @@
     resizeComposer(form);
   }
 
-  /* =======================================================
-     CHAT REPAIR
-  ======================================================= */
-
   function repairChat() {
     addStyles();
     repairConversationMenus();
@@ -1129,10 +956,6 @@
       if (form) buildComposer(form);
     });
   }
-
-  /* =======================================================
-     MESSAGE ACTIONS
-  ======================================================= */
 
   function showMessageActions(message) {
     if (
@@ -1210,10 +1033,6 @@
     event.preventDefault();
     showMessageActions(message);
   });
-
-  /* =======================================================
-     CLICK HANDLERS
-  ======================================================= */
 
   document.addEventListener("click", event => {
     const menuSummary = event.target.closest?.(
@@ -1305,10 +1124,6 @@
     }
   });
 
-  /* =======================================================
-     INPUT / CHANGE
-  ======================================================= */
-
   document.addEventListener("input", event => {
     if (!event.target.matches?.(".ksk-msg-compose")) return;
 
@@ -1328,10 +1143,6 @@
     }
   });
 
-  /* =======================================================
-     ESCAPE — CLOSE MENUS / ACTIONS
-  ======================================================= */
-
   document.addEventListener("keydown", event => {
     if (event.key !== "Escape") return;
 
@@ -1347,10 +1158,6 @@
       menu.removeAttribute("open");
     });
   });
-
-  /* =======================================================
-     START / OBSERVE
-  ======================================================= */
 
   function start() {
     if (!document.body) return;
